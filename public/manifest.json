@@ -1,6 +1,6 @@
 {
   "name": "ستار موبايـل",
-  "short_name": "ستار موبايل",
+  "short_name": "ستار موبايـل",
   "description": "تطبيق ستار موبايل لخدمات الاتصالات والإنترنت",
   "start_url": "/login",
   "display": "standalone",
