@@ -1,0 +1,15 @@
+
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Allow authenticated users to upload their receipts to a user-specific folder.
+    // The path should match the structure used in the client-side code.
+    match /receipts/{userId}/{fileName} {
+      // Users can only write to their own folder.
+      allow write: if request.auth != null && request.auth.uid == userId;
+      // Admins can read any receipt. Users can read their own.
+      allow read: if request.auth != null && (request.auth.token.email == '770326828@shabakat.com' || request.auth.uid == userId);
+    }
+  }
+}

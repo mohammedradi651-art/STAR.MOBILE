@@ -1,0 +1,16 @@
+{
+  "placeholderImages": [
+    {
+      "id": "user-avatar",
+      "description": "User avatar placeholder",
+      "imageUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxwcm9maWxlJTIwcGljdHVyZXxlbnwwfHx8fDE3NjM5NzU5MDN8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "profile picture"
+    },
+    {
+      "id": "promo-banner",
+      "description": "Promotional banner placeholder",
+      "imageUrl": "https://images.unsplash.com/photo-1568087924826-9a43624e8778?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxhZHZlcnRpc2VtZW50JTIwYmFubmVyfGVufDB8fHx8MTc2NDAxMjQzMnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "advertisement banner"
+    }
+  ]
+}

@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 215 25% 90%; /* تقوية درجة البيج المزرق لتكون أوضح */
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 215 100% 34%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 215 100% 96%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 215 100% 34%;
+    --radius: 0.75rem;
+    
+    --icon-grad-start: #2563eb;
+    --icon-grad-end: #1e3a8a;
+  }
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+    
+    --icon-grad-start: #60a5fa;
+    --icon-grad-end: #93c5fd;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    font-family: 'Almarai', sans-serif !important;
+  }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    /* منع التكبير عبر CSS */
+    touch-action: pan-x pan-y;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Almarai', sans-serif !important;
+    font-weight: 400;
+    background: linear-gradient(180deg, #dce3eb 0%, #d1d9e2 100%); /* تدرج أعمق للبيج المزرق */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  .dark body {
+    background: linear-gradient(180deg, #020617 0%, #0f172a 100%);
+  }
+  h1, h2, h3, h4, h5, h6, input, button, select, textarea {
+    @apply text-foreground;
+    font-family: 'Almarai', sans-serif !important;
+  }
+}
+
+.bg-mesh-gradient {
+  background-color: hsla(215, 100%, 34%, 1);
+  background-image: 
+    radial-gradient(at 0% 0%, hsla(215, 100%, 45%, 1) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, hsla(200, 100%, 40%, 1) 0px, transparent 50%);
+}
+
+@keyframes swing {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(8deg); }
+}
+
+.animate-swing {
+  animation: swing 3s ease-in-out infinite;
+  transform-origin: top center;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(-50%); }
+  100% { transform: translateX(0%); }
+}
+
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  white-space: nowrap;
+  animation: marquee 60s linear infinite;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

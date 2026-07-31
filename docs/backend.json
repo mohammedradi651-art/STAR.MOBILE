@@ -1,0 +1,183 @@
+
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the Star Mobile application.",
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "phoneNumber": { "type": "string" },
+        "displayName": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "photoURL": { "type": "string", "format": "uri" },
+        "registrationDate": { "type": "string", "format": "date-time" },
+        "balance": { "type": "number" },
+        "accountType": { "type": "string", "enum": ["user", "network-owner"] },
+        "location": { "type": "string" }
+      },
+      "required": ["id", "phoneNumber", "displayName", "registrationDate"]
+    },
+    "Product": {
+      "title": "Product",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "imageUrl": { "type": "string" },
+        "category": { "type": "string" }
+      },
+      "required": ["name", "price", "imageUrl"]
+    },
+    "StoreOrder": {
+      "title": "Store Order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhone": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "amount": { "type": "number" },
+        "address": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "shipped", "delivered", "cancelled"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "productId", "amount", "status", "timestamp"]
+    },
+    "ElectricityRequest": {
+      "title": "Electricity Request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhone": { "type": "string" },
+        "subscriberNumber": { "type": "string" },
+        "subscriberName": { "type": "string" },
+        "billAmount": { "type": "number" },
+        "commission": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "completed", "cancelled"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "subscriberNumber", "totalAmount", "status", "timestamp"]
+    },
+    "WaterRequest": {
+      "title": "Water Request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhone": { "type": "string" },
+        "city": { "type": "string" },
+        "subscriberNumber": { "type": "string" },
+        "subscriberName": { "type": "string" },
+        "billAmount": { "type": "number" },
+        "commission": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "completed", "cancelled"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "subscriberNumber", "totalAmount", "status", "timestamp"]
+    },
+    "Network": {
+      "title": "Network",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "location": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "phoneNumber": { "type": "string" }
+      }
+    },
+    "SoldCard": {
+      "title": "Sold Card",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "networkId": { "type": "string" },
+        "networkName": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "cardNumber": { "type": "string" },
+        "buyerId": { "type": "string" },
+        "buyerName": { "type": "string" },
+        "price": { "type": "number" },
+        "payoutAmount": { "type": "number" },
+        "payoutStatus": { "type": "string", "enum": ["pending", "completed"] },
+        "soldTimestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ClientDebt": {
+      "title": "Client Debt",
+      "type": "object",
+      "description": "Represents a debt record for a non-registered or specific client.",
+      "properties": {
+        "id": { "type": "string" },
+        "debtorName": { "type": "string" },
+        "amount": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["debtorName", "amount", "timestamp"]
+    },
+    "AppSettings": {
+      "title": "App Settings",
+      "type": "object",
+      "properties": {
+        "boxBalance": { "type": "number" },
+        "totalDebts": { "type": "number" },
+        "appLink": { "type": "string" },
+        "supportPhoneNumber": { "type": "string" }
+      }
+    }
+  },
+  "auth": {
+    "providers": ["password", "anonymous", "google"]
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/backend/entities/User" },
+      "description": "User profile data."
+    },
+    "/appSettings/global": {
+      "schema": { "$ref": "#/backend/entities/AppSettings" },
+      "description": "Global application configuration and balances."
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/backend/entities/Product" },
+      "description": "Store products."
+    },
+    "/storeOrders/{orderId}": {
+      "schema": { "$ref": "#/backend/entities/StoreOrder" },
+      "description": "Store customer orders."
+    },
+    "/electricityRequests/{requestId}": {
+      "schema": { "$ref": "#/backend/entities/ElectricityRequest" },
+      "description": "Electricity payment requests."
+    },
+    "/waterRequests/{requestId}": {
+      "schema": { "$ref": "#/backend/entities/WaterRequest" },
+      "description": "Water payment requests."
+    },
+    "/networks/{networkId}": {
+      "schema": { "$ref": "#/backend/entities/Network" },
+      "description": "Local Wi-Fi networks."
+    },
+    "/soldCards/{cardId}": {
+      "schema": { "$ref": "#/backend/entities/SoldCard" },
+      "description": "History of sold network cards."
+    },
+    "/clientDebts/{debtId}": {
+      "schema": { "$ref": "#/backend/entities/ClientDebt" },
+      "description": "Manual client debts record."
+    }
+  }
+}
