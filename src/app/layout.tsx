@@ -26,7 +26,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const [showSplash, setShowSplash] = useState(true);
   const [isPinVerified, setIsPinVerified] = useState(false);
 
-  // Register Service Worker for PWA
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -42,7 +41,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // منع التكبير بالأصابع عبر JavaScript
   useEffect(() => {
     const handleTouchStart = (e: TouchEvent) => {
       if (e.touches.length > 1) {
@@ -68,7 +66,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Fetch user profile for PIN check
   const userDocRef = useMemoFirebase(
     () => (user && firestore ? doc(firestore, 'users', user.uid) : null),
     [firestore, user]
@@ -156,7 +153,7 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no" />
         <link rel="icon" type="image/jpeg" href="/logo.jpeg" />
         <link rel="apple-touch-icon" href="/logo.jpeg" />
-        <link rel="manifest" href="/manifest.json" />
+        <link rel="manifest" href="/manifest.json?v=1.5" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@300;400;700;800&display=swap" rel="stylesheet" />
