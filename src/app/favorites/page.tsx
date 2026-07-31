@@ -240,6 +240,7 @@ export default function FavoritesPage() {
 
     try {
         const now = new Date().toISOString();
+        const formattedDate = new Date().toLocaleDateString('ar-YE');
         const batch = writeBatch(firestore);
         let finalCardID = '';
 
@@ -329,19 +330,18 @@ export default function FavoritesPage() {
             setPurchasedCard(cardData);
         }
         
-        // --- نظام الـ SMS التلقائي للعميل عبر الربط ---
+        // --- نظام إرسال الواتساب التلقائي ---
         if (userProfile?.phoneNumber) {
-            const currentBalance = (userBalance - categoryPrice).toLocaleString('en-US');
-            const autoMsg = `${userProfile.displayName || 'عميلنا'} 🖐️\nنشكرك على طلبك من ستار موبايل 💙\n\n*معلومات الكرت:*\nالشبكة : ${selectedNetwork.name}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${finalCardID}\n\n*رصيدك:* ${currentBalance} ريال\n\nتطبيق ستار موبايل :\nhttps://star26.vercel.app\n\nجهّزنا لك هالكرت، تقدر تشحن فيه وتستانس 🔥`;
+            const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${selectedNetwork.name}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${finalCardID}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
             
-            fetch('/api/sms', {
+            fetch('/api/send-whatsapp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    phoneNumber: userProfile.phoneNumber,
-                    message: autoMsg
+                    phone: userProfile.phoneNumber,
+                    message: waMsg
                 })
-            }).catch(e => console.error("Auto SMS API failed", e));
+            }).catch(e => console.error("WhatsApp Notify Error", e));
         }
 
         // إغلاق المنبثقات السابقة عند النجاح

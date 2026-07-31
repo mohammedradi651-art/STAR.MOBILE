@@ -136,6 +136,7 @@ function NetworkPurchasePageComponent() {
         
         const batch = writeBatch(firestore);
         const now = new Date().toISOString();
+        const formattedDate = new Date().toLocaleDateString('ar-YE');
         const commission = Math.ceil(categoryPrice * 0.10);
         const payoutAmount = categoryPrice - commission;
         const ownerId = networkData.ownerId;
@@ -186,19 +187,18 @@ function NetworkPurchasePageComponent() {
         setPurchasedCard(cardToPurchaseData);
         audioRef.current?.play().catch(() => {});
 
-        // --- نظام الـ SMS التلقائي للعميل عبر الربط ---
+        // --- نظام إرسال الواتساب التلقائي ---
         if (userProfile?.phoneNumber) {
-            const currentBalance = (userBalance - categoryPrice).toLocaleString('en-US');
-            const autoMsg = `${userProfile.displayName || 'عميلنا'} 🖐️\nنشكرك على طلبك من ستار موبايل 💙\n\n*معلومات الكرت:*\nالشبكة : ${networkName}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardToPurchaseData.cardNumber}\n\n*رصيدك:* ${currentBalance} ريال\n\nتطبيق ستار موبايل :\nhttps://star26.vercel.app\n\nجهّزنا لك هالكرت، تقدر تشحن فيه وتستانس 🔥`;
+            const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${networkName}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardToPurchaseData.cardNumber}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
             
-            fetch('/api/sms', {
+            fetch('/api/send-whatsapp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    phoneNumber: userProfile.phoneNumber,
-                    message: autoMsg
+                    phone: userProfile.phoneNumber,
+                    message: waMsg
                 })
-            }).catch(e => console.error("Auto SMS API failed", e));
+            }).catch(e => console.error("WhatsApp Notify Error", e));
         }
   
     } catch (error: any) {

@@ -193,6 +193,7 @@ export default function BaityNetworksPage() {
         
         const result = await response.json();
         const cardData = result.data.order.card;
+        const formattedDate = new Date().toLocaleDateString('ar-YE');
         
         const batch = writeBatch(firestore);
         batch.update(userDocRef, { balance: increment(-selectedCategory.price) });
@@ -219,19 +220,18 @@ export default function BaityNetworksPage() {
         setSelectedNetwork(null);
         audioRef.current?.play().catch(() => {});
 
-        // --- نظام الـ SMS التلقائي للعميل عبر الربط ---
+        // --- نظام إرسال الواتساب التلقائي ---
         if (userProfile?.phoneNumber) {
-            const currentBalance = (userProfile.balance - selectedCategory.price).toLocaleString('en-US');
-            const autoMsg = `${userProfile.displayName || 'عميلنا'} 🖐️\nنشكرك على طلبك من ستار موبايل 💙\n\n*معلومات الكرت:*\nالشبكة : ${selectedNetwork?.name}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardData.cardID}\n\n*رصيدك:* ${currentBalance} ريال\n\nتطبيق ستار موبايل :\nhttps://star26.vercel.app\n\nجهّزنا لك هالكرت، تقدر تشحن فيه وتستانس 🔥`;
+            const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${selectedNetwork?.name || 'الخير'}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardData.cardID}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
             
-            fetch('/api/sms', {
+            fetch('/api/send-whatsapp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    phoneNumber: userProfile.phoneNumber,
-                    message: autoMsg
+                    phone: userProfile.phoneNumber,
+                    message: waMsg
                 })
-            }).catch(e => console.error("Auto SMS API failed", e));
+            }).catch(e => console.error("WhatsApp Notify Error", e));
         }
 
     } catch (error: any) {
@@ -354,7 +354,7 @@ export default function BaityNetworksPage() {
                 <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl animate-pulse" />
                 
                 <DialogHeader className="pt-12 pb-10 px-8 text-white text-center relative z-10">
-                    <div className="bg-white/20 p-4 rounded-[24px] w-16 h-16 mx-auto mb-4 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl overflow-hidden">
+                    <div className="bg-white/20 p-4 rounded-[28px] w-16 h-16 mx-auto mb-4 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl overflow-hidden">
                         <Wifi className="h-8 w-8 text-white" />
                     </div>
                     <DialogTitle className="text-2xl font-black text-white drop-shadow-md">فئات {selectedNetwork.name}</DialogTitle>
