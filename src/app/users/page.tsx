@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -251,7 +252,7 @@ export default function UsersPage() {
     toast({ title: "نجاح", description: "تم حذف المستخدم بنجاح." });
   };
 
-  const handleTopUp = () => {
+  const handleTopUp = async () => {
     if (!selectedUser || !topUpAmount || !firestore) return;
     const amount = parseFloat(topUpAmount);
     if (isNaN(amount) || amount <= 0) return;
@@ -266,12 +267,27 @@ export default function UsersPage() {
       timestamp: new Date().toISOString()
     });
 
+    // إرسال واتساب تلقائي
+    if (selectedUser.phoneNumber) {
+        const newBalance = (selectedUser.balance || 0) + amount;
+        const waMsg = `⭐ ستار موبايل\n\nمرحباً ${selectedUser.displayName}\n\nتم شحن رصيدك بنجاح ✅\n\nالمبلغ المضاف: ${amount.toLocaleString('en-US')} ر.ي\nرصيدك الجديد: ${newBalance.toLocaleString('en-US')} ر.ي\n\nشكراً لثقتك بنا 💙`;
+        
+        await fetch('/api/send-whatsapp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                phone: selectedUser.phoneNumber,
+                message: waMsg
+            })
+        }).catch(e => console.error("WhatsApp Notification Error", e));
+    }
+
     toast({ title: "نجاح", description: `تمت إضافة الرصيد بنجاح.` });
     setIsTopUpDialogOpen(false);
     setTopUpAmount('');
   };
   
-  const handleManualDeposit = () => {
+  const handleManualDeposit = async () => {
     if (!selectedUser || !topUpAmount || !firestore || !selectedUser.phoneNumber) return;
     const amount = parseFloat(topUpAmount);
     if (isNaN(amount) || amount <= 0) return;
@@ -291,6 +307,7 @@ export default function UsersPage() {
     const newBalance = (selectedUser.balance ?? 0) + amount;
     const smsMessage = `ستار موبايل: تم إيداع (${amount.toLocaleString('en-US')}) ريال لحسابك. رصيدك الآن: (${newBalance.toLocaleString('en-US')}) ريال.`;
     
+    // إرسال SMS
     fetch('/api/sms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -298,16 +315,20 @@ export default function UsersPage() {
             phoneNumber: selectedUser.phoneNumber,
             message: smsMessage
         })
-    }).then(res => res.json()).then(res => {
-        if (res.success) {
-            toast({ title: 'نجاح', description: 'تم الإيداع وإرسال إشعار SMS للعميل.' });
-        } else {
-            toast({ variant: 'destructive', title: 'تنبيه', description: 'تم الإيداع، لكن فشل إرسال الـ SMS.' });
-        }
-    }).catch(() => {
-        toast({ variant: 'destructive', title: 'تنبيه', description: 'تم الإيداع، لكن فشل الاتصال بخدمة الـ SMS.' });
-    });
+    }).catch(() => console.error("SMS Error"));
 
+    // إرسال واتساب
+    const waMsg = `⭐ ستار موبايل\n\nمرحباً ${selectedUser.displayName}\n\nتم شحن رصيدك بنجاح ✅\n\nالمبلغ المضاف: ${amount.toLocaleString('en-US')} ر.ي\nرصيدك الجديد: ${newBalance.toLocaleString('en-US')} ر.ي\n\nشكراً لثقتك بنا 💙`;
+    await fetch('/api/send-whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            phone: selectedUser.phoneNumber,
+            message: waMsg
+        })
+    }).catch(e => console.error("WhatsApp Error", e));
+
+    toast({ title: 'نجاح', description: 'تم الإيداع وإرسال الإشعارات للعميل.' });
     setIsManualDepositOpen(false);
     setTopUpAmount('');
   };
@@ -638,7 +659,7 @@ export default function UsersPage() {
                 <h3 className="text-xs font-black text-primary uppercase tracking-widest">النتائج ({filteredUsers?.length || 0})</h3>
             </div>
             {isLoading ? (
-                [1, 2, 3].map(i => <Skeleton i={i} className="h-24 w-full rounded-3xl" />)
+                [1, 2, 3].map(i => <Skeleton key={i} className="h-24 w-full rounded-3xl" />)
             ) : filteredUsers?.length === 0 ? (
                 <div className="text-center py-10 opacity-30">
                     <Users className="h-12 w-12 mx-auto mb-2" />
