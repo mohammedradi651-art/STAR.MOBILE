@@ -42,7 +42,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // منع التكبير بالأصابع عبر JavaScript كخيار إضافي للمتصفحات التي تتجاهل meta tags
+  // منع التكبير بالأصابع عبر JavaScript
   useEffect(() => {
     const handleTouchStart = (e: TouchEvent) => {
       if (e.touches.length > 1) {
@@ -52,7 +52,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
     
     document.addEventListener('touchstart', handleTouchStart, { passive: false });
     
-    // منع التكبير عند النقر المزدوج (Double-tap to zoom)
     let lastTouchEnd = 0;
     const handleTouchEnd = (e: TouchEvent) => {
       const now = (new Date()).getTime();
@@ -152,7 +151,7 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl">
       <head>
-        <title>ستار موبايل - Star Mobile</title>
+        <title>ستار موبايل</title>
         <meta name="description" content="تطبيق ستار موبايل لخدمات الاتصالات والإنترنت" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no" />
         <link rel="icon" type="image/jpeg" href="/logo.jpeg" />
