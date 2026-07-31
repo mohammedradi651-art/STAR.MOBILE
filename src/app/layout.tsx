@@ -152,7 +152,7 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl">
       <head>
-        <title>Star Mobile - ستار موبايل</title>
+        <title>ستار موبايل - Star Mobile</title>
         <meta name="description" content="تطبيق ستار موبايل لخدمات الاتصالات والإنترنت" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no" />
         <link rel="icon" type="image/jpeg" href="/logo.jpeg" />
