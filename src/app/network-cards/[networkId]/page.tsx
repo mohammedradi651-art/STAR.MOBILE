@@ -187,11 +187,11 @@ function NetworkPurchasePageComponent() {
         setPurchasedCard(cardToPurchaseData);
         audioRef.current?.play().catch(() => {});
 
-        // --- نظام إرسال الواتساب التلقائي ---
+        // --- نظام إرسال الواتساب التلقائي (مع await لضمان التنفيذ) ---
         if (userProfile?.phoneNumber) {
             const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${networkName}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardToPurchaseData.cardNumber}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
             
-            fetch('/api/send-whatsapp', {
+            await fetch('/api/send-whatsapp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

@@ -220,11 +220,11 @@ export default function BaityNetworksPage() {
         setSelectedNetwork(null);
         audioRef.current?.play().catch(() => {});
 
-        // --- نظام إرسال الواتساب التلقائي ---
+        // --- نظام إرسال الواتساب التلقائي (مع await لضمان التنفيذ) ---
         if (userProfile?.phoneNumber) {
             const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${selectedNetwork?.name || 'الخير'}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardData.cardID}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
             
-            fetch('/api/send-whatsapp', {
+            await fetch('/api/send-whatsapp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -250,7 +250,7 @@ export default function BaityNetworksPage() {
 
   const handleSendSms = () => {
     if (!purchasedCard || !selectedNetwork || !smsRecipient) {
-        toast({ variant: 'destructive', title: 'خطأ', description: 'يرجى إدخال رقم الزبون.' });
+        toast({ variant: 'destructive', title: 'خطأ', description: 'يرجى إدخل رقم الزبون.' });
         return;
     }
     const name = userProfile?.displayName || 'عميلنا';

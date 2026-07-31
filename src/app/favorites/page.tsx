@@ -330,11 +330,11 @@ export default function FavoritesPage() {
             setPurchasedCard(cardData);
         }
         
-        // --- نظام إرسال الواتساب التلقائي ---
+        // --- نظام إرسال الواتساب التلقائي (مع await لضمان التنفيذ) ---
         if (userProfile?.phoneNumber) {
             const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${selectedNetwork.name}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${finalCardID}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
             
-            fetch('/api/send-whatsapp', {
+            await fetch('/api/send-whatsapp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -366,7 +366,7 @@ export default function FavoritesPage() {
 
   const handleSendSms = () => {
     if (!purchasedCard || !selectedNetwork || !smsRecipient) {
-        toast({ variant: 'destructive', title: 'خطأ', description: 'يرجى إدخال رقم الزبون.' });
+        toast({ variant: 'destructive', title: 'خطأ', description: 'يرجى إدخل رقم الزبون.' });
         return;
     }
     const name = userProfile?.displayName || 'عميلنا';
