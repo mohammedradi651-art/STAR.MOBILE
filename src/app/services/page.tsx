@@ -294,6 +294,7 @@ export default function CombinedNetworksPage() {
 
     try {
         const now = new Date().toISOString();
+        const formattedDate = new Date().toLocaleDateString('ar-YE');
         const batch = writeBatch(firestore);
         let finalCardID = '';
 
@@ -376,18 +377,18 @@ export default function CombinedNetworksPage() {
             setPurchasedCard(cardData);
         }
         
+        // --- نظام إرسال الواتساب التلقائي (باستخدام API Wassenger) ---
         if (userProfile?.phoneNumber) {
-            const currentBalance = (userBalance - categoryPrice).toLocaleString('en-US');
-            const autoMsg = `${userProfile.displayName || 'عميلنا'} 🖐️\nنشكرك على طلبك من ستار موبايل 💙\n\n*معلومات الكرت:*\nالشبكة : ${selectedNetwork?.name}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${finalCardID}\n\n*رصيدك:* ${currentBalance} ريال\n\nتطبيق ستار موبايل :\nhttps://star26.vercel.app\n\nجهّزنا لك هالكرت، تقدر تشحن فيه وتستانس 🔥`;
+            const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${selectedNetwork?.name}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${finalCardID}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
             
-            fetch('/api/sms', {
+            await fetch('/api/send-whatsapp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    phoneNumber: userProfile.phoneNumber,
-                    message: autoMsg
+                    phone: userProfile.phoneNumber,
+                    message: waMsg
                 })
-            }).catch(e => console.error("Auto SMS API failed", e));
+            }).catch(e => console.error("WhatsApp Notify Error", e));
         }
 
         setShowConfirmPurchase(null);
@@ -588,12 +589,12 @@ export default function CombinedNetworksPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10001] flex items-center justify-center p-4 animate-in fade-in-0">
             <Card className="w-full max-sm text-center shadow-2xl rounded-[40px] overflow-hidden border-none bg-background">
                 <CardContent className="p-8 space-y-6">
-                    <div>
-                        <div className="bg-green-500 p-8 flex justify-center mb-4 rounded-t-[40px] -m-8">
-                            <div className="bg-white/20 p-4 rounded-full animate-bounce">
-                                <CheckCircle className="h-16 w-16 text-white" />
-                            </div>
+                    <div className="bg-green-500 p-8 flex justify-center mb-4 rounded-t-[40px] -m-8">
+                        <div className="bg-white/20 p-4 rounded-full animate-bounce">
+                            <CheckCircle className="h-16 w-16 text-white" />
                         </div>
+                    </div>
+                    <div>
                         <h2 className="text-2xl font-black text-green-600 mt-4">تم الشراء بنجاح!</h2>
                         <p className="text-sm text-muted-foreground mt-1">احتفظ برقم الكرت جيداً</p>
                     </div>

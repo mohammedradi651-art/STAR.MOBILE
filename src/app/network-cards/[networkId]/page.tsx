@@ -187,7 +187,7 @@ function NetworkPurchasePageComponent() {
         setPurchasedCard(cardToPurchaseData);
         audioRef.current?.play().catch(() => {});
 
-        // --- نظام إرسال الواتساب التلقائي (مع await لضمان التنفيذ) ---
+        // --- نظام إرسال الواتساب التلقائي (باستخدام API Wassenger) ---
         if (userProfile?.phoneNumber) {
             const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${networkName}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardToPurchaseData.cardNumber}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
             

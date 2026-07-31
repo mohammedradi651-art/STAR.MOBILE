@@ -262,7 +262,7 @@ export default function FavoritesPage() {
             // 1. تحديث حالة الكرت
             batch.update(cardToPurchaseDoc.ref, { status: 'sold', soldTo: user.uid, soldTimestamp: now });
             
-            // 2. سجل العملية للمشتري
+            // 2. خصم الرصيد من المشتري
             batch.update(userDocRef, { balance: increment(-categoryPrice) });
             
             // 3. سجل العملية للمشتري
@@ -330,7 +330,7 @@ export default function FavoritesPage() {
             setPurchasedCard(cardData);
         }
         
-        // --- نظام إرسال الواتساب التلقائي (مع await لضمان التنفيذ) ---
+        // --- نظام إرسال الواتساب التلقائي (باستخدام API Wassenger) ---
         if (userProfile?.phoneNumber) {
             const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${selectedNetwork.name}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${finalCardID}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
             
