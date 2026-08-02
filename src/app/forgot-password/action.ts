@@ -4,29 +4,30 @@ import * as admin from 'firebase-admin';
 
 /**
  * @fileOverview محرك استعادة كلمة المرور المطور (Server Action).
- * يتميز بالقدرة على العمل في وضع المعاينة (Demo) إذا كانت مفاتيح السيرفر غير متوفرة.
+ * يقوم بتغيير كلمة المرور فعلياً إذا توفرت مفاتيح السيرفر، أو يعمل في وضع المعاينة إذا كانت ناقصة.
  */
 
 function getAdminApp() {
+  // إذا كان التطبيق مهيأ مسبقاً، نستخدمه
   if (admin.apps.length > 0) return admin.apps[0];
   
-  // جلب البيانات من بيئة التشغيل
-  const projectId = process.env.FIREBASE_PROJECT_ID || "studio-239662212-1b7b6";
+  // جلب البيانات من Environment Variables (يجب وضعها في Vercel أو ملف .env)
+  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
-  // إذا كانت المفاتيح ناقصة، لا تحاول التهيئة وتجنب الانهيار
-  if (!clientEmail || !privateKey) {
-    console.warn("⚠️ تنبيه: مفاتيح Firebase Admin غير متوفرة في بيئة التشغيل. سيتم تشغيل وضع المعاينة.");
+  // التحقق من وجود المفاتيح المطلوبة للعمل "الحقيقي"
+  if (!clientEmail || !privateKey || !projectId) {
+    console.warn("⚠️ تنبيه: مفاتيح Firebase Admin ناقصة. النظام سيعمل في وضع 'المعاينة الذكي' فقط.");
     return null;
   }
 
   try {
     return admin.initializeApp({
       credential: admin.credential.cert({
-        projectId,
-        clientEmail,
-        privateKey: privateKey.replace(/\\n/g, '\n'),
+        projectId: projectId,
+        clientEmail: clientEmail,
+        privateKey: privateKey.replace(/\\n/g, '\n'), // معالجة السطر الجديد في المفتاح
       }),
     });
   } catch (error) {
@@ -38,40 +39,40 @@ function getAdminApp() {
 export async function resetPasswordAdmin(phoneNumber: string, newPassword: string) {
   try {
     const app = getAdminApp();
+    const email = `${phoneNumber.trim()}@shabakat.com`;
     
-    // وضع المعاينة (Demo Mode): إذا لم تكن هناك مفاتيح سيرفر
+    // --- وضع المعاينة (Demo Mode) ---
     if (!app) {
-      console.log("🛠️ وضع المعاينة: تم قبول طلب تغيير كلمة المرور للرقم:", phoneNumber);
+      console.log("🛠️ وضع المعاينة: تم التحقق من الرقم بنجاح:", phoneNumber);
       return { 
         success: true, 
         demo: true, 
-        message: "تم التحقق بنجاح. (ملاحظة: لتفعيل التغيير الفعلي في قاعدة البيانات، يرجى إضافة مفاتيح السيرفر في إعدادات الاستضافة)." 
+        message: "تم التحقق بنجاح. (ملاحظة: لتفعيل التغيير الفعلي، يرجى إضافة مفاتيح السيرفر في إعدادات الاستضافة)." 
       };
     }
 
-    const email = `${phoneNumber.trim()}@shabakat.com`;
-    
-    // 1. البحث عن المستخدم
+    // --- الوضع الحقيقي (Real Mode) ---
     const userRecord = await admin.auth(app).getUserByEmail(email);
     
     if (!userRecord) {
-      return { success: false, error: 'المستخدم غير موجود في النظام.' };
+      return { success: false, error: 'عذراً، هذا الحساب غير موجود في سجلاتنا.' };
     }
 
-    // 2. التحديث الفعلي
+    // تحديث كلمة المرور إجبارياً
     await admin.auth(app).updateUser(userRecord.uid, {
       password: newPassword,
     });
 
-    return { success: true };
+    console.log("✅ تم تحديث كلمة المرور فعلياً للمستخدم:", email);
+    return { success: true, demo: false };
+
   } catch (error: any) {
     console.error('Reset Password Action Error:', error);
     
-    // معالجة الأخطاء الشائعة
     if (error.code === 'auth/user-not-found') {
-        return { success: false, error: 'عذراً، هذا الحساب غير موجود في سجلات الدخول.' };
+        return { success: false, error: 'عذراً، الحساب المرتبط بهذا الرقم غير موجود.' };
     }
 
-    return { success: false, error: 'فشل التحديث: تأكد من صحة البيانات أو حاول لاحقاً.' };
+    return { success: false, error: 'فشل التحديث: تأكد من إعدادات السيرفر أو حاول لاحقاً.' };
   }
 }
