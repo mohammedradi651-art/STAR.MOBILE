@@ -93,7 +93,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="w-full space-y-4 animate-in slide-in-from-bottom-8 duration-1000">
+          <form onSubmit={handleLogin} className="w-full space-y-4 animate-in slide-in-from-bottom-8 duration-1000 pb-10">
             <div className="space-y-1.5">
               <Label htmlFor="phone" className="text-[10px] font-black mr-2 text-white uppercase tracking-widest">رقم الهاتف</Label>
               <div className="relative group">
@@ -110,10 +110,7 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-1.5">
-              <div className="flex justify-between items-center mb-1">
-                <Label htmlFor="password" title="كلمة المرور" className="text-[10px] font-black mr-2 text-white uppercase tracking-widest">كلمة المرور</Label>
-                <Link href="/forgot-password" title="نسيت كلمة السر" className="text-[10px] font-bold text-white/60 hover:text-white transition-colors ml-2">نسيت كلمة السر؟</Link>
-              </div>
+              <Label htmlFor="password" title="كلمة المرور" className="text-[10px] font-black mr-2 text-white uppercase tracking-widest mb-1 block">كلمة المرور</Label>
               <div className="relative group">
                 <Input
                   id="password"
@@ -131,6 +128,9 @@ export default function LoginPage() {
                 >
                   {isPasswordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
+              </div>
+              <div className="text-right px-2 pt-1">
+                <Link href="/forgot-password" title="نسيت كلمة السر" className="text-[10px] font-bold text-white/60 hover:text-white transition-colors">نسيت كلمة السر؟</Link>
               </div>
             </div>
 
