@@ -13,8 +13,8 @@ import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
-// إصدار التطبيق المحدث لتطهير الكاش وتفعيل الواجهة الجديدة
-const APP_VERSION = '1.6.3';
+// إصدار التطبيق المحدث لتطهير الكاش وتفعيل الواجهة الملكية
+const APP_VERSION = '1.6.4';
 
 type UserProfile = {
   isPinEnabled?: boolean;
@@ -28,7 +28,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const { user, isUserLoading } = useUser();
   const [showSplash, setShowSplash] = useState(true);
   const [isPinVerified, setIsPinVerified] = useState(false);
-  const [isNavVisible, setIsNavVisible] = useState(false);
 
   // نظام تطهير الكاش القوي عند تغيير النسخة
   useEffect(() => {
@@ -41,7 +40,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // تسجيل Service Worker
+  // تسجيل Service Worker لضمان استقرار PWA
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js?v=' + APP_VERSION).catch(() => {});
@@ -54,29 +53,25 @@ function AppContent({ children }: { children: React.ReactNode }) {
   );
   const { data: userProfile } = useDoc<UserProfile>(userDocRef);
 
-  useEffect(() => {
-    const topLevelPages = [
-      '/login', 
-      '/renewal-requests', 
-      '/users', 
-      '/account', 
-      '/store-orders', 
-      '/bill-payment-requests', 
-      '/withdrawal-requests',
-      '/favorites'
-    ];
-    setIsNavVisible(topLevelPages.includes(pathname));
-  }, [pathname]);
+  // التحقق من الصفحات التي يجب أن يظهر فيها شريط التنقل
+  const isNavVisiblePage = [
+    '/login', 
+    '/renewal-requests', 
+    '/users', 
+    '/account', 
+    '/store-orders', 
+    '/bill-payment-requests', 
+    '/withdrawal-requests',
+    '/favorites'
+  ].includes(pathname);
 
   useEffect(() => {
-    // التحقق مما إذا كانت شاشة البداية قد ظهرت بالفعل في هذه الجلسة
     const hasSeenSplash = sessionStorage.getItem(`has_seen_splash_${APP_VERSION}`);
     if (hasSeenSplash) setShowSplash(false);
-    
     if (sessionStorage.getItem('is_pin_verified')) setIsPinVerified(true);
   }, []);
 
-  // توجيه تلقائي مباشر للمسجلين فور جاهزية البيانات لضمان عدم ظهور شاشة الدخول
+  // توجيه تلقائي ذكي: إذا كان المستخدم مسجلاً وهو في صفحة الهبوط، انقله للداخل فوراً
   useEffect(() => {
     if (!isUserLoading && user && pathname === '/') {
         router.replace('/login');
@@ -93,10 +88,12 @@ function AppContent({ children }: { children: React.ReactNode }) {
     sessionStorage.setItem('is_pin_verified', 'true');
   };
 
+  // شروط حماية PIN
   const shouldShowPinLock = user && userProfile?.isPinEnabled && userProfile?.pinCode && !isPinVerified && !showSplash;
 
   return (
-    <div className="mx-auto max-w-[450px] bg-card h-[100dvh] flex flex-col shadow-2xl relative overflow-hidden">
+    <div className="mx-auto max-w-[450px] bg-white h-[100dvh] flex flex-col shadow-2xl relative overflow-hidden">
+      {/* شاشة البداية هي الحاكم الوحيد للرؤية في البداية */}
       {showSplash && (
         <SplashScreen 
           onComplete={handleSplashComplete} 
@@ -111,17 +108,18 @@ function AppContent({ children }: { children: React.ReactNode }) {
         />
       )}
       
-      <div className={cn(
-        "flex-1 flex flex-col relative overflow-hidden transition-opacity duration-500",
-        showSplash ? "opacity-0 invisible" : "opacity-100 visible"
-      )}>
-        <WelcomeModal />
-        <AppErrorDialog />
-        <main className="flex-1 flex flex-col min-h-0 relative">
-          {children}
-        </main>
-        {isNavVisible && <BottomNav />}
-      </div>
+      {/* لا يتم عرض أي شيء من المحتوى أو شريط التنقل إلا بعد اختفاء شاشة البداية */}
+      {!showSplash && (
+        <div className="flex-1 flex flex-col relative overflow-hidden animate-in fade-in duration-500">
+          <WelcomeModal />
+          <AppErrorDialog />
+          <main className="flex-1 flex flex-col min-h-0 relative">
+            {children}
+          </main>
+          {/* شريط التنقل يظهر مع الصفحة كقطعة واحدة */}
+          {isNavVisiblePage && <BottomNav />}
+        </div>
+      )}
     </div>
   );
 }

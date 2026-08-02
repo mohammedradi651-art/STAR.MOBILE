@@ -26,11 +26,11 @@ export default function LoginPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (!isUserLoading && user) {
-      router.push('/login');
-    }
-  }, [user, isUserLoading, router]);
+  // منع ظهور هذه الصفحة نهائياً إذا كان المستخدم مسجلاً بالفعل
+  // هذا يمنع "الوميض" (Flicker) المزعج عند فتح التطبيق
+  if (!isUserLoading && user) {
+    return null; 
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +45,7 @@ export default function LoginPage() {
     const email = `${phoneNumber.trim()}@shabakat.com`;
     try {
       await signInWithEmailAndPassword(auth, email, password.trim());
+      router.push('/login');
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'فشل الدخول', description: 'تأكد من بياناتك وحاول مجدداً.' });
     } finally {
@@ -127,7 +128,7 @@ export default function LoginPage() {
         </div>
 
         <footer className="text-center text-[8px] font-bold text-white/30 pb-6 mt-auto">
-          <p>© STAR MOBILE - V1.6.2</p>
+          <p>© STAR MOBILE - V1.6.4</p>
         </footer>
       </div>
       <Toaster />
