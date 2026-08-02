@@ -1,23 +1,22 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Lottie from 'lottie-react';
+import dynamic from 'next/dynamic';
+
+const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
 
 /**
  * مؤشر تحميل عالمي فخم يستخدم شعار التطبيق المتحرك.
- * تم زيادة قوة الضبابية (Blur) والتعتيم لإعطاء مظهر ملكي عالي الجودة.
  */
 export const ProcessingOverlay = ({ message }: { message?: string }) => {
   const [animationData, setAnimationData] = useState<any>(null);
 
   useEffect(() => {
-    // جلب ملف الـ Lottie للشعار المتحرك
     fetch('/TH.json')
       .then(res => res.json())
       .then(data => setAnimationData(data))
       .catch(err => console.error("Lottie load error:", err));
 
-    // منع التفاعل مع الصفحة أثناء الظهور لضمان تجربة مستخدم سلسة
     const originalStyle = window.getComputedStyle(document.body).overflow;
     document.body.style.overflow = 'hidden';
     

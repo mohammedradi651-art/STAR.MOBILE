@@ -1,8 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Lottie from 'lottie-react';
+import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
+
+// استيراد مكتبة Lottie بشكل ديناميكي لتجنب أخطاء Module Factory في Next.js
+const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
 
 /**
  * شاشة الترحيب الملكية (Luxury Splash Screen)

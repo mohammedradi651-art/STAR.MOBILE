@@ -14,7 +14,7 @@ import { doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
 // إصدار التطبيق المحدث لتطهير الكاش وتفعيل الواجهة الجديدة
-const APP_VERSION = '1.6.1';
+const APP_VERSION = '1.6.2';
 
 type UserProfile = {
   isPinEnabled?: boolean;
