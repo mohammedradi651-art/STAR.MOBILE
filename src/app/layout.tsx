@@ -13,8 +13,8 @@ import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
-// إصدار التطبيق الحالي - تحديثه يطهر كاش المتصفح
-const APP_VERSION = '1.6.2';
+// إصدار التطبيق المحدث لتطهير الكاش وتفعيل الواجهة الجديدة
+const APP_VERSION = '1.6.1';
 
 type UserProfile = {
   isPinEnabled?: boolean;
@@ -29,7 +29,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const [isPinVerified, setIsPinVerified] = useState(false);
   const [isNavVisible, setIsNavVisible] = useState(false);
 
-  // نظام تطهير الكاش السريع
+  // نظام تطهير الكاش القوي عند تغيير النسخة
   useEffect(() => {
     const savedVersion = localStorage.getItem('star_app_version');
     if (savedVersion !== APP_VERSION) {
@@ -68,6 +68,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
+    // التحقق مما إذا كانت شاشة البداية قد ظهرت بالفعل في هذه الجلسة
     const hasSeenSplash = sessionStorage.getItem(`has_seen_splash_${APP_VERSION}`);
     if (hasSeenSplash) setShowSplash(false);
     
@@ -103,7 +104,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
       )}
       
       <div className={cn(
-        "flex-1 flex flex-col relative overflow-hidden transition-opacity duration-300",
+        "flex-1 flex flex-col relative overflow-hidden transition-opacity duration-500",
         showSplash ? "opacity-0 invisible" : "opacity-100 visible"
       )}>
         <WelcomeModal />
