@@ -1,14 +1,14 @@
+
 'use client';
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { SimpleHeader } from '@/components/layout/simple-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/hooks/use-toast';
-import { HelpCircle, Phone, ShieldCheck, Lock, ChevronRight, Loader2, Key, CheckCircle2 } from 'lucide-react';
+import { HelpCircle, Phone, ShieldCheck, Lock, ChevronRight, Loader2, Key, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useFirestore } from '@/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
-type Step = 'phone' | 'verify' | 'reset';
+type Step = 'phone' | 'verify' | 'reset' | 'success';
 
 export default function ForgotPasswordPage() {
   const [step, setStep] = useState<Step>('phone');
@@ -33,7 +33,7 @@ export default function ForgotPasswordPage() {
   const { toast } = useToast();
   const firestore = useFirestore();
 
-  // 1. طلب رمز التحقق
+  // 1. طلب رمز التحقق والبحث عن المستخدم
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (phoneNumber.length !== 9) {
@@ -43,8 +43,9 @@ export default function ForgotPasswordPage() {
 
     setIsLoading(true);
     try {
-      // التحقق من وجود المستخدم في Firestore
-      const usersRef = collection(firestore!, 'users');
+      if (!firestore) throw new Error("Firebase is not initialized");
+
+      const usersRef = collection(firestore, 'users');
       const q = query(usersRef, where('phoneNumber', '==', phoneNumber));
       const querySnapshot = await getDocs(q);
 
@@ -60,7 +61,7 @@ export default function ForgotPasswordPage() {
       const otp = Math.floor(1000 + Math.random() * 9000).toString();
       setSentOtp(otp);
 
-      // إرسال SMS
+      // إرسال SMS عبر الـ API الفعلي الخاص بك
       const smsMessage = `ستار موبايل: رمز إعادة تعيين كلمة المرور هو (${otp}). يرجى إدخاله للمتابعة.`;
       const response = await fetch('/api/sms', {
           method: 'POST',
@@ -71,9 +72,9 @@ export default function ForgotPasswordPage() {
 
       if (data.success) {
         setStep('verify');
-        toast({ title: 'تم الإرسال', description: 'تم إرسال رمز التحقق إلى رقم جوالك.' });
+        toast({ title: 'تم الإرسال', description: 'تم إرسال رمز التحقق إلى رقم جوالك بنجاح.' });
       } else {
-        throw new Error("فشل إرسال الرمز.");
+        throw new Error("فشل إرسال الرمز عبر المزود.");
       }
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'خطأ', description: error.message });
@@ -92,7 +93,7 @@ export default function ForgotPasswordPage() {
     }
   };
 
-  // 3. تعيين كلمة السر الجديدة
+  // 3. محاكاة تعيين كلمة السر الجديدة
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword.length < 6) {
@@ -105,37 +106,34 @@ export default function ForgotPasswordPage() {
     }
 
     setIsLoading(true);
-    try {
-      // في النسخة الحالية نقوم بمحاكاة النجاح. 
-      // لتغيير كلمة المرور فعلياً في Auth يتطلب ذلك Admin SDK أو Firebase Auth Reset Link.
-      // هنا سنعتبر أن العملية تمت بنجاح برمجياً للمتصفح.
-      toast({ title: 'نجاح', description: 'تم تحديث كلمة المرور بنجاح. يمكنك الدخول الآن.' });
-      setTimeout(() => {
-        router.push('/');
-      }, 1500);
-    } catch (error: any) {
-      toast({ variant: 'destructive', title: 'خطأ', description: 'فشل تحديث كلمة المرور.' });
-    } finally {
-      setIsLoading(false);
-    }
+    
+    // محاكاة تأخير للتحديث
+    setTimeout(() => {
+        setIsLoading(false);
+        setStep('success');
+        toast({ 
+            title: 'نجاح التوثيق', 
+            description: 'تم التحقق وتعيين كلمة المرور بنجاح في الواجهة.' 
+        });
+    }, 2000);
   };
 
   return (
     <>
       <div className="flex flex-col h-full bg-mesh-gradient text-white overflow-y-auto no-scrollbar pb-10">
-        {isLoading && <ProcessingOverlay message="جاري المعالجة..." />}
+        {isLoading && <ProcessingOverlay message="جاري معالجة الطلب..." />}
 
         <header className="p-4 flex items-center justify-between animate-in fade-in duration-500 shrink-0">
             <Link href="/" className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors">
                 <ChevronRight className="h-5 w-5" />
             </Link>
-            <h1 className="font-black text-sm">استعادة الحساب</h1>
+            <h1 className="font-black text-sm uppercase tracking-widest opacity-80">استعادة الوصول</h1>
             <div className="w-9" />
         </header>
 
         <div className="px-6 flex flex-col items-center flex-1 justify-center -mt-10">
           
-          {/* أيقونة القرصة مع الاستفهام الفخمة */}
+          {/* أيقونة الاستفهام الفخمة */}
           <div className="mb-8 text-center animate-in zoom-in duration-700">
              <div className="relative w-28 h-28 mx-auto mb-4">
                 <div className="absolute inset-0 bg-white/20 rounded-[40px] blur-3xl animate-pulse" />
@@ -143,12 +141,25 @@ export default function ForgotPasswordPage() {
                     {step === 'phone' && <HelpCircle className="h-16 w-16 text-white stroke-[2.5px]" />}
                     {step === 'verify' && <Key className="h-16 w-16 text-white stroke-[2.5px]" />}
                     {step === 'reset' && <ShieldCheck className="h-16 w-16 text-white stroke-[2.5px]" />}
+                    {step === 'success' && <CheckCircle2 className="h-16 w-16 text-green-400 stroke-[2.5px]" />}
                 </div>
              </div>
-            <h2 className="text-2xl font-black text-white">نسيت كلمة السر؟</h2>
-            <p className="text-white/70 text-[11px] font-bold mt-2 leading-relaxed max-w-[280px] mx-auto">
-              يرجى كتابة رقم جوالك لطلب كلمة المرور وسيتم إرسال كود التحقق إليك في حال كنت مسجلاً لدينا.
-            </p>
+            
+            {step !== 'success' ? (
+                <>
+                    <h2 className="text-2xl font-black text-white">نسيت كلمة السر؟</h2>
+                    <p className="text-white/70 text-[11px] font-bold mt-2 leading-relaxed max-w-[280px] mx-auto">
+                        يرجى كتابة رقم جوالك لطلب كلمة المرور وسيتم إرسال كود التحقق إليك في حال كنت مسجلاً لدينا.
+                    </p>
+                </>
+            ) : (
+                <>
+                    <h2 className="text-2xl font-black text-white">تم التحديث بنجاح!</h2>
+                    <p className="text-white/70 text-[11px] font-bold mt-2 leading-relaxed max-w-[280px] mx-auto">
+                        تمت عملية استعادة الحساب بنجاح. يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.
+                    </p>
+                </>
+            )}
           </div>
 
           <div className="w-full max-w-sm space-y-6 animate-in slide-in-from-bottom-8 duration-1000">
@@ -156,7 +167,7 @@ export default function ForgotPasswordPage() {
             {step === 'phone' && (
               <form onSubmit={handleRequestOtp} className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black mr-2 text-white uppercase tracking-widest">رقم الجوال</Label>
+                  <Label className="text-[10px] font-black mr-2 text-white uppercase tracking-widest">رقم الجوال المسجل</Label>
                   <div className="relative group">
                     <Input
                       type="tel"
@@ -178,7 +189,7 @@ export default function ForgotPasswordPage() {
             {step === 'verify' && (
               <form onSubmit={handleVerifyOtp} className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black mr-2 text-white uppercase tracking-widest">رمز التحقق (OTP)</Label>
+                  <Label className="text-[10px] font-black text-center block text-white/50 uppercase tracking-[0.2em]">أدخل الرمز المكون من 4 أرقام</Label>
                   <Input
                     type="tel"
                     maxLength={4}
@@ -192,6 +203,7 @@ export default function ForgotPasswordPage() {
                 <Button type="submit" className="w-full h-14 bg-white text-primary font-black text-base rounded-[22px] shadow-xl">
                     تأكيد الرمز
                 </Button>
+                <button type="button" onClick={() => setStep('phone')} className="w-full text-[10px] font-bold text-white/40 hover:text-white transition-colors">تعديل رقم الجوال؟</button>
               </form>
             )}
 
@@ -221,17 +233,33 @@ export default function ForgotPasswordPage() {
                     />
                   </div>
                 </div>
+                
+                <div className="bg-yellow-400/20 border border-yellow-400/30 p-3 rounded-2xl flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-yellow-400 shrink-0 mt-0.5" />
+                    <p className="text-[9px] text-yellow-100/80 font-bold leading-relaxed">
+                        ملاحظة: في هذا النموذج التجريبي، يتم التحقق من هويتك بنجاح. لتفعيل تغيير كلمة السر في النظام السحابي الفعلي، يتطلب الأمر صلاحيات إدارية (Admin API).
+                    </p>
+                </div>
+
                 <Button type="submit" className="w-full h-14 bg-green-500 text-white font-black text-base rounded-[22px] shadow-xl hover:bg-green-600">
                     تحديث كلمة السر
                 </Button>
               </form>
             )}
 
+            {step === 'success' && (
+                <div className="space-y-4 animate-in fade-in zoom-in duration-500">
+                    <Button onClick={() => router.push('/')} className="w-full h-14 bg-white text-primary font-black text-base rounded-[22px] shadow-xl">
+                        تسجيل الدخول الآن
+                    </Button>
+                </div>
+            )}
+
           </div>
         </div>
 
-        <footer className="text-center text-[9px] font-bold text-white/40 pb-6">
-          <p>© ستار موبايل - حماية بيانات متطورة</p>
+        <footer className="text-center text-[9px] font-bold text-white/40 pb-6 mt-auto">
+          <p>© ستار موبايل - أمن المعلومات والخصوصية</p>
         </footer>
       </div>
       <Toaster />
