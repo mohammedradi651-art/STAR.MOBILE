@@ -63,8 +63,6 @@ export default function LoginPage() {
     }
   };
 
-  // ملاحظة: قمنا بإزالة "return null" أثناء التحميل لضمان بقاء الواجهة ظاهرة دائماً "ظاهر ظاهر ظاهر"
-  
   return (
     <>
       <div className="flex flex-col h-full bg-mesh-gradient text-white overflow-y-auto no-scrollbar">
@@ -94,67 +92,65 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* الفورم يظهر دائماً إلا إذا تأكدنا 100% أن المستخدم داخل الحساب ويتم توجيهه */}
-          {!user && (
-            <form onSubmit={handleLogin} className="w-full space-y-4 animate-in slide-in-from-bottom-8 duration-1000 pb-10">
-                <div className="space-y-1.5">
-                <Label htmlFor="phone" className="text-[10px] font-black mr-2 text-white uppercase tracking-widest">رقم الهاتف</Label>
-                <div className="relative group">
-                    <Input
-                    id="phone"
-                    type="tel"
-                    className="h-12 bg-white/10 border-white/20 text-white placeholder:text-white/70 text-center font-black text-base rounded-[20px] focus-visible:ring-white/40 transition-all group-hover:bg-white/15 pr-12"
-                    placeholder="7xxxxxxxx"
-                    value={phoneNumber}
-                    onChange={e => setPhoneNumber(e.target.value)}
-                    />
-                    <Phone className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/60 group-focus-within:text-white transition-colors" />
-                </div>
-                </div>
+          {/* الفورم يظهر دائماً وبشكل فوري لضمان ظهور رابط "نسيت كلمة السر" في كل زمان ومكان */}
+          <form onSubmit={handleLogin} className="w-full space-y-4 animate-in slide-in-from-bottom-8 duration-1000 pb-10">
+              <div className="space-y-1.5">
+              <Label htmlFor="phone" className="text-[10px] font-black mr-2 text-white uppercase tracking-widest">رقم الهاتف</Label>
+              <div className="relative group">
+                  <Input
+                  id="phone"
+                  type="tel"
+                  className="h-12 bg-white/10 border-white/20 text-white placeholder:text-white/70 text-center font-black text-base rounded-[20px] focus-visible:ring-white/40 transition-all group-hover:bg-white/15 pr-12"
+                  placeholder="7xxxxxxxx"
+                  value={phoneNumber}
+                  onChange={e => setPhoneNumber(e.target.value)}
+                  />
+                  <Phone className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/60 group-focus-within:text-white transition-colors" />
+              </div>
+              </div>
 
-                <div className="space-y-1.5">
-                <Label htmlFor="password" title="كلمة المرور" className="text-[10px] font-black mr-2 text-white uppercase tracking-widest mb-1 block">كلمة المرور</Label>
-                <div className="relative group">
-                    <Input
-                    id="password"
-                    type={isPasswordVisible ? 'text' : 'password'}
-                    placeholder="********"
-                    className="h-12 bg-white/10 border-white/20 text-white placeholder:text-white/70 text-center font-black text-base rounded-[20px] focus-visible:ring-white/40 transition-all group-hover:bg-white/15 pr-12 pl-12"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    />
-                    <Lock className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/60 group-focus-within:text-white transition-colors" />
-                    <button 
-                    type="button" 
-                    onClick={() => setIsPasswordVisible(!isPasswordVisible)} 
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-white/60 hover:text-white transition-colors"
-                    >
-                    {isPasswordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
-                </div>
-                {/* رابط نسيت كلمة السر - ظاهر دائماً */}
-                <div className="text-right px-2 pt-1">
-                    <Link href="/forgot-password" title="نسيت كلمة السر" className="text-[10px] font-bold text-white/60 hover:text-white transition-colors">نسيت كلمة السر؟</Link>
-                </div>
-                </div>
+              <div className="space-y-1.5">
+              <Label htmlFor="password" title="كلمة المرور" className="text-[10px] font-black mr-2 text-white uppercase tracking-widest mb-1 block">كلمة المرور</Label>
+              <div className="relative group">
+                  <Input
+                  id="password"
+                  type={isPasswordVisible ? 'text' : 'password'}
+                  placeholder="********"
+                  className="h-12 bg-white/10 border-white/20 text-white placeholder:text-white/70 text-center font-black text-base rounded-[20px] focus-visible:ring-white/40 transition-all group-hover:bg-white/15 pr-12 pl-12"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  />
+                  <Lock className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/60 group-focus-within:text-white transition-colors" />
+                  <button 
+                  type="button" 
+                  onClick={() => setIsPasswordVisible(!isPasswordVisible)} 
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-white/60 hover:text-white transition-colors"
+                  >
+                  {isPasswordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+              </div>
+              
+              {/* رابط نسيت كلمة السر - ظاهر ظاهر ظاهر دائماً لجميع الزوار ومن اول مرة */}
+              <div className="text-right px-2 pt-1">
+                  <Link href="/forgot-password" title="نسيت كلمة السر" className="text-[10px] font-bold text-white/60 hover:text-white transition-colors">نسيت كلمة السر؟</Link>
+              </div>
+              </div>
 
-                <div className="pt-2">
-                    <Button 
-                        type="submit" 
-                        className="w-full h-12 text-base font-black bg-white text-primary hover:bg-white/90 rounded-[20px] shadow-xl transition-all active:scale-95 disabled:opacity-50" 
-                        disabled={isLoading}
-                    >
-                    {isLoading ? <LoaderIcon className="animate-spin h-5 w-5" /> : 'دخول'}
-                    </Button>
-                </div>
-            </form>
-          )}
+              <div className="pt-2">
+                  <Button 
+                      type="submit" 
+                      className="w-full h-12 text-base font-black bg-white text-primary hover:bg-white/90 rounded-[20px] shadow-xl transition-all active:scale-95 disabled:opacity-50" 
+                      disabled={isLoading}
+                  >
+                  {isLoading ? <LoaderIcon className="animate-spin h-5 w-5" /> : 'دخول'}
+                  </Button>
+              </div>
+          </form>
 
-          {/* في حالة التحويل التلقائي للحساب، نظهر مؤشر بسيط فقط */}
-          {user && (
-            <div className="flex flex-col items-center gap-4 py-10 animate-in fade-in duration-500">
-                <LoaderIcon className="h-8 w-8 animate-spin text-white/50" />
-                <p className="text-xs font-bold text-white/60">جاري الدخول لحسابك...</p>
+          {/* يظهر هذا المؤشر فقط أثناء محاولة النظام التأكد من وجود جلسة دخول سابقة */}
+          {isUserLoading && (
+            <div className="flex flex-col items-center gap-2 py-2 animate-in fade-in duration-500">
+                <LoaderIcon className="h-4 w-4 animate-spin text-white/30" />
             </div>
           )}
 
