@@ -13,8 +13,8 @@ import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
-// إصدار التطبيق الحالي - تغيير هذا الرقم سيؤدي لمسح كاش جميع المستخدمين فوراً
-const APP_VERSION = '1.6.0';
+// إصدار التطبيق الحالي - تحديثه يطهر كاش المتصفح
+const APP_VERSION = '1.6.2';
 
 type UserProfile = {
   isPinEnabled?: boolean;
@@ -29,45 +29,21 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const [isPinVerified, setIsPinVerified] = useState(false);
   const [isNavVisible, setIsNavVisible] = useState(false);
 
-  // نظام تطهير الكاش (Cache Purge Engine)
+  // نظام تطهير الكاش السريع
   useEffect(() => {
     const savedVersion = localStorage.getItem('star_app_version');
-    
     if (savedVersion !== APP_VERSION) {
-      console.warn("🔄 كشف نسخة قديمة.. جاري تطهير الكاش وإعادة التحميل...");
-      
-      // مسح كافة البيانات المخزنة
       localStorage.clear();
       sessionStorage.clear();
-      
-      // مسح ملفات تعريف الارتباط البرمجية
-      document.cookie.split(";").forEach((c) => {
-        document.cookie = c
-          .replace(/^ +/, "")
-          .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
-      });
-
-      // حفظ النسخة الجديدة
       localStorage.setItem('star_app_version', APP_VERSION);
-      
-      // إعادة تحميل إجبارية من السيرفر
       window.location.reload();
-      return;
     }
   }, []);
 
+  // تسجيل Service Worker
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js?v=' + APP_VERSION).then(
-          (registration) => {
-            console.log('Service Worker registered');
-          },
-          (err) => {
-            console.log('Service Worker registration failed:', err);
-          }
-        );
-      });
+      navigator.serviceWorker.register('/sw.js?v=' + APP_VERSION).catch(() => {});
     }
   }, []);
 
@@ -93,13 +69,9 @@ function AppContent({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const hasSeenSplash = sessionStorage.getItem(`has_seen_splash_${APP_VERSION}`);
-    if (hasSeenSplash) {
-      setShowSplash(false);
-    }
-    const isVerified = sessionStorage.getItem('is_pin_verified');
-    if (isVerified) {
-        setIsPinVerified(true);
-    }
+    if (hasSeenSplash) setShowSplash(false);
+    
+    if (sessionStorage.getItem('is_pin_verified')) setIsPinVerified(true);
   }, []);
 
   const handleSplashComplete = () => {
@@ -131,7 +103,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
       )}
       
       <div className={cn(
-        "flex-1 flex flex-col relative overflow-hidden transition-opacity duration-1000",
+        "flex-1 flex flex-col relative overflow-hidden transition-opacity duration-300",
         showSplash ? "opacity-0 invisible" : "opacity-100 visible"
       )}>
         <WelcomeModal />
@@ -154,14 +126,12 @@ export default function RootLayout({
     <html lang="ar" dir="rtl">
       <head>
         <title>ستار موبايل</title>
-        <meta name="description" content="تطبيق ستار موبايل لخدمات الاتصالات والإنترنت" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no" />
-        <link rel="icon" type="image/jpeg" href="/logo.jpeg" />
-        <link rel="apple-touch-icon" href="/logo.jpeg" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <link rel="icon" href="/logo.jpeg" />
         <link rel="manifest" href={`/manifest.json?v=${APP_VERSION}`} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@300;400;700;800&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@400;700;800&display=swap" rel="stylesheet" />
       </head>
       <body className="antialiased bg-background">
         <FirebaseProvider>

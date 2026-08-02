@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Eye, EyeOff, AlertTriangle, Phone, Lock, Loader2 as LoaderIcon } from 'lucide-react';
+import { Eye, EyeOff, Phone, Lock, Loader2 as LoaderIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,7 +12,6 @@ import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import Image from 'next/image';
-import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,15 +34,7 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!auth) {
-      toast({ 
-        variant: 'destructive', 
-        title: 'خطأ في الاتصال', 
-        description: 'تحذير: لم يتم اكتشاف إعدادات Firebase.' 
-      });
-      return;
-    }
+    if (!auth) return;
 
     if (!phoneNumber || !password) {
       toast({ variant: 'destructive', title: 'خطأ', description: 'الرجاء إدخال رقم الهاتف وكلمة المرور.' });
@@ -55,8 +46,7 @@ export default function LoginPage() {
     try {
       await signInWithEmailAndPassword(auth, email, password.trim());
     } catch (error: any) {
-      console.error("Login error:", error);
-      toast({ variant: 'destructive', title: 'فشل الدخول', description: 'رقم الهاتف أو كلمة المرور غير صحيحة.' });
+      toast({ variant: 'destructive', title: 'فشل الدخول', description: 'تأكد من بياناتك وحاول مجدداً.' });
     } finally {
       setIsLoading(false);
     }
@@ -65,12 +55,12 @@ export default function LoginPage() {
   return (
     <>
       <div className="flex flex-col h-full bg-mesh-gradient text-white overflow-y-auto no-scrollbar">
-        <div className="flex-1 flex flex-col items-center justify-center p-6 w-full max-w-sm mx-auto py-12">
+        <div className="flex-1 flex flex-col items-center justify-center p-6 w-full max-w-sm mx-auto py-8">
           
-          <div className="mb-8 text-center">
-            <div className="relative w-28 h-28 mx-auto mb-4">
-                <div className="absolute inset-0 bg-white/20 rounded-[40px] blur-2xl" />
-                <div className="relative w-full h-full overflow-hidden rounded-[36px] border-4 border-white/30 shadow-2xl bg-white">
+          <div className="mb-6 text-center">
+            <div className="relative w-24 h-24 mx-auto mb-4">
+                <div className="absolute inset-0 bg-white/20 rounded-[35px] blur-xl" />
+                <div className="relative w-full h-full overflow-hidden rounded-[30px] border-4 border-white/30 shadow-2xl bg-white">
                     <Image 
                         src="https://i.postimg.cc/2551nF1s/20260308-183624.jpg" 
                         alt="Star Mobile Logo" 
@@ -80,84 +70,64 @@ export default function LoginPage() {
                     />
                 </div>
             </div>
-            <h1 className="text-2xl font-black tracking-tight text-white drop-shadow-sm">ستار موبايل</h1>
-            <p className="text-white/80 text-xs font-bold mt-1.5">عالم من الخدمات الرقمية بين يديك</p>
+            <h1 className="text-2xl font-black text-white">ستار موبايل</h1>
+            <p className="text-white/70 text-[10px] font-bold mt-1 uppercase tracking-widest">عالم من الخدمات الرقمية</p>
           </div>
 
-          {!auth && !isUserLoading && (
-            <div className="bg-destructive/20 border border-white/20 p-4 rounded-3xl mb-6 text-white text-xs flex items-start gap-3 backdrop-blur-md">
-              <AlertTriangle className="h-5 w-5 shrink-0" />
-              <p>تحذير: لم يتم اكتشاف إعدادات Firebase.</p>
-            </div>
-          )}
-
-          <form onSubmit={handleLogin} className="w-full space-y-4 pb-10">
+          <form onSubmit={handleLogin} className="w-full space-y-4 pb-6">
               <div className="space-y-1.5">
-              <Label htmlFor="phone" className="text-[10px] font-black mr-2 text-white uppercase tracking-widest">رقم الهاتف</Label>
-              <div className="relative group">
+                <Label htmlFor="phone" className="text-[10px] font-black mr-2 text-white/60 uppercase">رقم الهاتف</Label>
+                <div className="relative">
                   <Input
-                  id="phone"
-                  type="tel"
-                  className="h-12 bg-white/10 border-white/20 text-white placeholder:text-white/70 text-center font-black text-base rounded-[20px] focus-visible:ring-white/40 transition-all group-hover:bg-white/15 pr-12"
-                  placeholder="7xxxxxxxx"
-                  value={phoneNumber}
-                  onChange={e => setPhoneNumber(e.target.value)}
+                    id="phone"
+                    type="tel"
+                    className="h-12 bg-white/10 border-white/20 text-white text-center font-black text-base rounded-[20px] pr-11"
+                    placeholder="7xxxxxxxx"
+                    value={phoneNumber}
+                    onChange={e => setPhoneNumber(e.target.value)}
                   />
-                  <Phone className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/60 group-focus-within:text-white transition-colors" />
-              </div>
+                  <Phone className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+                </div>
               </div>
 
               <div className="space-y-1.5">
-              <Label htmlFor="password" title="كلمة المرور" className="text-[10px] font-black mr-2 text-white uppercase tracking-widest mb-1 block">كلمة المرور</Label>
-              <div className="relative group">
+                <Label htmlFor="password" className="text-[10px] font-black mr-2 text-white/60 uppercase">كلمة المرور</Label>
+                <div className="relative">
                   <Input
-                  id="password"
-                  type={isPasswordVisible ? 'text' : 'password'}
-                  placeholder="********"
-                  className="h-12 bg-white/10 border-white/20 text-white placeholder:text-white/70 text-center font-black text-base rounded-[20px] focus-visible:ring-white/40 transition-all group-hover:bg-white/15 pr-12 pl-12"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
+                    id="password"
+                    type={isPasswordVisible ? 'text' : 'password'}
+                    placeholder="********"
+                    className="h-12 bg-white/10 border-white/20 text-white text-center font-black text-base rounded-[20px] px-11"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
                   />
-                  <Lock className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/60 group-focus-within:text-white transition-colors" />
-                  <button 
-                  type="button" 
-                  onClick={() => setIsPasswordVisible(!isPasswordVisible)} 
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-white/60 hover:text-white transition-colors"
-                  >
-                  {isPasswordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                  <Lock className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+                  <button type="button" onClick={() => setIsPasswordVisible(!isPasswordVisible)} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40">
+                    {isPasswordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
-              </div>
-              
-              <div className="text-right px-2 pt-1">
-                  <Link href="/forgot-password" title="نسيت كلمة السر" className="text-[10px] font-black text-white/80 hover:text-white transition-colors underline underline-offset-4 decoration-white/20">نسيت كلمة السر؟</Link>
-              </div>
+                </div>
+                <div className="text-right px-2 pt-1">
+                  <Link href="/forgot-password" title="نسيت كلمة السر" className="text-[10px] font-black text-white/80 hover:text-white underline underline-offset-4 decoration-white/20">نسيت كلمة السر؟</Link>
+                </div>
               </div>
 
-              <div className="pt-2">
-                  <Button 
-                      type="submit" 
-                      className="w-full h-12 text-base font-black bg-white text-primary hover:bg-white/90 rounded-[20px] shadow-xl transition-all active:scale-95 disabled:opacity-50" 
-                      disabled={isLoading}
-                  >
-                  {isLoading ? <LoaderIcon className="animate-spin h-5 w-5" /> : 'دخول'}
-                  </Button>
-              </div>
+              <Button 
+                  type="submit" 
+                  className="w-full h-12 text-base font-black bg-white text-primary rounded-[20px] shadow-xl transition-transform active:scale-95" 
+                  disabled={isLoading}
+              >
+                {isLoading ? <LoaderIcon className="animate-spin h-5 w-5" /> : 'دخول'}
+              </Button>
           </form>
 
-          {isUserLoading && (
-            <div className="flex flex-col items-center gap-2 py-2">
-                <LoaderIcon className="h-4 w-4 animate-spin text-white/30" />
-            </div>
-          )}
-
-          <div className="mt-6 text-center">
-            <p className="text-white/70 text-xs font-bold">ليس لديك حساب؟</p>
-            <Link href="/signup" className="mt-2 inline-block py-1.5 px-5 rounded-full bg-white/10 border border-white/20 hover:bg-white/20 transition-all font-black text-white text-[11px]">انضم إلينا الآن</Link>
+          <div className="mt-4 text-center">
+            <p className="text-white/50 text-[10px] font-bold">ليس لديك حساب؟</p>
+            <Link href="/signup" className="mt-2 inline-block py-1.5 px-6 rounded-full bg-white/10 border border-white/10 hover:bg-white/20 font-black text-white text-[11px]">انضم إلينا</Link>
           </div>
         </div>
 
-        <footer className="text-center text-[9px] font-bold text-white/50 pb-6">
-          <p>© ستار موبايل - تطوير محمد راضي باشادي</p>
+        <footer className="text-center text-[8px] font-bold text-white/30 pb-6 mt-auto">
+          <p>© STAR MOBILE - V1.6.2</p>
         </footer>
       </div>
       <Toaster />
