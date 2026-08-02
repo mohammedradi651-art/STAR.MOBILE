@@ -1,15 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
-
-// استيراد مكتبة Lottie بشكل ديناميكي لتجنب أخطاء Module Factory في Next.js
-const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
 
 /**
  * شاشة الترحيب الملكية (Luxury Splash Screen)
- * تعرض الشعار المتحرك "لحاله" مع خلفية بيضاء متدرجة وشريط انتظار نحيف.
+ * تم استبدال next/dynamic بنظام تحميل يدوي لتجنب أخطاء Turbopack.
  */
 export function SplashScreen({ 
   onComplete, 
@@ -19,24 +15,37 @@ export function SplashScreen({
   isAppReady: boolean;
 }) {
   const [isExiting, setIsExiting] = useState(false);
+  const [LottieComponent, setLottieComponent] = useState<any>(null);
   const [animationData, setAnimationData] = useState<any>(null);
 
   useEffect(() => {
-    // جلب ملف الـ Lottie للشعار المتحرك
-    fetch('/TH.json')
-      .then(res => res.json())
-      .then(data => setAnimationData(data))
-      .catch(err => console.error("Lottie load error:", err));
+    // تحميل المكتبة والبيانات في جهة المتصفح فقط وبشكل مستقل
+    const loadAssets = async () => {
+        try {
+            const [lottieMod, animRes] = await Promise.all([
+                import('lottie-react'),
+                fetch('/TH.json')
+            ]);
+            setLottieComponent(() => lottieMod.default);
+            setAnimationData(await animRes.json());
+        } catch (err) {
+            console.error("Lottie load error:", err);
+        }
+    };
+
+    loadAssets();
 
     // التوجيه للخروج بمجرد جاهزية التطبيق
     if (isAppReady) {
       const timer = setTimeout(() => {
         setIsExiting(true);
-        setTimeout(onComplete, 500); // وقت الأنيميشن النهائي للخروج
-      }, 2000); // مدة بقاء الشعار للاستمتاع بالفخامة
+        setTimeout(onComplete, 500); 
+      }, 2000); 
       return () => clearTimeout(timer);
     }
   }, [isAppReady, onComplete]);
+
+  const Lottie = LottieComponent;
 
   return (
     <div 
@@ -47,9 +56,9 @@ export function SplashScreen({
     >
       <div className="relative flex flex-col items-center justify-center w-full max-w-sm animate-in fade-in zoom-in-95 duration-1000">
         
-        {/* الشعار المتحرك - يظهر بنقاء بدون دوائر أو نصوص */}
+        {/* الشعار المتحرك */}
         <div className="relative w-40 h-40 flex items-center justify-center mb-8">
-            {animationData && (
+            {Lottie && animationData && (
                 <Lottie 
                     animationData={animationData} 
                     loop={true} 
@@ -58,7 +67,7 @@ export function SplashScreen({
             )}
         </div>
 
-        {/* شريط الانتظار النحيف والأنيق (Waiting Strip) */}
+        {/* شريط الانتظار النحيف والأنيق */}
         <div className="w-32 h-[3px] bg-slate-100 rounded-full overflow-hidden relative shadow-inner">
             <div className="absolute top-0 left-0 h-full bg-[#0048ad] rounded-full animate-progress-line shadow-[0_0_8px_rgba(0,72,173,0.4)]" />
         </div>

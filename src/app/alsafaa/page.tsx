@@ -16,7 +16,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
-import Lottie from 'lottie-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,24 +28,34 @@ type AlsafaResult = {
 };
 
 /**
- * مكون التحميل المطور باستخدام Lottie (JSON)
- * يعرض الشعار المتحرك "لحاله" بدون أي نصوص أو دوائر إضافية لضمان قمة الفخامة
+ * مكون التحميل المطور - تم إصلاح الاستيراد لتجنب الأخطاء
  */
 const AlsafaaMovingLoader = () => {
+  const [LottieComponent, setLottieComponent] = useState<any>(null);
   const [animationData, setAnimationData] = useState<any>(null);
 
   useEffect(() => {
-    // جلب ملف الـ Lottie من المسار العام المخصص
-    fetch('/TH.json')
-      .then(res => res.json())
-      .then(data => setAnimationData(data))
-      .catch(err => console.error("Lottie load error:", err));
+    const loadAssets = async () => {
+        try {
+            const [lottieMod, animRes] = await Promise.all([
+                import('lottie-react'),
+                fetch('/TH.json')
+            ]);
+            setLottieComponent(() => lottieMod.default);
+            setAnimationData(await animRes.json());
+        } catch (err) {
+            console.error("Lottie load error:", err);
+        }
+    };
+    loadAssets();
   }, []);
+
+  const Lottie = LottieComponent;
 
   return (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-xl animate-in fade-in-0 duration-500">
       <div className="relative w-28 h-28 flex items-center justify-center overflow-hidden">
-          {animationData && (
+          {Lottie && animationData && (
             <Lottie 
                 animationData={animationData} 
                 loop={true} 
