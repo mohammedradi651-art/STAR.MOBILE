@@ -1,7 +1,7 @@
 'use client';
 
 import './globals.css';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { BottomNav } from '@/components/layout/bottom-nav';
 import { ThemeProvider } from '@/components/theme-provider';
 import { FirebaseProvider, useUser, useDoc, useFirestore, useMemoFirebase } from '@/firebase';
@@ -14,7 +14,7 @@ import { doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
 // إصدار التطبيق المحدث لتطهير الكاش وتفعيل الواجهة الجديدة
-const APP_VERSION = '1.6.2';
+const APP_VERSION = '1.6.3';
 
 type UserProfile = {
   isPinEnabled?: boolean;
@@ -23,6 +23,7 @@ type UserProfile = {
 
 function AppContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
   const [showSplash, setShowSplash] = useState(true);
@@ -74,6 +75,13 @@ function AppContent({ children }: { children: React.ReactNode }) {
     
     if (sessionStorage.getItem('is_pin_verified')) setIsPinVerified(true);
   }, []);
+
+  // توجيه تلقائي مباشر للمسجلين فور جاهزية البيانات لضمان عدم ظهور شاشة الدخول
+  useEffect(() => {
+    if (!isUserLoading && user && pathname === '/') {
+        router.replace('/login');
+    }
+  }, [user, isUserLoading, pathname, router]);
 
   const handleSplashComplete = () => {
     setShowSplash(false);
