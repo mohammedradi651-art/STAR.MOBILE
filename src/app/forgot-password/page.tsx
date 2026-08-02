@@ -22,8 +22,6 @@ type Step = 'phone' | 'verify' | 'reset' | 'success';
 export default function ForgotPasswordPage() {
   const [step, setStep] = useState<Step>('phone');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const [sentOtp, setSentOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -33,8 +31,8 @@ export default function ForgotPasswordPage() {
   const { toast } = useToast();
   const firestore = useFirestore();
 
-  // 1. طلب رمز التحقق
-  const handleRequestOtp = async (e: React.FormEvent) => {
+  // 1. طلب استعادة الحساب (تم تعطيل الـ SMS مؤقتاً للتجربة)
+  const handleRequestReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (phoneNumber.length !== 9) {
       toast({ variant: 'destructive', title: 'خطأ', description: 'رقم الهاتف يجب أن يتكون من 9 أرقام.' });
@@ -55,23 +53,13 @@ export default function ForgotPasswordPage() {
         return;
       }
 
-      const otp = Math.floor(1000 + Math.random() * 9000).toString();
-      setSentOtp(otp);
-
-      const smsMessage = `ستار موبايل: رمز إعادة تعيين كلمة المرور هو (${otp}).`;
-      const response = await fetch('/api/sms', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phoneNumber, message: smsMessage })
+      // الانتقال مباشرة لتعيين كلمة المرور (تجاوز الـ OTP مؤقتاً)
+      setStep('reset');
+      toast({ 
+        title: 'تم التحقق', 
+        description: 'تم العثور على حسابك بنجاح. يرجى تعيين كلمة مرور جديدة الآن.' 
       });
-      const data = await response.json();
 
-      if (data.success) {
-        setStep('verify');
-        toast({ title: 'تم الإرسال', description: 'وصلك كود التحقق في رسالة SMS الآن.' });
-      } else {
-        throw new Error("فشل إرسال الرمز. تأكد من رصيد الـ SMS.");
-      }
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'خطأ', description: error.message });
     } finally {
@@ -79,17 +67,7 @@ export default function ForgotPasswordPage() {
     }
   };
 
-  // 2. التحقق من الرمز
-  const handleVerifyOtp = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (otpCode === sentOtp) {
-      setStep('reset');
-    } else {
-      toast({ variant: 'destructive', title: 'رمز خاطئ', description: 'الرمز الذي أدخلته غير صحيح.' });
-    }
-  };
-
-  // 3. تحديث كلمة المرور
+  // 3. تحديث كلمة المرور فعلياً
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword.length < 6) {
@@ -137,9 +115,8 @@ export default function ForgotPasswordPage() {
                 <div className="absolute inset-0 bg-white/20 rounded-[40px] blur-3xl animate-pulse" />
                 <div className="relative w-full h-full bg-white/15 backdrop-blur-xl rounded-[36px] border-4 border-white/30 shadow-2xl flex items-center justify-center overflow-hidden">
                     {step === 'phone' && <HelpCircle className="h-14 w-14 text-white stroke-[2.5px]" />}
-                    {step === 'verify' && <Key className="h-14 w-14 text-white stroke-[2.5px]" />}
                     {step === 'reset' && <ShieldCheck className="h-14 w-14 text-white stroke-[2.5px]" />}
-                    {step === 'success' && <CheckCircle2 className="h-14 w-14 text-green-400 stroke-[2.5px] animate-in zoom-in-50 duration-500" />}
+                    {step === 'success' && <CheckCircle2 className="h-14 w-14 text-green-400 animate-in zoom-in-50 duration-500" />}
                 </div>
                 {step === 'success' && (
                     <div className="absolute -top-2 -right-2 bg-green-500 p-2 rounded-2xl shadow-xl animate-bounce">
@@ -152,16 +129,16 @@ export default function ForgotPasswordPage() {
                 <>
                     <h2 className="text-2xl font-black text-white">استعادة الحساب</h2>
                     <p className="text-white/70 text-[11px] font-bold mt-2 leading-relaxed max-w-[280px] mx-auto">
-                        يرجى كتابة رقم جوالك المسجل وسيصلك رمز التحقق لإعادة تعيين كلمة المرور.
+                        {step === 'phone' 
+                            ? "يرجى كتابة رقم جوالك المسجل لتعيين كلمة مرور جديدة (تم تعطيل الرمز مؤقتاً للتجربة)."
+                            : "أدخل كلمة المرور الجديدة وتأكد من حفظها جيداً."}
                     </p>
                 </>
             ) : (
                 <>
-                    <h2 className="text-2xl font-black text-white">مبروك، تم النجاح!</h2>
+                    <h2 className="text-2xl font-black text-white">تم التحديث بنجاح!</h2>
                     <p className="text-white/70 text-[11px] font-bold mt-2 leading-relaxed max-w-[280px] mx-auto">
-                        {isDemoMode 
-                            ? "تم التحقق من هويتك بنجاح (وضع المعاينة). لتفعيل التغيير الفعلي، اطلب من المطور ربط مفاتيح السيرفر."
-                            : "تم تحديث كلمة المرور الجديدة في النظام بنجاح. يمكنك الآن الدخول لحسابك."}
+                        لقد تم تغيير كلمة المرور بنجاح. يمكنك الآن العودة لصفحة الدخول واستخدام كلمة المرور الجديدة.
                     </p>
                 </>
             )}
@@ -170,9 +147,9 @@ export default function ForgotPasswordPage() {
           <div className="w-full max-w-sm space-y-6 animate-in slide-in-from-bottom-8 duration-1000">
             
             {step === 'phone' && (
-              <form onSubmit={handleRequestOtp} className="space-y-4">
+              <form onSubmit={handleRequestReset} className="space-y-4">
                 <div className="space-y-2 text-right">
-                  <Label className="text-[10px] font-black mr-2 text-white/60 uppercase tracking-widest">رقم الجوال</Label>
+                  <Label className="text-[10px] font-black mr-2 text-white/60 uppercase tracking-widest">رقم الجوال المسجل</Label>
                   <div className="relative">
                     <Input
                       type="tel"
@@ -186,29 +163,8 @@ export default function ForgotPasswordPage() {
                   </div>
                 </div>
                 <Button type="submit" className="w-full h-14 bg-white text-primary font-black text-base rounded-[22px] shadow-xl active:scale-95 transition-transform">
-                    إرسال الرمز
+                    تحقق وابدأ الاستعادة
                 </Button>
-              </form>
-            )}
-
-            {step === 'verify' && (
-              <form onSubmit={handleVerifyOtp} className="space-y-6">
-                <div className="space-y-4">
-                  <Label className="text-[10px] font-black text-center block text-white/40 uppercase tracking-[0.2em]">أدخل كود الـ SMS</Label>
-                  <Input
-                    type="tel"
-                    maxLength={4}
-                    className="h-16 bg-white/10 border-white/20 text-white placeholder:text-white/10 text-center text-4xl font-black tracking-[0.5em] rounded-[24px]"
-                    placeholder="••••"
-                    value={otpCode}
-                    onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                    required
-                  />
-                </div>
-                <Button type="submit" className="w-full h-14 bg-white text-primary font-black text-base rounded-[22px] shadow-xl">
-                    تأكيد الكود
-                </Button>
-                <button type="button" onClick={() => setStep('phone')} className="w-full text-[10px] font-bold text-white/40 hover:text-white">تغيير الرقم؟</button>
               </form>
             )}
 
@@ -216,10 +172,10 @@ export default function ForgotPasswordPage() {
               <form onSubmit={handleResetPassword} className="space-y-4">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black mr-2 text-white/60">كلمة السر الجديدة</Label>
+                    <Label className="text-[10px] font-black mr-2 text-white/60 uppercase tracking-widest">كلمة السر الجديدة</Label>
                     <Input
                       type="password"
-                      className="h-12 bg-white/10 border-white/20 text-white rounded-[18px] text-center"
+                      className="h-14 bg-white/10 border-white/20 text-white rounded-[22px] text-center font-bold text-lg focus-visible:ring-white/40"
                       placeholder="********"
                       value={newPassword}
                       onChange={e => setNewPassword(e.target.value)}
@@ -227,10 +183,10 @@ export default function ForgotPasswordPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-black mr-2 text-white/60">تأكيد كلمة السر</Label>
+                    <Label className="text-[10px] font-black mr-2 text-white/60 uppercase tracking-widest">تأكيد كلمة السر</Label>
                     <Input
                       type="password"
-                      className="h-12 bg-white/10 border-white/20 text-white rounded-[18px] text-center"
+                      className="h-14 bg-white/10 border-white/20 text-white rounded-[22px] text-center font-bold text-lg focus-visible:ring-white/40"
                       placeholder="********"
                       value={confirmPassword}
                       onChange={e => setConfirmPassword(e.target.value)}
@@ -238,22 +194,14 @@ export default function ForgotPasswordPage() {
                     />
                   </div>
                 </div>
-                <Button type="submit" className="w-full h-14 bg-green-500 text-white font-black text-base rounded-[22px] shadow-xl">
-                    حفظ وتحديث
+                <Button type="submit" className="w-full h-14 bg-green-500 text-white font-black text-base rounded-[22px] shadow-xl active:scale-95 transition-all">
+                    تحديث كلمة المرور
                 </Button>
               </form>
             )}
 
             {step === 'success' && (
                 <div className="space-y-4 animate-in fade-in zoom-in duration-500">
-                    {isDemoMode && (
-                        <div className="bg-orange-500/20 border border-orange-500/30 p-4 rounded-2xl flex items-start gap-3">
-                            <AlertTriangle className="h-5 w-5 text-orange-400 shrink-0 mt-0.5" />
-                            <p className="text-[9px] text-orange-100/90 font-bold leading-relaxed">
-                                ملاحظة تقنية: تم النجاح برمجياً، لكن التغيير في قاعدة البيانات يتطلب إضافة المفاتيح السرية (Service Account) في إعدادات السيرفر ليعمل الوضع الحقيقي.
-                            </p>
-                        </div>
-                    )}
                     <Button onClick={() => router.push('/')} className="w-full h-14 bg-white text-primary font-black text-base rounded-[22px] shadow-xl active:scale-95 transition-all">
                         تسجيل الدخول الآن
                     </Button>
