@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -8,12 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/hooks/use-toast';
-import { HelpCircle, Phone, ShieldCheck, Lock, ChevronRight, Loader2, Key, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { HelpCircle, Phone, ShieldCheck, Key, ChevronRight, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import { useFirestore } from '@/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { resetPasswordAdmin } from './action';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +27,7 @@ export default function ForgotPasswordPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [foundUser, setFoundUser] = useState<any>(null);
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   const router = useRouter();
   const { toast } = useToast();
@@ -54,8 +54,6 @@ export default function ForgotPasswordPage() {
         setIsLoading(false);
         return;
       }
-
-      setFoundUser(querySnapshot.docs[0].data());
 
       // توليد رمز عشوائي
       const otp = Math.floor(1000 + Math.random() * 9000).toString();
@@ -93,7 +91,7 @@ export default function ForgotPasswordPage() {
     }
   };
 
-  // 3. محاكاة تعيين كلمة السر الجديدة
+  // 3. تحديث كلمة المرور فعلياً عبر السيرفر
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword.length < 6) {
@@ -107,15 +105,24 @@ export default function ForgotPasswordPage() {
 
     setIsLoading(true);
     
-    // محاكاة تأخير للتحديث
-    setTimeout(() => {
+    try {
+        const result = await resetPasswordAdmin(phoneNumber, newPassword);
+        
+        if (result.success) {
+            setIsDemoMode(!!result.demo);
+            setStep('success');
+            toast({ 
+                title: 'نجاح التحديث', 
+                description: result.demo ? 'تم التحقق بنجاح (وضع المعاينة).' : 'تم تحديث كلمة المرور بنجاح في النظام.' 
+            });
+        } else {
+            throw new Error(result.error);
+        }
+    } catch (error: any) {
+        toast({ variant: 'destructive', title: 'فشل التحديث', description: error.message });
+    } finally {
         setIsLoading(false);
-        setStep('success');
-        toast({ 
-            title: 'نجاح التوثيق', 
-            description: 'تم التحقق وتعيين كلمة المرور بنجاح في الواجهة.' 
-        });
-    }, 2000);
+    }
   };
 
   return (
@@ -127,13 +134,12 @@ export default function ForgotPasswordPage() {
             <Link href="/" className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors">
                 <ChevronRight className="h-5 w-5" />
             </Link>
-            <h1 className="font-black text-sm uppercase tracking-widest opacity-80">استعادة الوصول</h1>
+            <h1 className="font-black text-xs uppercase tracking-widest opacity-80">استعادة الوصول</h1>
             <div className="w-9" />
         </header>
 
         <div className="px-6 flex flex-col items-center flex-1 justify-center -mt-10">
           
-          {/* أيقونة الاستفهام الفخمة */}
           <div className="mb-8 text-center animate-in zoom-in duration-700">
              <div className="relative w-28 h-28 mx-auto mb-4">
                 <div className="absolute inset-0 bg-white/20 rounded-[40px] blur-3xl animate-pulse" />
@@ -156,7 +162,9 @@ export default function ForgotPasswordPage() {
                 <>
                     <h2 className="text-2xl font-black text-white">تم التحديث بنجاح!</h2>
                     <p className="text-white/70 text-[11px] font-bold mt-2 leading-relaxed max-w-[280px] mx-auto">
-                        تمت عملية استعادة الحساب بنجاح. يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.
+                        {isDemoMode 
+                            ? "تم التحقق من هويتك بنجاح في هذا النموذج التجريبي."
+                            : "تمت عملية استعادة الحساب وتحديث كلمة المرور في النظام بنجاح."}
                     </p>
                 </>
             )}
@@ -233,14 +241,6 @@ export default function ForgotPasswordPage() {
                     />
                   </div>
                 </div>
-                
-                <div className="bg-yellow-400/20 border border-yellow-400/30 p-3 rounded-2xl flex items-start gap-2">
-                    <AlertTriangle className="h-4 w-4 text-yellow-400 shrink-0 mt-0.5" />
-                    <p className="text-[9px] text-yellow-100/80 font-bold leading-relaxed">
-                        ملاحظة: في هذا النموذج التجريبي، يتم التحقق من هويتك بنجاح. لتفعيل تغيير كلمة السر في النظام السحابي الفعلي، يتطلب الأمر صلاحيات إدارية (Admin API).
-                    </p>
-                </div>
-
                 <Button type="submit" className="w-full h-14 bg-green-500 text-white font-black text-base rounded-[22px] shadow-xl hover:bg-green-600">
                     تحديث كلمة السر
                 </Button>
@@ -249,6 +249,14 @@ export default function ForgotPasswordPage() {
 
             {step === 'success' && (
                 <div className="space-y-4 animate-in fade-in zoom-in duration-500">
+                    {isDemoMode && (
+                        <div className="bg-yellow-400/20 border border-yellow-400/30 p-4 rounded-2xl flex items-start gap-3">
+                            <AlertTriangle className="h-5 w-5 text-yellow-400 shrink-0 mt-0.5" />
+                            <p className="text-[10px] text-yellow-100/90 font-bold leading-relaxed">
+                                ملاحظة للمطور: تم التحقق بنجاح، لكن لتغيير كلمة المرور في قاعدة البيانات الفعلية، يجب إضافة "Service Account Key" في إعدادات Vercel.
+                            </p>
+                        </div>
+                    )}
                     <Button onClick={() => router.push('/')} className="w-full h-14 bg-white text-primary font-black text-base rounded-[22px] shadow-xl">
                         تسجيل الدخول الآن
                     </Button>
