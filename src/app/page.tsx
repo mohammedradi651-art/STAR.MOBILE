@@ -27,7 +27,6 @@ export default function LoginPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
-  // التوجيه يتم في الخلفية فقط إذا كان المستخدم مسجلاً فعلاً
   useEffect(() => {
     if (!isUserLoading && user) {
       router.push('/login');
@@ -68,9 +67,9 @@ export default function LoginPage() {
       <div className="flex flex-col h-full bg-mesh-gradient text-white overflow-y-auto no-scrollbar">
         <div className="flex-1 flex flex-col items-center justify-center p-6 w-full max-w-sm mx-auto py-12">
           
-          <div className="mb-8 text-center animate-in fade-in zoom-in duration-700">
+          <div className="mb-8 text-center">
             <div className="relative w-28 h-28 mx-auto mb-4">
-                <div className="absolute inset-0 bg-white/20 rounded-[40px] blur-2xl animate-pulse" />
+                <div className="absolute inset-0 bg-white/20 rounded-[40px] blur-2xl" />
                 <div className="relative w-full h-full overflow-hidden rounded-[36px] border-4 border-white/30 shadow-2xl bg-white">
                     <Image 
                         src="https://i.postimg.cc/2551nF1s/20260308-183624.jpg" 
@@ -92,8 +91,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* الفورم يظهر دائماً وبشكل فوري لضمان ظهور رابط "نسيت كلمة السر" في كل زمان ومكان */}
-          <form onSubmit={handleLogin} className="w-full space-y-4 animate-in slide-in-from-bottom-8 duration-1000 pb-10">
+          <form onSubmit={handleLogin} className="w-full space-y-4 pb-10">
               <div className="space-y-1.5">
               <Label htmlFor="phone" className="text-[10px] font-black mr-2 text-white uppercase tracking-widest">رقم الهاتف</Label>
               <div className="relative group">
@@ -130,9 +128,8 @@ export default function LoginPage() {
                   </button>
               </div>
               
-              {/* رابط نسيت كلمة السر - ظاهر ظاهر ظاهر دائماً لجميع الزوار ومن اول مرة */}
               <div className="text-right px-2 pt-1">
-                  <Link href="/forgot-password" title="نسيت كلمة السر" className="text-[10px] font-bold text-white/60 hover:text-white transition-colors">نسيت كلمة السر؟</Link>
+                  <Link href="/forgot-password" title="نسيت كلمة السر" className="text-[10px] font-black text-white/80 hover:text-white transition-colors underline underline-offset-4 decoration-white/20">نسيت كلمة السر؟</Link>
               </div>
               </div>
 
@@ -147,20 +144,19 @@ export default function LoginPage() {
               </div>
           </form>
 
-          {/* يظهر هذا المؤشر فقط أثناء محاولة النظام التأكد من وجود جلسة دخول سابقة */}
           {isUserLoading && (
-            <div className="flex flex-col items-center gap-2 py-2 animate-in fade-in duration-500">
+            <div className="flex flex-col items-center gap-2 py-2">
                 <LoaderIcon className="h-4 w-4 animate-spin text-white/30" />
             </div>
           )}
 
-          <div className="mt-6 text-center animate-in fade-in duration-1000 delay-500">
+          <div className="mt-6 text-center">
             <p className="text-white/70 text-xs font-bold">ليس لديك حساب؟</p>
             <Link href="/signup" className="mt-2 inline-block py-1.5 px-5 rounded-full bg-white/10 border border-white/20 hover:bg-white/20 transition-all font-black text-white text-[11px]">انضم إلينا الآن</Link>
           </div>
         </div>
 
-        <footer className="text-center text-[9px] font-bold text-white/50 pb-6 animate-in fade-in duration-1000">
+        <footer className="text-center text-[9px] font-bold text-white/50 pb-6">
           <p>© ستار موبايل - تطوير محمد راضي باشادي</p>
         </footer>
       </div>
