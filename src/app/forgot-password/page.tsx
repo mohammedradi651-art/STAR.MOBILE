@@ -31,7 +31,18 @@ export default function ForgotPasswordPage() {
   const { toast } = useToast();
   const firestore = useFirestore();
 
-  // 1. طلب استعادة الحساب (تم تعطيل الـ SMS مؤقتاً للتجربة)
+  // منطق زر الرجوع الذكي
+  const handleBack = () => {
+    if (step === 'reset') {
+      setStep('phone');
+    } else if (step === 'success') {
+      router.push('/');
+    } else {
+      router.push('/');
+    }
+  };
+
+  // 1. طلب استعادة الحساب
   const handleRequestReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (phoneNumber.length !== 9) {
@@ -53,7 +64,6 @@ export default function ForgotPasswordPage() {
         return;
       }
 
-      // الانتقال مباشرة لتعيين كلمة المرور (تجاوز الـ OTP مؤقتاً)
       setStep('reset');
       toast({ 
         title: 'تم التحقق', 
@@ -101,10 +111,13 @@ export default function ForgotPasswordPage() {
         {isLoading && <ProcessingOverlay message="جاري المعالجة..." />}
 
         <header className="p-4 flex items-center justify-between animate-in fade-in duration-500 shrink-0">
-            <Link href="/" className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors">
+            <button 
+              onClick={handleBack}
+              className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors"
+            >
                 <ChevronRight className="h-5 w-5" />
-            </Link>
-            <h1 className="font-black text-[10px] uppercase tracking-[0.2em] opacity-60">Account Recovery</h1>
+            </button>
+            <div className="flex-1" />
             <div className="w-9" />
         </header>
 
@@ -127,10 +140,10 @@ export default function ForgotPasswordPage() {
             
             {step !== 'success' ? (
                 <>
-                    <h2 className="text-2xl font-black text-white">استعادة الحساب</h2>
+                    <h2 className="text-2xl font-black text-white">نسيت كلمة السر؟</h2>
                     <p className="text-white/70 text-[11px] font-bold mt-2 leading-relaxed max-w-[280px] mx-auto">
                         {step === 'phone' 
-                            ? "يرجى كتابة رقم جوالك المسجل لتعيين كلمة مرور جديدة (تم تعطيل الرمز مؤقتاً للتجربة)."
+                            ? "يرجى كتابة رقم جوالك لطلب كلمة المرور وسيتم ارسال لك كود التحقق الى رقم جوال في حال كنت مسجلاً لدينا .."
                             : "أدخل كلمة المرور الجديدة وتأكد من حفظها جيداً."}
                     </p>
                 </>
@@ -149,7 +162,7 @@ export default function ForgotPasswordPage() {
             {step === 'phone' && (
               <form onSubmit={handleRequestReset} className="space-y-4">
                 <div className="space-y-2 text-right">
-                  <Label className="text-[10px] font-black mr-2 text-white/60 uppercase tracking-widest">رقم الجوال المسجل</Label>
+                  <Label className="text-[10px] font-black mr-2 text-white/60 uppercase tracking-widest">ادخل رقم جوالك</Label>
                   <div className="relative">
                     <Input
                       type="tel"
@@ -163,7 +176,7 @@ export default function ForgotPasswordPage() {
                   </div>
                 </div>
                 <Button type="submit" className="w-full h-14 bg-white text-primary font-black text-base rounded-[22px] shadow-xl active:scale-95 transition-transform">
-                    تحقق وابدأ الاستعادة
+                    ارسال رمز التحقق
                 </Button>
               </form>
             )}
