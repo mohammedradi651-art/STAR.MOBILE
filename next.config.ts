@@ -30,6 +30,19 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=0, must-revalidate',
+          }
+        ],
+      },
     ];
   },
   images: {
