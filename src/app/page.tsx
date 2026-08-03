@@ -59,7 +59,7 @@ export default function LoginPage() {
         <div className="flex-1 flex flex-col items-center justify-center p-6 w-full max-w-sm mx-auto py-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
           
           <div className="mb-8 text-center">
-            <div className="relative w-28 h-28 mx-auto mb-6">
+            <div className="relative w-24 h-24 mx-auto mb-6">
                 <div className="absolute inset-0 bg-white/20 rounded-[40px] blur-2xl" />
                 <div className="relative w-full h-full overflow-hidden rounded-[32px] border-4 border-white/30 shadow-2xl bg-white">
                     <Image 
@@ -82,7 +82,7 @@ export default function LoginPage() {
                   <Input
                     id="phone"
                     type="tel"
-                    className="h-12 bg-white/10 border-2 border-white/20 text-white placeholder:text-white text-center font-black text-base rounded-[20px] pr-12 focus-visible:ring-white/40 focus-visible:border-white/40 transition-all shadow-inner"
+                    className="h-11 bg-white/10 border-2 border-white/20 text-white placeholder:text-white text-center font-black text-base rounded-[20px] pr-12 focus-visible:ring-white/40 focus-visible:border-white/40 transition-all shadow-inner"
                     placeholder="7xxxxxxxx"
                     value={phoneNumber}
                     onChange={e => setPhoneNumber(e.target.value)}
@@ -98,7 +98,7 @@ export default function LoginPage() {
                     id="password"
                     type={isPasswordVisible ? 'text' : 'password'}
                     placeholder="********"
-                    className="h-12 bg-white/10 border-2 border-white/20 text-white placeholder:text-white text-center font-black text-base rounded-[20px] px-12 focus-visible:ring-white/40 focus-visible:border-white/40 transition-all shadow-inner"
+                    className="h-11 bg-white/10 border-2 border-white/20 text-white placeholder:text-white text-center font-black text-base rounded-[20px] px-12 focus-visible:ring-white/40 focus-visible:border-white/40 transition-all shadow-inner"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                   />
@@ -114,7 +114,7 @@ export default function LoginPage() {
 
               <Button 
                   type="submit" 
-                  className="w-full h-12 text-base font-black bg-white text-[#0048ad] hover:bg-white/95 rounded-[20px] shadow-2xl shadow-black/20 transition-all active:scale-95 disabled:opacity-50" 
+                  className="w-full h-11 text-base font-black bg-white text-[#0048ad] hover:bg-white/95 rounded-[20px] shadow-2xl shadow-black/20 transition-all active:opacity-80 disabled:opacity-50" 
                   disabled={isLoading}
               >
                 {isLoading ? <LoaderIcon className="animate-spin h-6 w-6" /> : 'دخول'}
@@ -123,7 +123,7 @@ export default function LoginPage() {
 
           <div className="mt-4 text-center">
             <p className="text-white/50 text-[10px] font-bold uppercase tracking-widest">ليس لديك حساب؟</p>
-            <Link href="/signup" className="mt-3 inline-block py-2 px-10 rounded-full bg-white/10 border border-white/10 hover:bg-white/20 font-black text-white text-[12px] transition-all active:scale-95">انضم إلينا الآن</Link>
+            <Link href="/signup" className="mt-3 inline-block py-2 px-10 rounded-full bg-white/10 border border-white/10 hover:bg-white/20 font-black text-white text-[12px] transition-all active:opacity-80">انضم إلينا الآن</Link>
           </div>
         </div>
 

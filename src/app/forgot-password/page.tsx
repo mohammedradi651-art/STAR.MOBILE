@@ -158,13 +158,13 @@ export default function ForgotPasswordPage() {
         <div className="px-6 flex flex-col items-center flex-1 justify-center -mt-10">
           
           <div className="mb-8 text-center animate-in zoom-in duration-700">
-             <div className="relative w-28 h-28 mx-auto mb-6">
+             <div className="relative w-24 h-24 mx-auto mb-6">
                 <div className="absolute inset-0 bg-white/20 rounded-[40px] blur-3xl animate-pulse" />
                 <div className="relative w-full h-full bg-white/15 backdrop-blur-xl rounded-[36px] border-4 border-white/30 shadow-2xl flex items-center justify-center overflow-hidden">
-                    {step === 'phone' && <HelpCircle className="h-14 w-14 text-white stroke-[2.5px]" />}
-                    {step === 'verify' && <Clock className="h-14 w-14 text-white stroke-[2.5px] animate-spin-slow" />}
-                    {step === 'reset' && <ShieldCheck className="h-14 w-14 text-white stroke-[2.5px]" />}
-                    {step === 'success' && <CheckCircle2 className="h-14 w-14 text-green-400 animate-in zoom-in-50 duration-500" />}
+                    {step === 'phone' && <HelpCircle className="h-12 w-12 text-white stroke-[2.5px]" />}
+                    {step === 'verify' && <Clock className="h-12 w-12 text-white stroke-[2.5px] animate-spin-slow" />}
+                    {step === 'reset' && <ShieldCheck className="h-12 w-12 text-white stroke-[2.5px]" />}
+                    {step === 'success' && <CheckCircle2 className="h-12 w-12 text-green-400 animate-in zoom-in-50 duration-500" />}
                 </div>
                 {step === 'success' && (
                     <div className="absolute -top-2 -right-2 bg-green-500 p-2 rounded-2xl shadow-xl animate-bounce">
@@ -216,10 +216,10 @@ export default function ForgotPasswordPage() {
               <form onSubmit={handleRequestReset} className="space-y-4">
                 <div className="space-y-2 text-right">
                   <Label className="text-[10px] font-black mr-2 text-white/60 uppercase tracking-widest">ادخل رقم جوالك</Label>
-                  <div className="relative">
+                  <div className="relative group">
                     <Input
                       type="tel"
-                      className="h-14 bg-white/10 border-white/20 text-white placeholder:text-white/30 text-center font-black text-xl rounded-[22px] focus-visible:ring-white/40"
+                      className="h-12 bg-white/10 border-white/20 text-white placeholder:text-white/30 text-center font-black text-base rounded-[20px] focus-visible:ring-white/40"
                       placeholder="7xxxxxxxx"
                       value={phoneNumber}
                       onChange={e => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 9))}
@@ -228,7 +228,7 @@ export default function ForgotPasswordPage() {
                     <Phone className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/30" />
                   </div>
                 </div>
-                <Button type="submit" className="w-full h-14 bg-white text-primary font-black text-base rounded-[22px] shadow-xl active:scale-95 transition-transform">
+                <Button type="submit" className="w-full h-12 bg-white text-[#0048ad] font-black text-base rounded-[20px] shadow-xl active:opacity-80 transition-all">
                     ارسال رمز التحقق
                 </Button>
               </form>
@@ -241,14 +241,14 @@ export default function ForgotPasswordPage() {
                         <Input
                             type="tel"
                             maxLength={4}
-                            className="h-16 bg-white/10 border-white/20 text-white text-center text-3xl font-black tracking-[0.5em] rounded-[22px]"
+                            className="h-14 bg-white/10 border-white/20 text-white text-center text-3xl font-black tracking-[0.5em] rounded-[20px]"
                             placeholder="••••"
                             value={userOtpInput}
                             onChange={e => setUserOtpInput(e.target.value.replace(/\D/g, ''))}
                             required
                         />
                     </div>
-                    <Button type="submit" className="w-full h-14 bg-white text-primary font-black text-base rounded-[22px] shadow-xl">
+                    <Button type="submit" className="w-full h-12 bg-white text-[#0048ad] font-black text-base rounded-[20px] shadow-xl active:opacity-80 transition-all">
                         تأكيد الرمز
                     </Button>
                 </form>
@@ -261,7 +261,7 @@ export default function ForgotPasswordPage() {
                     <Label className="text-[10px] font-black mr-2 text-white/60 uppercase tracking-widest">كلمة السر الجديدة</Label>
                     <Input
                       type="password"
-                      className="h-14 bg-white/10 border-white/20 text-white rounded-[22px] text-center font-bold text-lg focus-visible:ring-white/40"
+                      className="h-12 bg-white/10 border-white/20 text-white rounded-[20px] text-center font-bold text-base focus-visible:ring-white/40"
                       placeholder="********"
                       value={newPassword}
                       onChange={e => setNewPassword(e.target.value)}
@@ -272,7 +272,7 @@ export default function ForgotPasswordPage() {
                     <Label className="text-[10px] font-black mr-2 text-white/60 uppercase tracking-widest">تأكيد كلمة السر</Label>
                     <Input
                       type="password"
-                      className="h-14 bg-white/10 border-white/20 text-white rounded-[22px] text-center font-bold text-lg focus-visible:ring-white/40"
+                      className="h-12 bg-white/10 border-white/20 text-white rounded-[20px] text-center font-bold text-base focus-visible:ring-white/40"
                       placeholder="********"
                       value={confirmPassword}
                       onChange={e => setConfirmPassword(e.target.value)}
@@ -280,7 +280,7 @@ export default function ForgotPasswordPage() {
                     />
                   </div>
                 </div>
-                <Button type="submit" className="w-full h-14 bg-green-500 text-white font-black text-base rounded-[22px] shadow-xl active:scale-95 transition-all">
+                <Button type="submit" className="w-full h-12 bg-white text-[#0048ad] font-black text-base rounded-[20px] shadow-xl active:opacity-80 transition-all">
                     تحديث كلمة المرور
                 </Button>
               </form>
@@ -288,7 +288,7 @@ export default function ForgotPasswordPage() {
 
             {step === 'success' && (
                 <div className="space-y-4 animate-in fade-in zoom-in duration-500">
-                    <Button onClick={() => router.push('/')} className="w-full h-14 bg-white text-primary font-black text-base rounded-[22px] shadow-xl active:scale-95 transition-all">
+                    <Button onClick={() => router.push('/')} className="w-full h-12 bg-white text-[#0048ad] font-black text-base rounded-[20px] shadow-xl active:opacity-80 transition-all">
                         تسجيل الدخول الآن
                     </Button>
                 </div>
@@ -297,7 +297,7 @@ export default function ForgotPasswordPage() {
           </div>
         </div>
 
-        <footer className="text-center text-[8px] font-bold text-white/30 pb-6 mt-auto">
+        <footer className="text-center text-[9px] font-black text-white/30 pb-6 mt-auto">
           <p>مطور التطبيق " محمد راضي باشادي</p>
         </footer>
       </div>
