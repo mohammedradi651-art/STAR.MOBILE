@@ -2,42 +2,43 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
 import { collection, query, where, getDocs, doc, writeBatch, increment } from 'firebase/firestore';
-import { processAlomqyReceipt } from '@/ai/flows/process-alomqy-receipt-flow';
 
 /**
- * @fileOverview محرك الشحن التلقائي عبر الواتساب (v1.0)
- * يستقبل الصور من Wassenger، يحللها بالذكاء الاصطناعي، ويشحن رصيد العميل فوراً.
+ * @fileOverview محرك الشحن التلقائي المباشر (v1.5)
+ * الوظيفة: استقبال البيانات المستخرجة جاهزة من نظام الواتساب وإيداعها فوراً.
+ * تم إلغاء الذكاء الاصطناعي بناءً على طلب العميل للاعتماد على ذكاء نظام الواتساب الخارجي.
  */
-
-async function imageUrlToBase64(url: string) {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('فشل تحميل صورة الإيصال من السيرفر.');
-    const buffer = await response.arrayBuffer();
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
-    return `data:${contentType};base64,${Buffer.from(buffer).toString('base64')}`;
-}
 
 export async function POST(req: Request) {
     try {
         const payload = await req.json();
         
-        // 1. التحقق من أن الرسالة واردة وتحتوي على وسائط (صورة)
-        if (payload.event !== 'message:in:new' || !payload.data?.media?.url) {
-            return NextResponse.json({ status: 'ignored' });
+        /**
+         * البيانات المتوقعة من نظام الواتساب الخاص بك:
+         * {
+         *   "phone": "77xxxxxxx",
+         *   "amount": 5000,
+         *   "receiptNumber": "8-1234567"
+         * }
+         */
+        const { phone, amount, receiptNumber } = payload;
+
+        if (!phone || !amount || !receiptNumber) {
+            console.error('WhatsApp Webhook: Missing required fields');
+            return NextResponse.json({ status: 'invalid_data', message: 'phone, amount, and receiptNumber are required' });
         }
 
-        const senderPhone = payload.data.from; // الرقم الدولي للمرسل
-        const mediaUrl = payload.data.media.url;
-        const cleanPhone = senderPhone.replace(/\D/g, '').slice(-9); // استخراج آخر 9 أرقام (7xxxxxxxx)
+        // تنظيف رقم الهاتف (آخر 9 أرقام)
+        const cleanPhone = phone.replace(/\D/g, '').slice(-9);
 
         const { firestore } = initializeServerFirebase();
 
-        // 2. البحث عن المستخدم في قاعدة البيانات
+        // 1. البحث عن المستخدم بالرقم
         const userQ = query(collection(firestore, 'users'), where('phoneNumber', '==', cleanPhone));
         const userSnap = await getDocs(userQ);
 
         if (userSnap.empty) {
-            console.log(`User not found for phone: ${cleanPhone}`);
+            console.warn(`User not found for phone: ${cleanPhone}`);
             return NextResponse.json({ status: 'user_not_found' });
         }
 
@@ -45,68 +46,54 @@ export async function POST(req: Request) {
         const userData = userDoc.data();
         const userId = userDoc.id;
 
-        // 3. تحليل الإيصال باستخدام الذكاء الاصطناعي
-        const base64Image = await imageUrlToBase64(mediaUrl);
-        const aiResult = await processAlomqyReceipt({ receiptImage: base64Image });
-
-        if (!aiResult.isAlomqy || !aiResult.amount || !aiResult.receiptNumber) {
-            console.warn('AI failed to validate receipt content');
-            return NextResponse.json({ status: 'invalid_receipt' });
-        }
-
-        // 4. التحقق من تكرار العملية (Idempotency)
-        const txQ = query(collection(firestore, 'users', userId, 'transactions'), where('transid', '==', aiResult.receiptNumber));
+        // 2. التحقق من تكرار رقم الإيصال (Idempotency)
+        const txQ = query(collection(firestore, 'users', userId, 'transactions'), where('transid', '==', receiptNumber));
         const txSnap = await getDocs(txQ);
         
         if (!txSnap.empty) {
             return NextResponse.json({ status: 'duplicate_transaction' });
         }
 
-        // 5. تنفيذ الشحن الآلي
+        // 3. تنفيذ الإيداع المباشر
         const batch = writeBatch(firestore);
         const now = new Date().toISOString();
-        const amount = aiResult.amount;
+        const numAmount = parseFloat(amount);
 
         // تحديث الرصيد
-        batch.update(userDoc.ref, { balance: increment(amount) });
+        batch.update(userDoc.ref, { balance: increment(numAmount) });
 
-        // تسجيل العملية
+        // تسجيل العملية في السجل
         const txRef = doc(collection(firestore, `users/${userId}/transactions`));
         batch.set(txRef, {
-            userId,
+            userId: userId,
             transactionDate: now,
-            amount: amount,
-            transactionType: 'تغذية تلقائية (إيصال)',
-            notes: `رقم السند: ${aiResult.receiptNumber} - تم عبر الواتساب`,
-            transid: aiResult.receiptNumber
+            amount: numAmount,
+            transactionType: 'شحن تلقائي (واتساب)',
+            notes: `تم التأكيد عبر الواتساب - رقم الإشعار: ${receiptNumber}`,
+            transid: receiptNumber
         });
 
-        // إرسال إشعار داخلي
+        // إرسال إشعار داخلي للتطبيق
         const notifRef = doc(collection(firestore, `users/${userId}/notifications`));
         batch.set(notifRef, {
-            title: 'تم شحن حسابك تلقائياً',
-            body: `بناءً على إيصالك المرسل، تمت إضافة مبلغ ${amount.toLocaleString()} ريال لحسابك بنجاح.`,
+            title: 'تم شحن رصيدك ✅',
+            body: `بناءً على تأكيد الواتساب، أضفنا ${numAmount.toLocaleString()} ريال لحسابك.`,
             timestamp: now
         });
 
         await batch.commit();
 
-        // 6. إرسال رسالة تأكيد للعميل عبر الواتساب
-        const confirmationMsg = `⭐ ستار موبايل\n\nمرحباً ${userData.displayName || 'عميلنا'}\n\nتم تأكيد إيصالك وشحن حسابك تلقائياً ✅\n\nالمبلغ المضاف: ${amount.toLocaleString()} ر.ي\nرصيدك الجديد: ${(userData.balance + amount).toLocaleString()} ر.ي\n\nشكراً لاستخدامك النظام الآلي 💙`;
-        
-        await fetch(`${new URL(req.url).origin}/api/send-whatsapp`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                phone: cleanPhone,
-                message: confirmationMsg
-            })
+        console.log(`Successfully credited ${numAmount} to user ${cleanPhone}`);
+
+        return NextResponse.json({ 
+            success: true, 
+            processed: true, 
+            amount: numAmount,
+            user: userData.displayName 
         });
 
-        return NextResponse.json({ success: true, processed: true, amount });
-
     } catch (error: any) {
-        console.error('WhatsApp Webhook AI Error:', error.message);
+        console.error('WhatsApp Webhook Critical Error:', error.message);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }
