@@ -55,7 +55,7 @@ export default function LoginPage() {
   return (
     <>
       <div className="flex flex-col h-full bg-mesh-gradient text-white overflow-y-auto no-scrollbar">
-        {/* إضافة أنيميشن دخول فخم للمحتوى بالكامل */}
+        {/* أنيميشن دخول فخم للمحتوى بالكامل: ظهور متدرج من الأسفل للأعلى */}
         <div className="flex-1 flex flex-col items-center justify-center p-6 w-full max-w-sm mx-auto py-8 animate-in fade-in slide-in-from-bottom-12 duration-1000">
           
           <div className="mb-8 text-center">
