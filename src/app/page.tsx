@@ -55,13 +55,12 @@ export default function LoginPage() {
   return (
     <>
       <div className="flex flex-col h-full bg-mesh-gradient text-white overflow-y-auto no-scrollbar">
-        {/* أنيميشن دخول فخم للمحتوى بالكامل: ظهور متدرج من الأسفل للأعلى */}
         <div className="flex-1 flex flex-col items-center justify-center p-6 w-full max-w-sm mx-auto py-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
           
           <div className="mb-8 text-center">
-            <div className="relative w-24 h-24 mx-auto mb-6">
+            <div className="relative w-20 h-20 mx-auto mb-6">
                 <div className="absolute inset-0 bg-white/20 rounded-[40px] blur-2xl" />
-                <div className="relative w-full h-full overflow-hidden rounded-[32px] border-4 border-white/30 shadow-2xl bg-white">
+                <div className="relative w-full h-full overflow-hidden rounded-[28px] border-4 border-white/30 shadow-2xl bg-white">
                     <Image 
                         src="https://i.postimg.cc/2551nF1s/20260308-183624.jpg" 
                         alt="Star Mobile Logo" 

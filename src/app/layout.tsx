@@ -14,7 +14,7 @@ import { doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
 // إصدار التطبيق المحدث لتطهير الكاش وتفعيل الواجهة الملكية
-const APP_VERSION = '1.6.4';
+const APP_VERSION = '1.6.5';
 
 type UserProfile = {
   isPinEnabled?: boolean;
@@ -29,21 +29,25 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const [showSplash, setShowSplash] = useState(true);
   const [isPinVerified, setIsPinVerified] = useState(false);
 
-  // نظام تطهير الكاش القوي عند تغيير النسخة
+  // نظام تطهير الكاش القوي والآلي عند تغيير النسخة
   useEffect(() => {
     const savedVersion = localStorage.getItem('star_app_version');
     if (savedVersion !== APP_VERSION) {
+      // مسح كافة البيانات المخزنة لضمان جلب النسخة الأحدث
       localStorage.clear();
       sessionStorage.clear();
       localStorage.setItem('star_app_version', APP_VERSION);
+      // إعادة تحميل إجبارية من السيرفر
       window.location.reload();
     }
   }, []);
 
-  // تسجيل Service Worker لضمان استقرار PWA
+  // تسجيل Service Worker لضمان استقرار PWA مع منع الكاش
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js?v=' + APP_VERSION).catch(() => {});
+      navigator.serviceWorker.register('/sw.js?v=' + APP_VERSION, {
+        updateViaCache: 'none'
+      }).catch(() => {});
     }
   }, []);
 
@@ -108,7 +112,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
         />
       )}
       
-      {/* لا يتم عرض أي شيء من المحتوى أو شريط التنقل إلا بعد اختفاء شاشة البداية */}
       {!showSplash && (
         <div className="flex-1 flex flex-col relative overflow-hidden animate-in fade-in duration-500">
           <WelcomeModal />
@@ -116,7 +119,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
           <main className="flex-1 flex flex-col min-h-0 relative">
             {children}
           </main>
-          {/* شريط التنقل يظهر مع الصفحة كقطعة واحدة */}
           {isNavVisiblePage && <BottomNav />}
         </div>
       )}
