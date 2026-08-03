@@ -127,8 +127,8 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <footer className="text-center text-[9px] font-black text-white/30 pb-6 mt-auto tracking-[0.3em]">
-          <p>© STAR MOBILE - PREMIUM EDITION</p>
+        <footer className="text-center text-[9px] font-black text-white/30 pb-6 mt-auto">
+          <p>مطور التطبيق " محمد راضي باشادي</p>
         </footer>
       </div>
       <Toaster />
