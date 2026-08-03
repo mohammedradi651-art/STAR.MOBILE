@@ -24,9 +24,8 @@ export async function GET() {
         'x-api-key': API_KEY.trim(),
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'User-Agent': 'StarMobileApp/1.0', // إضافة User-Agent لضمان قبول الطلب في Vercel
+        'User-Agent': 'StarMobileApp/1.0',
       },
-      next: { revalidate: 0 },
       cache: 'no-store'
     });
 
@@ -53,15 +52,15 @@ export async function GET() {
         }
     } else {
         const text = await response.text();
-        console.error("Vercel received HTML instead of JSON from Baitynet:", text.substring(0, 300));
+        console.error("Received HTML instead of JSON from Baitynet:", text.substring(0, 300));
         return new NextResponse(
-            JSON.stringify({ message: 'تعذر جلب الشبكات: المصدر أعاد استجابة غير صالحة. يرجى التحقق من المفاتيح في فيرسل.' }),
+            JSON.stringify({ message: 'المصدر أعاد صفحة خطأ. يرجى التحقق من المفاتيح.' }),
             { status: 502, headers: { 'Content-Type': 'application/json' } }
         );
     }
 
   } catch (error: any) {
-    console.error('Baitynet Fetch Exception on Vercel:', error);
+    console.error('Baitynet Fetch Exception:', error);
     return new NextResponse(
         JSON.stringify({ message: 'حدث خطأ في الاتصال بالمزود الخارجي.' }),
         { status: 500, headers: { 'Content-Type': 'application/json' } }
