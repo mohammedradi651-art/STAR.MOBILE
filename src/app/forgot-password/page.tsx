@@ -166,11 +166,6 @@ export default function ForgotPasswordPage() {
                     {step === 'reset' && <ShieldCheck className="h-12 w-12 text-white stroke-[2.5px]" />}
                     {step === 'success' && <CheckCircle2 className="h-12 w-12 text-green-400 animate-in zoom-in-50 duration-500" />}
                 </div>
-                {step === 'success' && (
-                    <div className="absolute -top-2 -right-2 bg-green-500 p-2 rounded-2xl shadow-xl animate-bounce">
-                        <Sparkles className="h-4 w-4 text-white" />
-                    </div>
-                )}
              </div>
             
             {step === 'phone' && (
