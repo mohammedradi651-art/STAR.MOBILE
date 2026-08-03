@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/hooks/use-toast';
-import { HelpCircle, Phone, ShieldCheck, Key, ChevronRight, CheckCircle2, AlertTriangle, Loader2, Sparkles } from 'lucide-react';
+import { HelpCircle, Phone, ShieldCheck, Key, ChevronRight, CheckCircle2, AlertTriangle, Loader2, Sparkles, Clock } from 'lucide-react';
 import { useFirestore } from '@/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
@@ -22,6 +22,8 @@ type Step = 'phone' | 'verify' | 'reset' | 'success';
 export default function ForgotPasswordPage() {
   const [step, setStep] = useState<Step>('phone');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [otp, setOtp] = useState('');
+  const [userOtpInput, setUserOtpInput] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -33,8 +35,10 @@ export default function ForgotPasswordPage() {
 
   // منطق زر الرجوع الذكي
   const handleBack = () => {
-    if (step === 'reset') {
+    if (step === 'verify') {
       setStep('phone');
+    } else if (step === 'reset') {
+      setStep('verify');
     } else if (step === 'success') {
       router.push('/');
     } else {
@@ -42,7 +46,7 @@ export default function ForgotPasswordPage() {
     }
   };
 
-  // 1. طلب استعادة الحساب
+  // 1. طلب استعادة الحساب وإرسال OTP
   const handleRequestReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (phoneNumber.length !== 9) {
@@ -64,16 +68,46 @@ export default function ForgotPasswordPage() {
         return;
       }
 
-      setStep('reset');
-      toast({ 
-        title: 'تم التحقق', 
-        description: 'تم العثور على حسابك بنجاح. يرجى تعيين كلمة مرور جديدة الآن.' 
+      // توليد وإرسال الـ OTP فعلياً عبر الجوال
+      const generatedOtp = Math.floor(1000 + Math.random() * 9000).toString();
+      const smsMessage = `ستار موبايل: رمز التحقق الخاص بك لاستعادة كلمة المرور هو (${generatedOtp}).`;
+      
+      const response = await fetch('/api/sms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+              phoneNumber: phoneNumber.trim(),
+              message: smsMessage
+          })
       });
+      const data = await response.json();
+
+      if (data.success) {
+          setOtp(generatedOtp);
+          setStep('verify');
+          toast({ 
+            title: 'تم إرسال الرمز', 
+            description: 'يرجى إدخال رمز التحقق المرسل إلى هاتفك.' 
+          });
+      } else {
+          throw new Error(data.error || "فشل إرسال رمز التحقق.");
+      }
 
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'خطأ', description: error.message });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // 2. التحقق من الرمز المدخل
+  const handleVerifyOtp = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (userOtpInput === otp) {
+        setStep('reset');
+        toast({ title: "تم التحقق", description: "الآن قم بتعيين كلمة المرور الجديدة." });
+    } else {
+        toast({ variant: 'destructive', title: 'خطأ', description: 'رمز التحقق غير صحيح، يرجى التأكد والمحاولة مجدداً.' });
     }
   };
 
@@ -128,6 +162,7 @@ export default function ForgotPasswordPage() {
                 <div className="absolute inset-0 bg-white/20 rounded-[40px] blur-3xl animate-pulse" />
                 <div className="relative w-full h-full bg-white/15 backdrop-blur-xl rounded-[36px] border-4 border-white/30 shadow-2xl flex items-center justify-center overflow-hidden">
                     {step === 'phone' && <HelpCircle className="h-14 w-14 text-white stroke-[2.5px]" />}
+                    {step === 'verify' && <Clock className="h-14 w-14 text-white stroke-[2.5px] animate-spin-slow" />}
                     {step === 'reset' && <ShieldCheck className="h-14 w-14 text-white stroke-[2.5px]" />}
                     {step === 'success' && <CheckCircle2 className="h-14 w-14 text-green-400 animate-in zoom-in-50 duration-500" />}
                 </div>
@@ -138,16 +173,34 @@ export default function ForgotPasswordPage() {
                 )}
              </div>
             
-            {step !== 'success' ? (
+            {step === 'phone' && (
                 <>
                     <h2 className="text-2xl font-black text-white">نسيت كلمة السر؟</h2>
                     <p className="text-white/70 text-[11px] font-bold mt-2 leading-relaxed max-w-[280px] mx-auto">
-                        {step === 'phone' 
-                            ? "يرجى كتابة رقم جوالك لطلب كلمة المرور وسيتم ارسال لك كود التحقق الى رقم جوال في حال كنت مسجلاً لدينا .."
-                            : "أدخل كلمة المرور الجديدة وتأكد من حفظها جيداً."}
+                        يرجى كتابة رقم جوالك لطلب كلمة المرور وسيتم ارسال لك كود التحقق الى رقم جوال في حال كنت مسجلاً لدينا ..
                     </p>
                 </>
-            ) : (
+            )}
+
+            {step === 'verify' && (
+                <>
+                    <h2 className="text-2xl font-black text-white">رمز التحقق</h2>
+                    <p className="text-white/70 text-[11px] font-bold mt-2 leading-relaxed max-w-[280px] mx-auto">
+                        أدخل الرمز المكون من 4 أرقام المرسل إلى الرقم <span className="text-white font-black">{phoneNumber}</span>
+                    </p>
+                </>
+            )}
+
+            {step === 'reset' && (
+                <>
+                    <h2 className="text-2xl font-black text-white">تغيير المرور</h2>
+                    <p className="text-white/70 text-[11px] font-bold mt-2 leading-relaxed max-w-[280px] mx-auto">
+                        أدخل كلمة المرور الجديدة وتأكد من حفظها جيداً.
+                    </p>
+                </>
+            )}
+
+            {step === 'success' && (
                 <>
                     <h2 className="text-2xl font-black text-white">تم التحديث بنجاح!</h2>
                     <p className="text-white/70 text-[11px] font-bold mt-2 leading-relaxed max-w-[280px] mx-auto">
@@ -179,6 +232,26 @@ export default function ForgotPasswordPage() {
                     ارسال رمز التحقق
                 </Button>
               </form>
+            )}
+
+            {step === 'verify' && (
+                <form onSubmit={handleVerifyOtp} className="space-y-4">
+                    <div className="space-y-2 text-right">
+                        <Label className="text-[10px] font-black text-center block text-white/60 uppercase">أدخل الرمز المستلم</Label>
+                        <Input
+                            type="tel"
+                            maxLength={4}
+                            className="h-16 bg-white/10 border-white/20 text-white text-center text-3xl font-black tracking-[0.5em] rounded-[22px]"
+                            placeholder="••••"
+                            value={userOtpInput}
+                            onChange={e => setUserOtpInput(e.target.value.replace(/\D/g, ''))}
+                            required
+                        />
+                    </div>
+                    <Button type="submit" className="w-full h-14 bg-white text-primary font-black text-base rounded-[22px] shadow-xl">
+                        تأكيد الرمز
+                    </Button>
+                </form>
             )}
 
             {step === 'reset' && (
@@ -225,7 +298,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         <footer className="text-center text-[8px] font-bold text-white/30 pb-6 mt-auto">
-          <p>© STAR MOBILE - SECURITY SYSTEM</p>
+          <p>مطور التطبيق " محمد راضي باشادي</p>
         </footer>
       </div>
       <Toaster />

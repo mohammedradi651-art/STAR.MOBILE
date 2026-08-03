@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -222,7 +221,7 @@ export default function VerifyOtpPage() {
                             onClick={handleVerifyAndComplete}
                             className={cn(
                                 "w-full h-14 rounded-[22px] font-black text-base shadow-2xl transition-all active:scale-95",
-                                isSuccess ? "bg-green-500 text-white" : "bg-white text-[#0048ad] hover:bg-white/95"
+                                isSuccess ? "bg-green-50 text-white" : "bg-white text-[#0048ad] hover:bg-white/95"
                             )}
                             disabled={isVerifying || userOtpInput.length < 4 || isSuccess}
                         >
@@ -252,7 +251,7 @@ export default function VerifyOtpPage() {
                 {/* Footer Branding */}
                 <div className="mt-auto pt-10 pb-6 opacity-30 flex flex-col items-center gap-2">
                     <div className="h-[1px] w-20 bg-white/50" />
-                    <p className="text-[8px] font-black uppercase tracking-[0.3em]">ستار موبايل - تطوير, محمد راضي باشادي</p>
+                    <p className="text-[8px] font-black uppercase tracking-[0.3em]">مطور التطبيق " محمد راضي باشادي</p>
                 </div>
             </div>
             
