@@ -56,7 +56,7 @@ export default function LoginPage() {
     <>
       <div className="flex flex-col h-full bg-mesh-gradient text-white overflow-y-auto no-scrollbar">
         {/* أنيميشن دخول فخم للمحتوى بالكامل: ظهور متدرج من الأسفل للأعلى */}
-        <div className="flex-1 flex flex-col items-center justify-center p-6 w-full max-w-sm mx-auto py-8 animate-in fade-in slide-in-from-bottom-12 duration-1000">
+        <div className="flex-1 flex flex-col items-center justify-center p-6 w-full max-w-sm mx-auto py-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
           
           <div className="mb-8 text-center">
             <div className="relative w-28 h-28 mx-auto mb-6">
@@ -82,7 +82,7 @@ export default function LoginPage() {
                   <Input
                     id="phone"
                     type="tel"
-                    className="h-14 bg-white/10 border-2 border-white/20 text-white placeholder:text-white/80 text-center font-black text-lg rounded-[22px] pr-12 focus-visible:ring-white/40 focus-visible:border-white/40 transition-all shadow-inner"
+                    className="h-12 bg-white/10 border-2 border-white/20 text-white placeholder:text-white text-center font-black text-base rounded-[20px] pr-12 focus-visible:ring-white/40 focus-visible:border-white/40 transition-all shadow-inner"
                     placeholder="7xxxxxxxx"
                     value={phoneNumber}
                     onChange={e => setPhoneNumber(e.target.value)}
@@ -98,7 +98,7 @@ export default function LoginPage() {
                     id="password"
                     type={isPasswordVisible ? 'text' : 'password'}
                     placeholder="********"
-                    className="h-14 bg-white/10 border-2 border-white/20 text-white placeholder:text-white/80 text-center font-black text-lg rounded-[22px] px-12 focus-visible:ring-white/40 focus-visible:border-white/40 transition-all shadow-inner"
+                    className="h-12 bg-white/10 border-2 border-white/20 text-white placeholder:text-white text-center font-black text-base rounded-[20px] px-12 focus-visible:ring-white/40 focus-visible:border-white/40 transition-all shadow-inner"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                   />
@@ -114,7 +114,7 @@ export default function LoginPage() {
 
               <Button 
                   type="submit" 
-                  className="w-full h-14 text-base font-black bg-white text-[#0048ad] hover:bg-white/95 rounded-[22px] shadow-2xl shadow-black/20 transition-all active:scale-95 disabled:opacity-50" 
+                  className="w-full h-12 text-base font-black bg-white text-[#0048ad] hover:bg-white/95 rounded-[20px] shadow-2xl shadow-black/20 transition-all active:scale-95 disabled:opacity-50" 
                   disabled={isLoading}
               >
                 {isLoading ? <LoaderIcon className="animate-spin h-6 w-6" /> : 'دخول'}
