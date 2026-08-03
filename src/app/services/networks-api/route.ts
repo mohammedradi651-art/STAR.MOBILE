@@ -4,66 +4,56 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const EXTERNAL_API_URL = 'https://apis.baitynet.net/api/partner/networks';
+/**
+ * @fileOverview محرك جلب الشبكات من بيتي (v2)
+ * يعتمد على التوثيق الجديد لضمان استقرار ظهور الشبكات الخارجية.
+ */
+
+const BASE_API_URL = 'https://apis.baitynet.net/api/partner/networks';
 
 export async function GET() {
-  const API_KEY = process.env.BAITYNET_NETWORKS_API_KEY;
+  // استخدام مفاتيح الربط المتاحة
+  const API_KEY = process.env.BAITYNET_NETWORKS_API_KEY || process.env.BAITYNET_BALANCE_API_KEY;
 
   if (!API_KEY) {
-    console.error('BAITYNET_NETWORKS_API_KEY is missing');
-    return new NextResponse(
-        JSON.stringify({ message: 'إعدادات النظام ناقصة: مفتاح API غير موجود' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    console.error('Baity API Key is missing in environment variables');
+    return NextResponse.json({ message: 'إعدادات الربط غير مكتملة' }, { status: 500 });
   }
 
   try {
-    const response = await fetch(EXTERNAL_API_URL, {
+    const response = await fetch(BASE_API_URL, {
       method: 'GET',
       headers: {
         'x-api-key': API_KEY.trim(),
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'User-Agent': 'StarMobileApp/1.0',
+        'User-Agent': 'StarMobileApp/1.6',
       },
       cache: 'no-store'
     });
 
-    const contentType = response.headers.get("content-type") || "";
+    const responseData = await response.json();
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Baitynet API failed with status ${response.status}:`, errorText.substring(0, 200));
-      return new NextResponse(
-        JSON.stringify({ message: `خطأ من المصدر الخارجي: ${response.status}` }),
-        { status: response.status, headers: { 'Content-Type': 'application/json' } }
-      );
+      console.error(`Baity API Error (${response.status}):`, responseData);
+      return NextResponse.json({ message: 'فشل الجلب من المصدر' }, { status: response.status });
     }
     
-    if (contentType.includes("application/json")) {
-        const data = await response.json();
-        if (data && Array.isArray(data.data)) {
-            return NextResponse.json(data.data);
-        } else {
-            return new NextResponse(
-                JSON.stringify({ message: 'تنسيق البيانات من المصدر غير صحيح' }),
-                { status: 502, headers: { 'Content-Type': 'application/json' } }
-            );
-        }
-    } else {
-        const text = await response.text();
-        console.error("Received HTML instead of JSON from Baitynet:", text.substring(0, 300));
-        return new NextResponse(
-            JSON.stringify({ message: 'المصدر أعاد صفحة خطأ. يرجى التحقق من المفاتيح.' }),
-            { status: 502, headers: { 'Content-Type': 'application/json' } }
-        );
+    // التحقق من وجود البيانات حسب التوثيق الجديد
+    // التوثيق يقول: "data": [ { "id": 12, ... } ]
+    if (responseData && Array.isArray(responseData.data)) {
+        return NextResponse.json(responseData.data);
+    } 
+    
+    // إذا كانت البيانات مصفوفة مباشرة (حالة احتياطية)
+    if (Array.isArray(responseData)) {
+        return NextResponse.json(responseData);
     }
 
+    return NextResponse.json({ message: 'تنسيق بيانات غير متوقع' }, { status: 502 });
+
   } catch (error: any) {
-    console.error('Baitynet Fetch Exception:', error);
-    return new NextResponse(
-        JSON.stringify({ message: 'حدث خطأ في الاتصال بالمزود الخارجي.' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    console.error('Baity Fetch Exception:', error.message);
+    return NextResponse.json({ message: 'حدث خطأ في الاتصال بالمزود' }, { status: 500 });
   }
 }

@@ -1,76 +1,71 @@
 
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
 
-const API_BASE_URL = 'https://apis.baitynet.net/api/partner/orders';
+/**
+ * @fileOverview تنفيذ عملية الشراء عبر Baity API V2
+ * يتطلب إرسال Idempotency-Key لضمان عدم تكرار الخصم.
+ */
 
-export async function POST(
-  request: Request
-) {
-  const API_KEY = process.env.BAITYNET_NETWORKS_API_KEY;
-  const USER_IDENTIFIER = process.env.BAITYNET_NETWORKS_USER_PHONE;
-  const USER_PASSWORD = process.env.BAITYNET_NETWORKS_USER_PASS;
+const ORDER_API_URL = 'https://apis.baitynet.net/api/partner/v2/orders';
+
+export async function POST(request: Request) {
+  const API_KEY = process.env.BAITYNET_NETWORKS_API_KEY || process.env.BAITYNET_BALANCE_API_KEY;
 
   try {
     const body = await request.json();
-    const { classId, userId } = body; // استلام userId لإرساله كمرجع
+    const { classId, userId } = body;
 
     if (!classId) {
-      return new NextResponse(JSON.stringify({ message: 'Class ID is required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      return NextResponse.json({ message: 'Class ID is required' }, { status: 400 });
     }
 
-    if (!API_KEY || !USER_IDENTIFIER || !USER_PASSWORD) {
-        return new NextResponse(JSON.stringify({ message: 'إعدادات شراء الكروت ناقصة في فيرسل.' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    if (!API_KEY) {
+        return NextResponse.json({ message: 'إعدادات النظام غير مكتملة' }, { status: 500 });
     }
+
+    // توليد مفتاح فريد لمنع تكرار الطلب (Idempotency)
+    const idempotencyKey = crypto.randomUUID();
 
     const externalApiBody = {
       data: {
-        class: classId,
-        externalRef: userId || '', // إرسال معرف المستخدم للويب هوك
-        user: { 
-          identifier: USER_IDENTIFIER.trim(), 
-          password: USER_PASSWORD.trim()
-        },
+        class: parseInt(classId),
+        externalRef: userId || 'web_order',
       }
     };
     
-    const response = await fetch(API_BASE_URL, {
+    const response = await fetch(ORDER_API_URL, {
       method: 'POST',
       headers: {
         'x-api-key': API_KEY.trim(),
+        'Idempotency-Key': idempotencyKey,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'User-Agent': 'StarMobileApp/1.0',
+        'User-Agent': 'StarMobileApp/1.6',
       },
       body: JSON.stringify(externalApiBody),
       cache: 'no-store'
     });
 
+    const responseData = await response.json();
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Order creation failed (${response.status}):`, errorText.substring(0, 200));
-      return new NextResponse(
-        JSON.stringify({ message: 'فشل الشراء\nيرجى التواصل مع الادارة 770326828' }),
-        { status: response.status, headers: { 'Content-Type': 'application/json' } }
-      );
+      console.error(`Order V2 Failed (${response.status}):`, responseData);
+      const errorMsg = responseData.error?.message?.ar || 'فشل الشراء من المصدر';
+      return NextResponse.json({ message: errorMsg }, { status: response.status });
     }
     
-    const data = await response.json();
-    if (data.status !== 200) {
-        return new NextResponse(
-            JSON.stringify({ message: 'فشل الشراء\nيرجى التواصل مع الادارة 770326828' }),
-            { status: 400, headers: { 'Content-Type': 'application/json' } }
-        );
+    // نجاح العملية
+    if (responseData.status === 200 || responseData.status === 201) {
+        return NextResponse.json(responseData);
     }
     
-    return NextResponse.json(data);
+    return NextResponse.json({ message: 'فشل إنشاء الطلب' }, { status: 400 });
 
   } catch (error: any) {
-    console.error('Order route exception on Vercel:', error);
-    return new NextResponse(
-        JSON.stringify({ message: 'فشل الشراء\nيرجى التواصل مع الادارة 770326828' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    console.error('Order V2 Exception:', error);
+    return NextResponse.json({ message: 'حدث خطأ تقني أثناء الشراء' }, { status: 500 });
   }
 }
