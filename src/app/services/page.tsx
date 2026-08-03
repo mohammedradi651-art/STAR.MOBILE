@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
@@ -102,6 +103,13 @@ const CARD_GRADIENTS = [
     "from-fuchsia-400 via-fuchsia-500 to-pink-600",
     "from-teal-400 via-teal-500 to-cyan-600",
 ];
+
+const CustomLoader = () => (
+    <div className="flex flex-col items-center justify-center p-8 space-y-4">
+        <Loader2 className="w-10 h-10 text-primary animate-spin" />
+        <p className="text-xs font-bold text-muted-foreground animate-pulse">جاري التحميل...</p>
+    </div>
+);
 
 export default function CombinedNetworksPage() {
   const firestore = useFirestore();
@@ -348,7 +356,7 @@ export default function CombinedNetworksPage() {
         } else {
             const response = await fetch(`/services/networks-api/order`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ classId: selectedCategory.id })
+                body: JSON.stringify({ classId: selectedCategory.id, userId: user.uid }) // إرسال userId للويب هوك
             });
             
             if (!response.ok) {
@@ -366,6 +374,7 @@ export default function CombinedNetworksPage() {
                 userId: user.uid, transactionDate: now, amount: categoryPrice,
                 transactionType: `شراء كرت ${selectedCategory.name}`, notes: `شبكة: ${selectedNetwork.name}`,
                 cardNumber: cardData.cardID,
+                uuidOrder: result.data.order.uuidOrder // حفظ معرف الطلب للمطابقة مع الويب هوك
             };
             
             if (cardData.cardPass && cardData.cardPass !== cardData.cardID) {
@@ -503,7 +512,7 @@ export default function CombinedNetworksPage() {
                 </DialogHeader>
               </div>
               <div className="flex-1 overflow-y-auto p-4 bg-white dark:bg-slate-900">
-                {(isLoadingCategories && categories.length === 0) ? ( <div className="flex justify-center py-10"><ProcessingOverlay /></div> ) : categoryError ? ( <p className="text-center text-destructive font-bold p-4 bg-destructive/10 rounded-2xl">{categoryError}</p> ) : (
+                {(isLoadingCategories && categories.length === 0) ? ( <div className="flex justify-center py-10"><CustomLoader /></div> ) : categoryError ? ( <p className="text-center text-destructive font-bold p-4 bg-destructive/10 rounded-2xl">{categoryError}</p> ) : (
                   <div className="space-y-3">
                     {sortedCategories.map((cat, idx) => {
                         const gradient = CARD_GRADIENTS[idx % CARD_GRADIENTS.length];
