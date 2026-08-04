@@ -60,7 +60,8 @@ import {
   Copy,
   XCircle,
   ShieldCheck,
-  Zap
+  Zap,
+  Settings
 } from 'lucide-react';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { useToast } from '@/hooks/use-toast';
