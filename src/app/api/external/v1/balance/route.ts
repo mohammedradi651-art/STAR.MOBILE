@@ -3,7 +3,8 @@ import { initializeServerFirebase } from '@/firebase/server-init';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 
 /**
- * @fileOverview نقطة نهاية فحص الرصيد المحدثة v1.5 مع دعم CORS واستقرار Firebase
+ * @fileOverview نقطة نهاية فحص الرصيد المحدثة v1.6 (Master Scope)
+ * تدعم الاستعلام عن رصيد أي عميل إذا كان المفتاح المستخدم هو مفتاح مدير.
  */
 
 const corsHeaders = {
@@ -19,14 +20,15 @@ export async function OPTIONS() {
 export async function GET(req: Request) {
   const timestamp = new Date().toISOString();
   try {
+    const { searchParams } = new URL(req.url);
+    const targetMobile = searchParams.get('mobile'); // رقم الجوال المراد فحصه (اختياري للمدير)
+
     const authHeader = req.headers.get('Authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json({ 
         success: false, 
         code: 'SM_UNAUTHORIZED', 
         message: 'Missing or invalid Authorization header', 
-        transactionId: null,
-        data: null,
         timestamp 
       }, { status: 401, headers: corsHeaders });
     }
@@ -34,6 +36,7 @@ export async function GET(req: Request) {
     const apiKey = authHeader.split(' ')[1];
     const { firestore } = initializeServerFirebase();
     
+    // 1. التحقق من صحة مفتاح الـ API وتحديد هوية صاحب المفتاح
     const q = query(collection(firestore, 'users'), where('apiKey', '==', apiKey));
     const querySnapshot = await getDocs(q);
 
@@ -42,21 +45,54 @@ export async function GET(req: Request) {
         success: false, 
         code: 'SM_FORBIDDEN', 
         message: 'Invalid API Key', 
-        transactionId: null,
-        data: null,
         timestamp 
       }, { status: 403, headers: corsHeaders });
     }
 
-    const userData = querySnapshot.docs[0].data();
+    const requesterDoc = querySnapshot.docs[0];
+    const requesterData = requesterDoc.data();
+    const isAdmin = requesterData.email === '770326828@shabakat.com' || requesterDoc.id === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2';
 
+    // 2. منطق الاستعلام (Master Scope)
+    // إذا كان الطالب مديراً وطلب رقم جوال معين
+    if (isAdmin && targetMobile) {
+        const cleanMobile = targetMobile.replace(/\D/g, '').slice(-9);
+        const targetQ = query(collection(firestore, 'users'), where('phoneNumber', '==', cleanMobile));
+        const targetSnap = await getDocs(targetQ);
+
+        if (targetSnap.empty) {
+            return NextResponse.json({ 
+                success: false, 
+                code: 'SM_USER_NOT_FOUND', 
+                message: 'No registered user found with this mobile number', 
+                timestamp 
+            }, { status: 404, headers: corsHeaders });
+        }
+
+        const targetData = targetSnap.docs[0].data();
+        return NextResponse.json({
+            success: true,
+            code: 'SM_SUCCESS',
+            message: 'User balance retrieved (Admin View)',
+            data: {
+                user: targetData.displayName,
+                mobile: targetData.phoneNumber,
+                balance: targetData.balance || 0,
+                currency: 'YER',
+                isRegistered: true
+            },
+            timestamp
+        }, { headers: corsHeaders });
+    }
+
+    // الوضع العادي: إرجاع رصيد صاحب المفتاح نفسه
     return NextResponse.json({
       success: true,
       code: 'SM_SUCCESS',
-      message: 'Balance retrieved successfully',
-      transactionId: null,
+      message: 'Your balance retrieved successfully',
       data: {
-          balance: userData.balance || 0,
+          user: requesterData.displayName,
+          balance: requesterData.balance || 0,
           currency: 'YER'
       },
       timestamp
@@ -68,8 +104,6 @@ export async function GET(req: Request) {
         success: false, 
         code: 'SM_INTERNAL_ERROR', 
         message: 'Internal server error: ' + error.message, 
-        transactionId: null,
-        data: null,
         timestamp 
     }, { status: 500, headers: corsHeaders });
   }

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -60,7 +59,8 @@ import {
   Key,
   Copy,
   XCircle,
-  ShieldCheck
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { useToast } from '@/hooks/use-toast';
@@ -87,6 +87,7 @@ type User = {
   telecomDiscount?: number;
   gamesDiscount?: number;
   apiKey?: string;
+  email?: string;
 };
 
 type AppSettings = {
@@ -160,6 +161,10 @@ export default function UsersPage() {
     [firestore]
   );
   const { data: users, isLoading } = useCollection<User>(usersCollection);
+
+  const adminUser = useMemo(() => {
+    return users?.find(u => u.email === '770326828@shabakat.com' || u.id === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2');
+  }, [users]);
 
   const debtsCollection = useMemoFirebase(
     () => (firestore ? query(collection(firestore, 'clientDebts'), orderBy('timestamp', 'desc')) : null),
@@ -620,6 +625,64 @@ export default function UsersPage() {
                 </CardContent>
                 </Card>
             </div>
+
+            {/* Master API Key Card for Admin */}
+            {isUserAdmin && adminUser && (
+                <Card className="border-none shadow-xl bg-mesh-gradient text-white rounded-[32px] overflow-hidden animate-in zoom-in-95 duration-700">
+                    <CardContent className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-white/20 rounded-xl backdrop-blur-md border border-white/20">
+                                    <ShieldCheck className="h-6 w-6 text-white" />
+                                </div>
+                                <h3 className="font-black text-base text-white">مفتاح الربط الشامل (Master API)</h3>
+                            </div>
+                            <Badge className="bg-green-400 text-green-900 border-none font-black text-[9px] uppercase tracking-widest h-5">Master Scope</Badge>
+                        </div>
+                        
+                        <div className="space-y-4">
+                            <div className="bg-black/20 rounded-2xl p-4 border border-white/10">
+                                <p className="text-[10px] font-bold text-white/60 mb-2 uppercase tracking-widest">مفتاح الوصول الخاص بالبوت</p>
+                                <div className="flex items-center gap-3">
+                                    <Input 
+                                        readOnly 
+                                        value={adminUser.apiKey || 'لا يوجد مفتاح مفعل'} 
+                                        className="bg-transparent border-none font-mono text-xs font-black text-white p-0 h-auto focus-visible:ring-0 placeholder:text-white/20"
+                                    />
+                                    <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 text-white hover:bg-white/10" 
+                                        onClick={() => {
+                                            if (adminUser.apiKey) {
+                                                navigator.clipboard.writeText(adminUser.apiKey);
+                                                toast({ title: "تم النسخ" });
+                                            }
+                                        }}
+                                    >
+                                        <Copy className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-start gap-3 opacity-80">
+                                <Zap className="h-4 w-4 text-yellow-300 shrink-0 mt-0.5" />
+                                <p className="text-[9px] font-bold leading-relaxed">
+                                    هذا المفتاح يمنح البوت صلاحية فحص رصيد أي مشترك عبر API الرصيد باستخدام باراميتر <code className="bg-black/30 px-1 rounded">?mobile=77xxxxxxx</code>
+                                </p>
+                            </div>
+
+                            <Button 
+                                onClick={() => handleApiKeyClick(adminUser)}
+                                className="w-full h-10 bg-white/20 hover:bg-white/30 text-white font-black text-xs border border-white/10 rounded-xl"
+                            >
+                                <Settings className="ml-2 h-3.5 w-3.5" />
+                                إدارة المفتاح الشامل
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
           </div>
           
           <div className="relative">
