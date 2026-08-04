@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
@@ -134,11 +133,24 @@ export default function CombinedNetworksPage() {
   );
   const { data: localNetworks, isLoading: isLoadingLocal } = useCollection<any>(localNetworksQuery);
 
-  // Fetch API networks with strict Refresh logic
+  // Fetch API networks with Caching
   useEffect(() => {
     const fetchApiNetworks = async () => {
+      const cached = localStorage.getItem('star_mobile_api_networks_cache');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setApiNetworks(parsed);
+            setIsLoadingApi(false);
+          }
+        } catch (e) {
+          console.error("Cache read error", e);
+        }
+      }
+
       try {
-        const response = await fetch('/services/networks-api', { cache: 'no-store' });
+        const response = await fetch('/services/networks-api');
         if (response.ok) {
           const data = await response.json();
           const mapped = data.map((n: any) => ({
@@ -149,17 +161,10 @@ export default function CombinedNetworksPage() {
             logo: n.logo,
           }));
           setApiNetworks(mapped);
-          // تحديث الكاش احتياطاً فقط
           localStorage.setItem('star_mobile_api_networks_cache', JSON.stringify(mapped));
-        } else {
-            // محاولة التحميل من الكاش في حال فشل السيرفر
-            const cached = localStorage.getItem('star_mobile_api_networks_cache');
-            if (cached) setApiNetworks(JSON.parse(cached));
         }
       } catch (err) {
         console.error(err);
-        const cached = localStorage.getItem('star_mobile_api_networks_cache');
-        if (cached) setApiNetworks(JSON.parse(cached));
       } finally {
         setIsLoadingApi(false);
       }
@@ -203,8 +208,22 @@ export default function CombinedNetworksPage() {
     setSelectedNetwork(network);
     setCategoryError(null);
     setPurchasedCard(null);
-    setCategories([]);
-    setIsLoadingCategories(true);
+
+    const catCacheKey = `star_cache_cats_${network.id}`;
+    const cachedCats = localStorage.getItem(catCacheKey);
+    
+    if (cachedCats) {
+      try {
+        setCategories(JSON.parse(cachedCats));
+        setIsLoadingCategories(false);
+      } catch (e) {
+        setCategories([]);
+        setIsLoadingCategories(true);
+      }
+    } else {
+      setCategories([]);
+      setIsLoadingCategories(true);
+    }
 
     try {
       if (network.isLocal && firestore) {
@@ -219,14 +238,16 @@ export default function CombinedNetworksPage() {
         });
         const catsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as CardCategory));
         setCategories(catsData);
+        localStorage.setItem(catCacheKey, JSON.stringify(catsData));
       } else {
-        const response = await fetch(`/services/networks-api/${network.id}/classes`, { cache: 'no-store' });
+        const response = await fetch(`/services/networks-api/${network.id}/classes`);
         if (!response.ok) throw new Error('فشل تحميل الفئات');
         const data = await response.json();
         const mapped = data.map((c: any) => ({
             id: c.id, name: c.name, price: c.price, capacity: c.dataLimit, validity: c.expirationDate
         }));
         setCategories(mapped);
+        localStorage.setItem(catCacheKey, JSON.stringify(mapped));
       }
     } catch (err: any) {
       if (err.name !== 'FirebaseError') {
@@ -327,12 +348,12 @@ export default function CombinedNetworksPage() {
         } else {
             const response = await fetch(`/services/networks-api/order`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ classId: selectedCategory.id, userId: user.uid })
+                body: JSON.stringify({ classId: selectedCategory.id })
             });
             
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.message || 'فشل الشراء من المصدر');
+                throw new Error(errorData.message || 'فشل الشراء\nيرجى التواصل مع الادارة 770326828');
             }
             
             const result = await response.json();
@@ -356,6 +377,7 @@ export default function CombinedNetworksPage() {
             setPurchasedCard(cardData);
         }
         
+        // --- نظام إرسال الواتساب التلقائي (باستخدام API Wassenger) ---
         if (userProfile?.phoneNumber) {
             const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${selectedNetwork?.name}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${finalCardID}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
             
@@ -430,7 +452,7 @@ export default function CombinedNetworksPage() {
         </div>
         
         <div className="flex-1 overflow-y-auto px-4 pb-20 space-y-4">
-            {(isLoadingLocal || isLoadingApi) && allNetworksCombined.length === 0 ? (
+            {(isLoadingLocal || (isLoadingApi && apiNetworks.length === 0)) ? (
                 <div className="flex justify-center py-20"><ProcessingOverlay /></div>
             ) : allNetworksCombined.length === 0 ? (
                 <div className="text-center py-20 opacity-40"><Wifi className="h-16 w-16 mx-auto mb-4" /><p className="font-bold">لا توجد شبكات متاحة حالياً</p></div>
@@ -448,10 +470,7 @@ export default function CombinedNetworksPage() {
                             </div>
                             
                             <div className="flex-1 text-right mx-2 space-y-0.5 overflow-hidden">
-                                <div className="flex items-center justify-end gap-2">
-                                    {!net.isLocal && <Badge className="bg-white/20 text-white border-none text-[8px] font-black h-4 px-1.5 rounded">بيتي</Badge>}
-                                    <h4 className="font-black text-base text-white truncate">{net.name}</h4>
-                                </div>
+                                <h4 className="font-black text-base text-white truncate">{net.name}</h4>
                                 <p className="text-[10px] text-white/70 font-bold truncate opacity-80">{net.location}</p>
                             </div>
                             
@@ -484,7 +503,7 @@ export default function CombinedNetworksPage() {
                 </DialogHeader>
               </div>
               <div className="flex-1 overflow-y-auto p-4 bg-white dark:bg-slate-900">
-                {isLoadingCategories ? ( <div className="flex justify-center py-10"><ProcessingOverlay /></div> ) : categoryError ? ( <p className="text-center text-destructive font-bold p-4 bg-destructive/10 rounded-2xl">{categoryError}</p> ) : (
+                {(isLoadingCategories && categories.length === 0) ? ( <div className="flex justify-center py-10"><ProcessingOverlay /></div> ) : categoryError ? ( <p className="text-center text-destructive font-bold p-4 bg-destructive/10 rounded-2xl">{categoryError}</p> ) : (
                   <div className="space-y-3">
                     {sortedCategories.map((cat, idx) => {
                         const gradient = CARD_GRADIENTS[idx % CARD_GRADIENTS.length];
