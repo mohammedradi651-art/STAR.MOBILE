@@ -2,8 +2,11 @@ import { NextResponse } from 'next/server';
 import * as admin from 'firebase-admin';
 
 /**
- * @fileOverview مستقبل شحن الرصيد التلقائي (v2.0)
- * يستخدم Firebase Admin لتجاوز قيود الحماية وإضافة الرصيد مباشرة.
+ * @fileOverview المسار الرسمي والنهائي لإيداع الرصيد آلياً عبر بوت الواتساب.
+ * 
+ * الرابط: /api/webhooks/whatsapp-receipt
+ * الطريقة: POST
+ * الجسم المطلوب: { "phone": "string", "amount": number, "receiptNumber": "string" }
  */
 
 function getAdminApp() {
@@ -14,18 +17,25 @@ function getAdminApp() {
   let privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
   if (!clientEmail || !privateKey) {
-    // Fallback if env vars are missing - note: in production these MUST be in Vercel
-    console.warn("⚠️ Admin SDK credentials missing, using default initialization.");
+    console.error("❌ خطأ: مفاتيح Firebase Admin مفقودة في إعدادات فيرسل.");
     return null;
   }
 
-  return admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId,
-      clientEmail,
-      privateKey: privateKey.replace(/\\n/g, '\n'),
-    }),
-  });
+  // تنظيف ومعالجة المفتاح الخاص لضمان عمله على فيرسل
+  const formattedKey = privateKey.replace(/\\n/g, '\n').trim();
+
+  try {
+    return admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId,
+        clientEmail,
+        privateKey: formattedKey,
+      }),
+    });
+  } catch (error) {
+    console.error("❌ فشل تهيئة Firebase Admin:", error);
+    return null;
+  }
 }
 
 export async function POST(req: Request) {
@@ -33,81 +43,90 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { phone, amount, receiptNumber } = body;
 
+    // 1. التحقق من البيانات الواردة
     if (!phone || !amount || !receiptNumber) {
-      return NextResponse.json({ success: false, message: 'بيانات ناقصة' }, { status: 400 });
+      return NextResponse.json({ success: false, message: 'بيانات الطلب ناقصة' }, { status: 400 });
     }
 
     const cleanPhone = phone.toString().replace(/\D/g, '').slice(-9);
     const numericAmount = parseFloat(amount);
 
     if (isNaN(numericAmount) || numericAmount <= 0) {
-      return NextResponse.json({ success: false, message: 'مبلغ غير صحيح' }, { status: 400 });
+      return NextResponse.json({ success: false, message: 'المبلغ غير صحيح' }, { status: 400 });
     }
 
     const app = getAdminApp();
     if (!app) {
-        return NextResponse.json({ success: false, message: 'فشل تهيئة السيرفر - تأكد من مفاتيح Admin في فيرسل' }, { status: 500 });
+        return NextResponse.json({ success: false, message: 'فشل في الاتصال بقاعدة البيانات (Admin Error)' }, { status: 500 });
     }
 
     const db = admin.firestore(app);
 
-    // 1. البحث عن المستخدم
+    // 2. البحث عن المستخدم بالرقم
     const usersRef = db.collection('users');
     const userSnapshot = await usersRef.where('phoneNumber', '==', cleanPhone).limit(1).get();
 
     if (userSnapshot.empty) {
-      return NextResponse.json({ success: false, message: 'الرقم غير مسجل' }, { status: 404 });
+      return NextResponse.json({ success: false, message: 'هذا الرقم غير مسجل في التطبيق' }, { status: 404 });
     }
 
     const userDoc = userSnapshot.docs[0];
     const userId = userDoc.id;
+    const userData = userDoc.data();
 
-    // 2. منع التكرار
+    // 3. منع تكرار شحن نفس الإيصال
     const txRef = db.collection('users').doc(userId).collection('transactions');
     const duplicateCheck = await txRef.where('receiptReference', '==', receiptNumber).limit(1).get();
 
     if (!duplicateCheck.empty) {
-      return NextResponse.json({ success: false, message: 'الإيصال مشحون مسبقاً' }, { status: 409 });
+      return NextResponse.json({ success: false, message: 'هذا الإيصال تم شحنه مسبقاً' }, { status: 409 });
     }
 
-    // 3. تنفيذ العملية (الخصم والتسجيل)
+    // 4. تنفيذ عملية الإيداع الحقيقية (Atomic Transaction)
     const batch = db.batch();
     const now = new Date().toISOString();
 
-    // تحديث الرصيد
+    // تحديث رصيد المستخدم
     batch.update(userDoc.ref, { 
         balance: admin.firestore.FieldValue.increment(numericAmount) 
     });
 
-    // تسجيل العملية
+    // تسجيل العملية في كشف الحساب
     const newTxRef = txRef.doc();
     batch.set(newTxRef, {
         userId,
         transactionDate: now,
         amount: numericAmount,
-        transactionType: 'تغذية رصيد (آلي)',
-        notes: `تم الشحن تلقائياً للإيصال: ${receiptNumber}`,
-        receiptReference: receiptNumber
+        transactionType: 'تغذية رصيد (واتساب)',
+        notes: `شحن آلي للإيصال رقم: ${receiptNumber}`,
+        receiptReference: receiptNumber,
+        status: 'success'
     });
 
-    // إشعار داخلي
+    // إضافة إشعار داخل التطبيق
     const notifRef = db.collection('users').doc(userId).collection('notifications').doc();
     batch.set(notifRef, {
-        title: 'تم شحن رصيدك ✅',
-        body: `تم إضافة ${numericAmount.toLocaleString()} ريال إلى حسابك بنجاح.`,
-        timestamp: now
+        title: 'تم شحن رصيدك بنجاح ✅',
+        body: `تم إضافة ${numericAmount.toLocaleString()} ريال إلى حسابك عبر الواتساب.`,
+        timestamp: now,
+        type: 'deposit'
     });
 
     await batch.commit();
 
     return NextResponse.json({ 
         success: true, 
-        message: 'تم الشحن بنجاح',
-        data: { deposited: numericAmount, receipt: receiptNumber }
+        message: 'تمت عملية الإيداع بنجاح',
+        data: { 
+            userName: userData.displayName,
+            deposited: numericAmount, 
+            newBalance: (userData.balance || 0) + numericAmount,
+            receipt: receiptNumber 
+        }
     });
 
   } catch (error: any) {
     console.error('Webhook Error:', error);
-    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, message: 'خطأ داخلي: ' + error.message }, { status: 500 });
   }
 }
