@@ -2,3 +2,4 @@
 import './flows/process-receipt-flow';
 import './flows/support-chat-flow';
 import './flows/process-alomqy-receipt-flow';
+import './flows/process-bank-receipt-flow';
