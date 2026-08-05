@@ -1,11 +1,32 @@
 import { NextResponse } from 'next/server';
-import { initializeServerFirebase } from '@/firebase/server-init';
-import { collection, query, where, getDocs, doc, writeBatch, increment } from 'firebase/firestore';
+import * as admin from 'firebase-admin';
 
 /**
- * @fileOverview مستقبل شحن الرصيد التلقائي المطور (v1.7)
- * ينفذ عمليات الإيداع الفورية بناءً على تأكيد نظام الواتساب.
+ * @fileOverview مستقبل شحن الرصيد التلقائي (v2.0)
+ * يستخدم Firebase Admin لتجاوز قيود الحماية وإضافة الرصيد مباشرة.
  */
+
+function getAdminApp() {
+  if (admin.apps.length > 0) return admin.apps[0];
+  
+  const projectId = process.env.FIREBASE_PROJECT_ID || "studio-239662212-1b7b6";
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+  if (!clientEmail || !privateKey) {
+    // Fallback if env vars are missing - note: in production these MUST be in Vercel
+    console.warn("⚠️ Admin SDK credentials missing, using default initialization.");
+    return null;
+  }
+
+  return admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId,
+      clientEmail,
+      privateKey: privateKey.replace(/\\n/g, '\n'),
+    }),
+  });
+}
 
 export async function POST(req: Request) {
   try {
@@ -13,73 +34,67 @@ export async function POST(req: Request) {
     const { phone, amount, receiptNumber } = body;
 
     if (!phone || !amount || !receiptNumber) {
-      return NextResponse.json({ 
-        success: false, 
-        message: 'بيانات ناقصة: يرجى إرسال phone و amount و receiptNumber' 
-      }, { status: 400 });
+      return NextResponse.json({ success: false, message: 'بيانات ناقصة' }, { status: 400 });
     }
 
-    // 1. تنظيف رقم الهاتف (نظام 9 أرقام يبدأ بـ 7)
     const cleanPhone = phone.toString().replace(/\D/g, '').slice(-9);
     const numericAmount = parseFloat(amount);
 
     if (isNaN(numericAmount) || numericAmount <= 0) {
-        return NextResponse.json({ success: false, message: 'مبلغ الشحن غير صحيح.' }, { status: 400 });
+      return NextResponse.json({ success: false, message: 'مبلغ غير صحيح' }, { status: 400 });
     }
 
-    const { firestore } = initializeServerFirebase();
+    const app = getAdminApp();
+    if (!app) {
+        return NextResponse.json({ success: false, message: 'فشل تهيئة السيرفر - تأكد من مفاتيح Admin في فيرسل' }, { status: 500 });
+    }
 
-    // 2. البحث عن المستخدم بدقة بالرقم
-    const usersRef = collection(firestore, 'users');
-    const qUser = query(usersRef, where('phoneNumber', '==', cleanPhone));
-    const userSnapshot = await getDocs(qUser);
+    const db = admin.firestore(app);
+
+    // 1. البحث عن المستخدم
+    const usersRef = db.collection('users');
+    const userSnapshot = await usersRef.where('phoneNumber', '==', cleanPhone).limit(1).get();
 
     if (userSnapshot.empty) {
-      return NextResponse.json({ 
-        success: false, 
-        message: `الرقم ${cleanPhone} غير مسجل في قاعدة بيانات التطبيق حالياً.` 
-      }, { status: 404 });
+      return NextResponse.json({ success: false, message: 'الرقم غير مسجل' }, { status: 404 });
     }
 
     const userDoc = userSnapshot.docs[0];
     const userId = userDoc.id;
-    const userData = userDoc.data();
 
-    // 3. منع التكرار باستخدام حقل مرجعي خاص
-    const txRef = collection(firestore, 'users', userId, 'transactions');
-    const qTx = query(txRef, where('receiptReference', '==', receiptNumber));
-    const txSnapshot = await getDocs(qTx);
+    // 2. منع التكرار
+    const txRef = db.collection('users').doc(userId).collection('transactions');
+    const duplicateCheck = await txRef.where('receiptReference', '==', receiptNumber).limit(1).get();
 
-    if (!txSnapshot.empty) {
-        return NextResponse.json({ 
-            success: false, 
-            message: 'هذا الإيصال تم شحنه مسبقاً، لا يمكن تكرار العملية.' 
-        }, { status: 409 });
+    if (!duplicateCheck.empty) {
+      return NextResponse.json({ success: false, message: 'الإيصال مشحون مسبقاً' }, { status: 409 });
     }
 
-    // 4. تنفيذ العملية (الخصم والتسجيل) في حزمة واحدة (Batch)
-    const batch = writeBatch(firestore);
+    // 3. تنفيذ العملية (الخصم والتسجيل)
+    const batch = db.batch();
     const now = new Date().toISOString();
 
-    // تحديث رصيد المستخدم
-    batch.update(userDoc.ref, { balance: increment(numericAmount) });
+    // تحديث الرصيد
+    batch.update(userDoc.ref, { 
+        balance: admin.firestore.FieldValue.increment(numericAmount) 
+    });
 
-    // تسجيل العملية في كشف الحساب
-    const newTxRef = doc(collection(firestore, 'users', userId, 'transactions'));
+    // تسجيل العملية
+    const newTxRef = txRef.doc();
     batch.set(newTxRef, {
         userId,
         transactionDate: now,
         amount: numericAmount,
-        transactionType: 'تغذية رصيد (واتساب آلي)',
-        notes: `تم الإيداع تلقائياً بناءً على الإيصال رقم: ${receiptNumber}`,
-        receiptReference: receiptNumber // حقل حاسم لمنع التكرار
+        transactionType: 'تغذية رصيد (آلي)',
+        notes: `تم الشحن تلقائياً للإيصال: ${receiptNumber}`,
+        receiptReference: receiptNumber
     });
 
-    // إضافة إشعار للمستخدم داخل التطبيق
-    const notifRef = doc(collection(firestore, 'users', userId, 'notifications'));
+    // إشعار داخلي
+    const notifRef = db.collection('users').doc(userId).collection('notifications').doc();
     batch.set(notifRef, {
-        title: 'تم شحن رصيدك بنجاح ✅',
-        body: `شكراً لك! تم إضافة ${numericAmount.toLocaleString()} ريال إلى حسابك آلياً.`,
+        title: 'تم شحن رصيدك ✅',
+        body: `تم إضافة ${numericAmount.toLocaleString()} ريال إلى حسابك بنجاح.`,
         timestamp: now
     });
 
@@ -87,20 +102,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ 
         success: true, 
-        message: 'تمت عملية الشحن بنجاح.',
-        data: {
-            userName: userData.displayName,
-            deposited: numericAmount,
-            newBalance: (userData.balance || 0) + numericAmount,
-            receipt: receiptNumber
-        }
+        message: 'تم الشحن بنجاح',
+        data: { deposited: numericAmount, receipt: receiptNumber }
     });
 
   } catch (error: any) {
-    console.error('WhatsApp Webhook Error:', error);
-    return NextResponse.json({ 
-        success: false, 
-        message: 'خطأ داخلي في الخادم: ' + error.message 
-    }, { status: 500 });
+    console.error('Webhook Error:', error);
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }
