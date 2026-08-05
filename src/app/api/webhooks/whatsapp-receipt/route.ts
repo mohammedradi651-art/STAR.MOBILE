@@ -1,16 +1,16 @@
-
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
 import { collection, query, where, getDocs, doc, writeBatch, increment } from 'firebase/firestore';
 
 /**
- * @fileOverview مستقبل شحن الرصيد التلقائي (Webhook)
- * يستقبل البيانات الجاهزة من نظام الواتساب وينفذ الشحن فوراً.
+ * @fileOverview مستقبل شحن الرصيد التلقائي المطور (v1.7)
+ * ينفذ عمليات الإيداع الفورية بناءً على تأكيد نظام الواتساب.
  */
 
 export async function POST(req: Request) {
   try {
-    const { phone, amount, receiptNumber } = await req.json();
+    const body = await req.json();
+    const { phone, amount, receiptNumber } = body;
 
     if (!phone || !amount || !receiptNumber) {
       return NextResponse.json({ 
@@ -19,17 +19,17 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    // 1. تنظيف رقم الهاتف (نظام 9 أرقام)
-    const cleanPhone = phone.replace(/\D/g, '').slice(-9);
+    // 1. تنظيف رقم الهاتف (نظام 9 أرقام يبدأ بـ 7)
+    const cleanPhone = phone.toString().replace(/\D/g, '').slice(-9);
     const numericAmount = parseFloat(amount);
 
     if (isNaN(numericAmount) || numericAmount <= 0) {
-        return NextResponse.json({ success: false, message: 'مبلغ غير صحيح' }, { status: 400 });
+        return NextResponse.json({ success: false, message: 'مبلغ الشحن غير صحيح.' }, { status: 400 });
     }
 
     const { firestore } = initializeServerFirebase();
 
-    // 2. البحث عن المستخدم بالرقم
+    // 2. البحث عن المستخدم بدقة بالرقم
     const usersRef = collection(firestore, 'users');
     const qUser = query(usersRef, where('phoneNumber', '==', cleanPhone));
     const userSnapshot = await getDocs(qUser);
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     if (userSnapshot.empty) {
       return NextResponse.json({ 
         success: false, 
-        message: `الرقم ${cleanPhone} غير مسجل في التطبيق.` 
+        message: `الرقم ${cleanPhone} غير مسجل في قاعدة بيانات التطبيق حالياً.` 
       }, { status: 404 });
     }
 
@@ -45,42 +45,41 @@ export async function POST(req: Request) {
     const userId = userDoc.id;
     const userData = userDoc.data();
 
-    // 3. منع التكرار (التحقق هل تم شحن هذا الإيصال مسبقاً؟)
+    // 3. منع التكرار باستخدام حقل مرجعي خاص
     const txRef = collection(firestore, 'users', userId, 'transactions');
-    const qTx = query(txRef, where('notes', '>=', `مرجع: ${receiptNumber}`));
+    const qTx = query(txRef, where('receiptReference', '==', receiptNumber));
     const txSnapshot = await getDocs(qTx);
 
-    // ملاحظة: نتحقق من وجود رقم الإيصال في الملاحظات لضمان عدم الشحن المزدوج
-    const alreadyProcessed = txSnapshot.docs.some(d => d.data().notes?.includes(receiptNumber));
-    if (alreadyProcessed) {
+    if (!txSnapshot.empty) {
         return NextResponse.json({ 
             success: false, 
-            message: 'هذا الإيصال تم معالجته وشحنه مسبقاً.' 
+            message: 'هذا الإيصال تم شحنه مسبقاً، لا يمكن تكرار العملية.' 
         }, { status: 409 });
     }
 
-    // 4. تنفيذ عملية الشحن (Batch)
+    // 4. تنفيذ العملية (الخصم والتسجيل) في حزمة واحدة (Batch)
     const batch = writeBatch(firestore);
     const now = new Date().toISOString();
 
-    // تحديث الرصيد
+    // تحديث رصيد المستخدم
     batch.update(userDoc.ref, { balance: increment(numericAmount) });
 
-    // تسجيل العملية
+    // تسجيل العملية في كشف الحساب
     const newTxRef = doc(collection(firestore, 'users', userId, 'transactions'));
     batch.set(newTxRef, {
         userId,
         transactionDate: now,
         amount: numericAmount,
-        transactionType: 'شحن تلقائي (واتساب)',
-        notes: `تم الشحن تلقائياً عبر الواتساب. مرجع: ${receiptNumber}`,
+        transactionType: 'تغذية رصيد (واتساب آلي)',
+        notes: `تم الإيداع تلقائياً بناءً على الإيصال رقم: ${receiptNumber}`,
+        receiptReference: receiptNumber // حقل حاسم لمنع التكرار
     });
 
-    // إضافة إشعار داخلي
+    // إضافة إشعار للمستخدم داخل التطبيق
     const notifRef = doc(collection(firestore, 'users', userId, 'notifications'));
     batch.set(notifRef, {
-        title: 'تم شحن رصيدك تلقائياً',
-        body: `شكراً لك! تم إضافة ${numericAmount} ريال إلى حسابك عبر الواتساب بنجاح.`,
+        title: 'تم شحن رصيدك بنجاح ✅',
+        body: `شكراً لك! تم إضافة ${numericAmount.toLocaleString()} ريال إلى حسابك آلياً.`,
         timestamp: now
     });
 
@@ -88,11 +87,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ 
         success: true, 
-        message: 'تم الشحن بنجاح',
+        message: 'تمت عملية الشحن بنجاح.',
         data: {
             userName: userData.displayName,
-            amount: numericAmount,
-            newBalance: (userData.balance || 0) + numericAmount
+            deposited: numericAmount,
+            newBalance: (userData.balance || 0) + numericAmount,
+            receipt: receiptNumber
         }
     });
 
@@ -100,7 +100,7 @@ export async function POST(req: Request) {
     console.error('WhatsApp Webhook Error:', error);
     return NextResponse.json({ 
         success: false, 
-        message: 'خطأ داخلي في السيرفر: ' + error.message 
+        message: 'خطأ داخلي في الخادم: ' + error.message 
     }, { status: 500 });
   }
 }
