@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { SimpleHeader } from '@/components/layout/simple-header';
-import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc, updateDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc, addDocumentNonBlocking } from '@/firebase';
 import { collection, doc, query, where, getDocs, writeBatch, increment } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { 
     Copy, 
     Wallet, 
-    MapPin, 
     ExternalLink, 
     HelpCircle, 
     PhoneCall, 
@@ -18,13 +17,12 @@ import {
     ChevronDown,
     CircleDollarSign,
     CheckCircle2,
-    Info,
     Scan,
-    ImageUp,
     Sparkles,
     Loader2,
-    AlertCircle,
-    CheckCircle
+    CheckCircle,
+    Smartphone,
+    AlertCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -175,11 +173,11 @@ export default function TopUpPage() {
             });
             const dataUri = await base64Promise;
 
-            // استدعاء محرك الذكاء الاصطناعي
+            // استدعاء محرك الذكاء الاصطناعي الجبار Gemini 2.0 Flash
             const result = await processBankReceipt({ receiptImage: dataUri });
             
             if (!result.isValid) {
-                throw new Error("عذراً، لم نتمكن من التعرف على هذا الإيصال كحوالة صحيحة للعمقي أو الكريمي.");
+                throw new Error("عذراً، هذا الإيصال لا يخص العمقي أو الكريمي أو أن الصورة غير واضحة بما يكفي.");
             }
 
             // التحقق من عدم تكرار الإيصال
@@ -192,11 +190,12 @@ export default function TopUpPage() {
             }
 
             setAiResult(result);
-            toast({ title: "تم التحليل بنجاح", description: "يرجى مراجعة البيانات قبل التأكيد." });
+            toast({ title: "تم فحص الإيصال", description: "يرجى مراجعة المبلغ والتأكيد للإيداع." });
         } catch (error: any) {
             toast({ variant: "destructive", title: "فشل التحليل", description: error.message });
         } finally {
             setIsAiProcessing(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
         }
     };
 
@@ -210,35 +209,35 @@ export default function TopUpPage() {
         try {
             const batch = writeBatch(firestore);
             
-            // 1. تحديث الرصيد
+            // 1. تحديث الرصيد فورياً
             batch.update(userDocRef, { balance: increment(amount) });
 
-            // 2. تسجيل العملية
+            // 2. تسجيل العملية في كشف الحساب
             const txRef = doc(collection(firestore, `users/${user.uid}/transactions`));
             batch.set(txRef, {
                 userId: user.uid,
                 transactionDate: now,
                 amount: amount,
-                transactionType: 'تغذية رصيد (بالذكاء)',
-                notes: `شحن آلي لإيصال ${aiResult.bankName}: ${aiResult.receiptNumber}`,
+                transactionType: 'تغذية رصيد (ذكاء آلي)',
+                notes: `شحن آلي لإيصال ${aiResult.bankName === 'Al-Omqy' ? 'العمقي' : 'الكريمي'}: ${aiResult.receiptNumber}`,
                 receiptReference: aiResult.receiptNumber,
                 status: 'success'
             });
 
-            // 3. إشعار
+            // 3. إرسال إشعار للمستخدم
             const notifRef = doc(collection(firestore, `users/${user.uid}/notifications`));
             batch.set(notifRef, {
-                title: 'تم شحن حسابك آلياً ✅',
-                body: `تم إيداع ${amount.toLocaleString()} ريال بنجاح بعد فحص إيصال ${aiResult.bankName}.`,
+                title: 'تم شحن رصيدك آلياً ✅',
+                body: `تم إيداع ${amount.toLocaleString()} ريال في حسابك بعد فحص إيصال ${aiResult.bankName === 'Al-Omqy' ? 'العمقي' : 'الكريمي'}.`,
                 timestamp: now
             });
 
             await batch.commit();
             setAiResult(null);
-            toast({ title: "مبروك!", description: "تم إيداع الرصيد في حسابك فوراً." });
+            toast({ title: "تم الإيداع!", description: "تمت إضافة الرصيد إلى محفظتك بنجاح." });
             router.push('/login');
         } catch (error: any) {
-            toast({ variant: "destructive", title: "خطأ في الإيداع", description: "حدث خطأ أثناء تحديث الرصيد." });
+            toast({ variant: "destructive", title: "خطأ في الإيداع", description: "حدث خطأ غير متوقع، يرجى المحاولة لاحقاً." });
         } finally {
             setIsAiProcessing(false);
         }
@@ -252,7 +251,7 @@ export default function TopUpPage() {
             <SimpleHeader title="تغذية الحساب" />
             
             <div className="flex-1 overflow-y-auto pb-32 no-scrollbar">
-                {isAiProcessing && <ProcessingOverlay message="جاري فحص الإيصال بالذكاء الاصطناعي..." />}
+                {isAiProcessing && <ProcessingOverlay message="جاري تحليل الإيصال بمحرك Gemini 2.0..." />}
 
                 <div className="bg-mesh-gradient pt-6 pb-12 px-6 rounded-b-[50px] shadow-xl relative overflow-hidden mb-8">
                     <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
@@ -262,7 +261,7 @@ export default function TopUpPage() {
                         </div>
                         <div className="space-y-1">
                             <h2 className="text-2xl font-black text-white tracking-tight">تغذية المحفظة</h2>
-                            <p className="text-[10px] text-white/70 font-bold uppercase tracking-[0.2em]">اختر طريقة الشحن المناسبة لك</p>
+                            <p className="text-[10px] text-white/80 font-bold uppercase tracking-[0.2em]">اشحن رصيدك بالذكاء الاصطناعي فوراً</p>
                         </div>
                     </div>
                 </div>
@@ -271,7 +270,7 @@ export default function TopUpPage() {
                     <div className="space-y-4">
                         <div className="flex items-center gap-3 px-2">
                             <div className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-[10px] font-black shadow-lg">1</div>
-                            <h3 className="text-sm font-black text-foreground/80 uppercase tracking-widest">طريقة التحويل</h3>
+                            <h3 className="text-sm font-black text-foreground/80 uppercase tracking-widest">اختر البنك أو المصرف</h3>
                         </div>
                         {renderPaymentMethods()}
                     </div>
@@ -280,7 +279,7 @@ export default function TopUpPage() {
                         <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
                             <div className="flex items-center gap-3 px-2">
                                 <div className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-[10px] font-black shadow-lg">2</div>
-                                <h3 className="text-sm font-black text-foreground/80 uppercase tracking-widest">التفاصيل</h3>
+                                <h3 className="text-sm font-black text-foreground/80 uppercase tracking-widest">بيانات التحويل</h3>
                             </div>
 
                             {isQutaibiSelected ? (
@@ -308,16 +307,18 @@ export default function TopUpPage() {
                                         </CardContent>
                                     </Card>
 
-                                    {/* نظام المسح الذكي للعمقي والكريمي */}
+                                    {/* نظام المسح الذكي لعمقي وكريمي بمحرك Gemini 2.0 */}
                                     {isAiSupported ? (
                                         <div className="space-y-4 animate-in slide-in-from-top-4 duration-700">
-                                            <div className="bg-orange-50 border border-orange-200 rounded-[32px] p-6 text-center space-y-4">
+                                            <div className="bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800 rounded-[32px] p-6 text-center space-y-4">
                                                 <div className="bg-orange-500/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto">
                                                     <Sparkles className="h-8 w-8 text-orange-600 animate-pulse" />
                                                 </div>
                                                 <div>
-                                                    <h3 className="font-black text-orange-700">شحن آلي بالذكاء الاصطناعي</h3>
-                                                    <p className="text-[10px] text-orange-600/80 font-bold">ارفع صورة الإيصال وسيقوم النظام بإيداع الرصيد فوراً</p>
+                                                    <h3 className="font-black text-orange-700 dark:text-orange-400">نظام المسح الآلي (Beta)</h3>
+                                                    <p className="text-[10px] text-orange-600/80 dark:text-orange-500 font-bold leading-relaxed">
+                                                        ارفع صورة الإيصال وسيقوم Gemini 2.0 بقراءتها وإيداع المبلغ فوراً في حسابك.
+                                                    </p>
                                                 </div>
                                                 <input 
                                                     type="file" 
@@ -327,7 +328,7 @@ export default function TopUpPage() {
                                                     onChange={handleFileSelect}
                                                 />
                                                 <Button 
-                                                    className="w-full h-14 rounded-2xl bg-orange-600 hover:bg-orange-700 text-white font-black shadow-xl"
+                                                    className="w-full h-14 rounded-2xl bg-orange-600 hover:bg-orange-700 text-white font-black shadow-xl transition-all active:scale-95"
                                                     onClick={() => fileInputRef.current?.click()}
                                                 >
                                                     <Scan className="ml-2 h-5 w-5" />
@@ -335,31 +336,36 @@ export default function TopUpPage() {
                                                 </Button>
                                             </div>
 
-                                            {/* نتائج التحليل الذكي */}
+                                            {/* لوحة تأكيد بيانات الذكاء الاصطناعي */}
                                             {aiResult && (
                                                 <div className="bg-white dark:bg-slate-900 rounded-[32px] p-6 shadow-2xl border-t-4 border-green-500 animate-in zoom-in-95 duration-500">
                                                     <div className="flex items-center gap-2 mb-4">
                                                         <CheckCircle className="h-5 w-5 text-green-500" />
-                                                        <h4 className="font-black text-sm">تم استخراج البيانات بنجاح</h4>
+                                                        <h4 className="font-black text-sm text-foreground">البيانات المستخرجة من الإيصال</h4>
                                                     </div>
-                                                    <div className="space-y-3 mb-6">
-                                                        <div className="flex justify-between items-center text-xs py-2 border-b border-dashed">
-                                                            <span className="text-muted-foreground">البنك:</span>
-                                                            <span className="font-black">{aiResult.bankName === 'Al-Omqy' ? 'العمقي للصرافة' : 'بنك الكريمي'}</span>
+                                                    <div className="space-y-3 mb-6 bg-muted/30 p-4 rounded-2xl">
+                                                        <div className="flex justify-between items-center text-xs py-1 border-b border-dashed">
+                                                            <span className="text-muted-foreground font-bold">مصدر الإيصال:</span>
+                                                            <span className="font-black text-primary">{aiResult.bankName === 'Al-Omqy' ? 'العمقي للصرافة' : 'بنك الكريمي'}</span>
                                                         </div>
-                                                        <div className="flex justify-between items-center text-xs py-2 border-b border-dashed">
-                                                            <span className="text-muted-foreground">رقم العملية:</span>
+                                                        <div className="flex justify-between items-center text-xs py-1 border-b border-dashed">
+                                                            <span className="text-muted-foreground font-bold">رقم العملية:</span>
                                                             <span className="font-mono font-black">{aiResult.receiptNumber}</span>
                                                         </div>
                                                         <div className="flex justify-between items-center pt-2">
-                                                            <span className="text-muted-foreground text-xs font-bold">المبلغ الصافي:</span>
-                                                            <span className="text-2xl font-black text-primary">{aiResult.amount.toLocaleString()} <span className="text-xs">ر.ي</span></span>
+                                                            <span className="text-muted-foreground text-xs font-black">المبلغ المكتشف:</span>
+                                                            <div className="text-left" dir="rtl">
+                                                                <span className="text-2xl font-black text-green-600">{aiResult.amount.toLocaleString()}</span>
+                                                                <span className="text-[10px] font-bold text-green-600/70 mr-1">ر.ي</span>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                    <Button className="w-full h-12 rounded-xl font-black" onClick={handleConfirmAiTopUp}>
-                                                        تأكيد الإيداع الآن
-                                                    </Button>
-                                                    <Button variant="ghost" className="w-full mt-2 text-xs font-bold" onClick={() => setAiResult(null)}>إلغاء</Button>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <Button className="rounded-2xl h-12 font-black shadow-lg" onClick={handleConfirmAiTopUp}>
+                                                            تأكيد وشحن الآن
+                                                        </Button>
+                                                        <Button variant="outline" className="rounded-2xl h-12 font-bold" onClick={() => setAiResult(null)}>إلغاء</Button>
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
@@ -377,7 +383,7 @@ export default function TopUpPage() {
                         </div>
                     )}
 
-                    {/* معلومات الوكيل */}
+                    {/* معلومات الوكيل الرسمي */}
                     <div className="pt-10 border-t border-muted-foreground/10">
                         <h2 className="text-lg font-black text-primary text-center mb-4">الوكيل الرسمي (حضرموت)</h2>
                         <Card className="border-none shadow-xl bg-mesh-gradient text-white rounded-[32px] overflow-hidden">
@@ -387,7 +393,7 @@ export default function TopUpPage() {
                                 </div>
                                 <h3 className="text-xl font-black">مكتب ستار ميديا</h3>
                                 <p className="text-xs font-bold opacity-80">حضرموت - شبام - بجانب سوبر ماركت البر</p>
-                                <Button className="w-full h-14 rounded-2xl bg-white text-primary hover:bg-white/90 font-black" onClick={() => window.open('https://maps.app.goo.gl/Qs6cNBxMutA6SsvH6', '_blank')}>
+                                <Button className="w-full h-14 rounded-2xl bg-white text-primary hover:bg-white/90 font-black transition-all active:scale-95" onClick={() => window.open('https://maps.app.goo.gl/Qs6cNBxMutA6SsvH6', '_blank')}>
                                     <ExternalLink className="ml-2 h-5 w-5" /> عرض الموقع على الخريطة
                                 </Button>
                             </CardContent>
@@ -408,8 +414,8 @@ export default function TopUpPage() {
                         "group flex flex-col items-center justify-center space-y-3 rounded-[32px] p-4 aspect-square cursor-pointer transition-all duration-300 border-2 relative overflow-hidden",
                         selectedMethod?.id === method.id ? 'border-primary bg-primary/5 shadow-xl scale-[1.02]' : 'border-transparent bg-white dark:bg-slate-900 shadow-sm hover:border-primary/20'
                     )}>
-                        <div className="w-16 h-16 rounded-2xl relative shadow-sm"><Image src={getLogoSrc(method.logoUrl)} alt={method.name} fill className="object-cover" /></div>
-                        <p className={cn("text-center text-xs font-black", selectedMethod?.id === method.id ? "text-primary" : "text-foreground/70")}>{method.name}</p>
+                        <div className="w-16 h-16 rounded-2xl relative shadow-sm overflow-hidden bg-white"><Image src={getLogoSrc(method.logoUrl)} alt={method.name} fill className="object-contain" /></div>
+                        <p className={cn("text-center text-[11px] font-black", selectedMethod?.id === method.id ? "text-primary" : "text-foreground/70")}>{method.name}</p>
                         {selectedMethod?.id === method.id && <div className="absolute top-2 left-2 animate-in zoom-in-50"><CheckCircle2 className="w-5 h-5 text-primary" /></div>}
                     </div>
                 ))}
