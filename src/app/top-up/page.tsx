@@ -27,7 +27,7 @@ import { Label } from '@/components/ui/label';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
-import { ProcessingOverlay } from '@/components/layout/processing-overlay';
+import Lottie from 'lottie-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,6 +44,34 @@ type UserProfile = {
     displayName?: string;
     phoneNumber?: string;
     balance?: number;
+};
+
+/**
+ * مكون التحميل بالشعار المتحرك المعتمد
+ */
+const TopUpMovingLoader = () => {
+  const [animationData, setAnimationData] = useState<any>(null);
+
+  useEffect(() => {
+    fetch('/TH.json')
+      .then(res => res.json())
+      .then(data => setAnimationData(data))
+      .catch(err => console.error("Lottie load error:", err));
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-transparent pointer-events-auto">
+      <div className="relative w-32 h-32 flex items-center justify-center overflow-hidden animate-in zoom-in-95 duration-500">
+          {animationData && (
+            <Lottie 
+                animationData={animationData} 
+                loop={true} 
+                style={{ width: '100%', height: '100%' }} 
+            />
+          )}
+      </div>
+    </div>
+  );
 };
 
 const getLogoSrc = (url?: string) => {
@@ -97,16 +125,7 @@ export default function TopUpPage() {
             return;
         }
 
-        if (bankType === 'alomqy' && !alomqyAccount) {
-            toast({ variant: 'destructive', title: 'بيانات ناقصة', description: 'الرجاء إدخال رقم حسابك في العمقي.' });
-            return;
-        }
-
-        if (bankType === 'kuraimi' && !kuraimiReference) {
-            toast({ variant: 'destructive', title: 'بيانات ناقصة', description: 'الرجاء إدخال رقم المرجع.' });
-            return;
-        }
-
+        const amt = parseFloat(bankAmount);
         setIsVerifyingBank(true);
         try {
             const notifsRef = collection(firestore, 'bankNotifications');
@@ -116,7 +135,7 @@ export default function TopUpPage() {
                 q = query(notifsRef, 
                     where('bank', '==', 'alomqy'),
                     where('account', '==', alomqyAccount.trim()), 
-                    where('amount', '==', parseFloat(bankAmount)),
+                    where('amount', '==', amt),
                     where('status', '==', 'unpaid'),
                     limit(1)
                 );
@@ -124,7 +143,7 @@ export default function TopUpPage() {
                 q = query(notifsRef, 
                     where('bank', '==', 'kuraimi'),
                     where('reference', '==', kuraimiReference.trim()), 
-                    where('amount', '==', parseFloat(bankAmount)),
+                    where('amount', '==', amt),
                     where('status', '==', 'unpaid'),
                     limit(1)
                 );
@@ -151,7 +170,7 @@ export default function TopUpPage() {
                 const txRef = doc(collection(firestore, `users/${userProfile.id}/transactions`));
                 batch.set(txRef, {
                     userId: userProfile.id,
-                    transactionDate: new Date().toISOString(),
+                    transactionDate: now,
                     amount: notifData.amount,
                     transactionType: `تغذية آلي - ${bankType === 'alomqy' ? 'العمقي' : 'الكريمي'}`,
                     notes: `مطابقة آلية لـ ${bankType === 'alomqy' ? 'حساب' : 'مرجع'}: ${bankType === 'alomqy' ? alomqyAccount : kuraimiReference}`,
@@ -225,6 +244,9 @@ export default function TopUpPage() {
     return (
         <div className="flex flex-col h-full bg-[#F8FAFC] dark:bg-slate-950">
             <SimpleHeader title="تغذية الحساب" />
+            
+            {isVerifyingBank && <TopUpMovingLoader />}
+
             <div className="flex-1 overflow-y-auto pb-32 no-scrollbar">
                 
                 <div className="bg-mesh-gradient pt-4 pb-12 px-6 rounded-b-[50px] shadow-xl relative overflow-hidden mb-6">
@@ -289,9 +311,9 @@ export default function TopUpPage() {
                     {selectedMethod && (
                         <div className="space-y-6 animate-in fade-in-0 slide-in-from-bottom-4 duration-700">
                             
-                            <Card className="border-none shadow-[0_20px_50px_rgba(0,0,0,0.08)] rounded-[48px] overflow-hidden bg-white dark:bg-slate-900 border border-primary/5 w-full max-w-lg mx-auto">
+                            <Card className="border-none shadow-[0_20px_50px_rgba(0,0,0,0.08)] rounded-[48px] overflow-hidden bg-white dark:bg-slate-900 border border-primary/5 w-full">
                                 <CardContent className="p-10 text-center space-y-10">
-                                    <div className="bg-mesh-gradient p-8 rounded-[40px] border-2 border-dashed border-white/20 flex flex-col items-center gap-5 text-white shadow-2xl">
+                                    <div className="bg-mesh-gradient p-8 rounded-[40px] border-2 border-dashed border-white/20 flex flex-col items-center gap-5 text-white shadow-2xl w-full">
                                         <p className="text-[11px] font-black text-white/70 uppercase tracking-widest">حول إلى هذا الحساب</p>
                                         <div className="flex items-center gap-6">
                                             <span className="text-4xl font-black font-mono tracking-widest text-white drop-shadow-lg">{selectedMethod.accountNumber}</span>
@@ -318,7 +340,7 @@ export default function TopUpPage() {
                                                         value={isAlOmqy ? alomqyAccount : kuraimiReference} 
                                                         onChange={e => isAlOmqy ? setAlomqyAccount(e.target.value.replace(/\D/g, '')) : setKuraimiReference(e.target.value.replace(/\D/g, ''))} 
                                                         placeholder={isAlOmqy ? "25******" : "الرقم"} 
-                                                        className="h-12 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-lg focus-visible:ring-0 placeholder:text-primary/20 tracking-widest w-full"
+                                                        className="h-16 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-xl focus-visible:ring-0 placeholder:text-primary/20 tracking-widest w-full"
                                                         style={{ direction: 'ltr' }}
                                                     />
                                                 </div>
@@ -330,7 +352,7 @@ export default function TopUpPage() {
                                                         value={bankAmount} 
                                                         onChange={e => setBankAmount(e.target.value)} 
                                                         placeholder="0.00" 
-                                                        className="h-12 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-lg focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10 w-full" 
+                                                        className="h-16 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-2xl focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10 w-full" 
                                                     />
                                                 </div>
                                             </div>
@@ -338,18 +360,12 @@ export default function TopUpPage() {
                                             <Button 
                                                 onClick={() => handleConfirmBankDeposit(isAlOmqy ? 'alomqy' : 'kuraimi')} 
                                                 disabled={isVerifyingBank} 
-                                                className="w-full h-12 rounded-2xl bg-[#0048ad] hover:bg-[#003a8c] text-white font-black text-base shadow-xl shadow-primary/20 active:scale-95 transition-all border-none"
+                                                className="w-full h-14 rounded-3xl bg-[#0048ad] hover:bg-[#003a8c] text-white font-black text-lg shadow-xl shadow-primary/20 active:scale-95 transition-all border-none"
                                             >
                                                 {isVerifyingBank ? (
-                                                    <div className="flex items-center gap-3">
-                                                        <Loader2 className="animate-spin h-5 w-5" />
-                                                        <span>جاري المطابقة...</span>
-                                                    </div>
+                                                    <Loader2 className="animate-spin h-7 w-7" />
                                                 ) : (
-                                                    <div className="flex items-center gap-3">
-                                                        <CheckCircle2 className="h-5 w-5" />
-                                                        <span>اضافة المبلغ الى حسابي</span>
-                                                    </div>
+                                                    "اضافة المبلغ الى حسابي"
                                                 )}
                                             </Button>
                                         </div>
