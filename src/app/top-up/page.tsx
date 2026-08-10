@@ -304,7 +304,7 @@ export default function TopUpPage() {
 
                                     {(isAlOmqy || isKuraimi) && (
                                         <div className="space-y-6 pt-2 animate-in fade-in duration-500">
-                                            <div className="relative group">
+                                            <div className="relative group text-right">
                                                 <Label className="text-[10px] font-black text-muted-foreground uppercase pr-2 mb-1 block">
                                                     {isAlOmqy ? 'رقم حسابك في العمقي' : 'رقم المرجع (العملية)'}
                                                 </Label>
@@ -313,7 +313,7 @@ export default function TopUpPage() {
                                                         value={isAlOmqy ? alomqyAccount : kuraimiReference} 
                                                         onChange={e => isAlOmqy ? setAlomqyAccount(e.target.value.replace(/\D/g, '')) : setKuraimiReference(e.target.value.replace(/\D/g, ''))} 
                                                         placeholder={isAlOmqy ? "25*******" : "أدخل رقم المرجع هنا"} 
-                                                        className="h-14 rounded-2xl bg-muted/20 border-none text-center font-black text-xl shadow-inner focus-visible:ring-2 focus-visible:ring-[#0048ad]/30" 
+                                                        className="h-14 rounded-2xl bg-muted/20 border-2 border-primary/5 text-center font-black text-xl shadow-inner focus-visible:ring-2 focus-visible:ring-[#0048ad]/30" 
                                                     />
                                                     {isAlOmqy ? (
                                                         <Building2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#B32C4C] opacity-20" />
@@ -323,7 +323,7 @@ export default function TopUpPage() {
                                                 </div>
                                             </div>
 
-                                            <div className="relative">
+                                            <div className="relative text-right">
                                                 <Label className="text-[10px] font-black text-muted-foreground uppercase pr-2 mb-1 block">المبلغ المودع</Label>
                                                 <div className="relative">
                                                     <Input 
@@ -331,7 +331,7 @@ export default function TopUpPage() {
                                                         value={bankAmount} 
                                                         onChange={e => setBankAmount(e.target.value)} 
                                                         placeholder="0.00" 
-                                                        className="h-16 rounded-[24px] bg-muted/20 border-none text-center font-black text-3xl shadow-inner text-[#0048ad] focus-visible:ring-2 focus-visible:ring-[#0048ad]/30" 
+                                                        className="h-16 rounded-[24px] bg-muted/20 border-2 border-primary/5 text-center font-black text-3xl shadow-inner text-[#0048ad] focus-visible:ring-2 focus-visible:ring-[#0048ad]/30" 
                                                     />
                                                     <Wallet className="absolute right-5 top-1/2 -translate-y-1/2 w-6 h-6 text-[#0048ad] opacity-10" />
                                                 </div>
@@ -350,7 +350,7 @@ export default function TopUpPage() {
                                                 ) : (
                                                     <div className="flex items-center gap-3">
                                                         <CheckCircle2 className="h-5 w-5" />
-                                                        <span>تأكيد ومطابقة الإيداع</span>
+                                                        <span>اضافة المبلغ الى حسابي</span>
                                                     </div>
                                                 )}
                                             </Button>
