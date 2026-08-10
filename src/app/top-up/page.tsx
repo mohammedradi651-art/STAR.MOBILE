@@ -19,7 +19,8 @@ import {
     Zap,
     Hash,
     Clock,
-    MapPin
+    MapPin,
+    ArrowUpRight
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -173,7 +174,7 @@ export default function TopUpPage() {
                 setShowSuccess(true);
                 audioRef.current?.play().catch(() => {});
 
-                // إرسال SMS لنجاح العملية (سواء كريمي أو عمقي)
+                // إرسال SMS لنجاح العملية
                 if (userProfile.phoneNumber) {
                     const newBalance = (userProfile.balance || 0) + notifData.amount;
                     const smsMessage = `ستار موبايل: تم إيداع (${notifData.amount.toLocaleString('en-US')}) ريال لحسابك بنجاح. رصيدك الآن: (${newBalance.toLocaleString('en-US')}) ريال.`;
@@ -238,9 +239,9 @@ export default function TopUpPage() {
                         <div className="bg-white/20 p-3 rounded-[24px] backdrop-blur-md border border-white/20 shadow-2xl animate-in zoom-in-95 duration-700">
                             <CircleDollarSign className="h-8 w-8 text-white" />
                         </div>
-                        <h2 className="text-2xl font-black text-white tracking-tight">إيداع رصيد فوري</h2>
+                        <h2 className="text-2xl font-black text-white tracking-tight">غذي حسابك بنفسك</h2>
                         <div className="bg-white/10 backdrop-blur-sm px-4 py-1.5 rounded-full border border-white/10">
-                            <p className="text-[10px] text-white font-bold uppercase tracking-[0.2em]">مطابقة آلية للعمقي والكريمي</p>
+                            <p className="text-[10px] text-white font-bold uppercase tracking-[0.2em]">عبر البنوك وشبكات الصرافة</p>
                         </div>
                     </div>
                 </div>
