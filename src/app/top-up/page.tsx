@@ -317,7 +317,7 @@ export default function TopUpPage() {
                         <div className="space-y-6 animate-in fade-in-0 slide-in-from-bottom-4 duration-700 px-4">
                             
                             <div className="bg-mesh-gradient py-6 px-8 rounded-[48px] border-2 border-dashed border-white/20 flex flex-col items-center gap-3 text-white shadow-2xl w-full text-center">
-                                <p className="text-[10px] font-black text-white/70 uppercase tracking-widest">حول إلى هذا الحساب الموحد</p>
+                                <p className="text-[10px] font-black text-white/70 uppercase tracking-widest">حول إلى هذا الحساب</p>
                                 <div className="flex items-center gap-4">
                                     <span className="text-3xl font-black font-mono tracking-widest text-white drop-shadow-lg">{selectedMethod.accountNumber}</span>
                                     <button 
