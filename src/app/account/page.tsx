@@ -38,7 +38,7 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
-  Trash2
+  Building2
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { SimpleHeader } from '@/components/layout/simple-header';
@@ -72,9 +72,11 @@ import { ar } from 'date-fns/locale';
 
 export const dynamic = 'force-dynamic';
 
-type AlOmqyNotif = {
+type BankNotif = {
     id: string;
-    account: string;
+    bank: string;
+    account?: string;
+    reference?: string;
     amount: number;
     status: 'unpaid' | 'paid';
     timestamp: string;
@@ -83,7 +85,7 @@ type AlOmqyNotif = {
 
 const managementLinks = [
   { title: 'إدارة المستخدمين', icon: Users, href: '/users' },
-  { title: 'إدارة إيداعات العمقي', icon: Banknote, href: '/omqy-management' },
+  { title: 'إدارة الإيداعات', icon: Building2, href: '/omqy-management' },
   { title: 'إدارة الشبكات', icon: Wifi, href: '/networks-management' },
   { title: 'إدارة المتجر', icon: ShoppingBag, href: '/store-management' },
   { title: 'طلبات المتجر', icon: PackageCheck, href: '/store-orders' },
@@ -109,13 +111,11 @@ const userAppSettingsLinks = [
     { id: 'app-developer', title: 'مطور التطبيق', icon: Code, action: 'developer' },
 ];
 
-
 type UserProfile = {
   displayName?: string;
   location?: string;
   phoneNumber?: string;
   balance?: number;
-  photoURL?: string;
 };
 
 type AppSettings = {
@@ -123,30 +123,11 @@ type AppSettings = {
     supportPhoneNumber: string;
 };
 
-const CustomLoader = () => (
-  <div className="flex flex-col items-center justify-center animate-in zoom-in-95 duration-700">
-    <div className="relative w-28 h-28 overflow-hidden rounded-[32px] border-4 border-white/30 shadow-2xl bg-white">
-        <Image 
-            src="https://i.postimg.cc/2551nF1s/20260308-183624.jpg" 
-            alt="Star Mobile Logo" 
-            fill
-            className="object-cover"
-            priority
-        />
-    </div>
-    <div className="mt-8">
-        <div className="flex gap-1.5">
-            <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
-            <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-            <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
-        </div>
-    </div>
-  </div>
-);
-
 const LoadingSpinner = () => (
   <div className="fixed inset-0 flex flex-col justify-center items-center z-[100] bg-mesh-gradient">
-    <CustomLoader />
+    <div className="relative w-28 h-28 overflow-hidden rounded-[32px] border-4 border-white/30 shadow-2xl bg-white">
+        <Image src="https://i.postimg.cc/2551nF1s/20260308-183624.jpg" alt="Logo" fill className="object-cover" priority />
+    </div>
   </div>
 );
 
@@ -174,89 +155,30 @@ export default function AccountPage() {
   
   const isUserAdmin = user?.email === '770326828@shabakat.com' || user?.uid === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2';
 
-  // جلب إشعارات العمقي للمدير
-  const omqyQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'alomqyNotifications'), orderBy('timestamp', 'desc'), limit(5)) : null),
+  // جلب آخر الإيداعات الواردة للمدير
+  const bankQuery = useMemoFirebase(
+    () => (firestore ? query(collection(firestore, 'bankNotifications'), orderBy('timestamp', 'desc'), limit(5)) : null),
     [firestore]
   );
-  const { data: omqyNotifs } = useCollection<AlOmqyNotif>(omqyQuery);
+  const { data: bankNotifs } = useCollection<BankNotif>(bankQuery);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'light';
     setActiveTheme(savedTheme);
-    if (savedTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    if (savedTheme === 'dark') document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
   }, []);
   
-  useEffect(() => {
-    if (!isUserLoading && !user) {
-      router.push('/');
-    }
-  }, [user, isUserLoading, router]);
-
   const handleThemeChange = (theme: 'light' | 'dark') => {
     setActiveTheme(theme);
     localStorage.setItem('theme', theme);
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  };
-  
-  const handleShare = async () => {
-    if (!appSettings?.appLink) {
-      toast({
-        variant: 'destructive',
-        title: 'خطأ',
-        description: 'رابط التطبيق غير محدد في الإعدادات.',
-      });
-      return;
-    }
-  
-    if (navigator.share) {
-        try {
-            await navigator.share({
-                title: 'تطبيق ستار موبايل',
-                text: 'حمل تطبيق ستار موبايل الآن واستمتع بخدماتنا المتميزة!',
-                url: appSettings.appLink,
-            });
-        } catch (error) {
-            window.open(appSettings.appLink, '_blank', 'noopener,noreferrer');
-        }
-    } else {
-        window.open(appSettings.appLink, '_blank', 'noopener,noreferrer');
-    }
+    if (theme === 'dark') document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
   };
 
-  const handleAction = (item: any) => {
-    if (item.href) {
-        router.push(item.href);
-        return;
-    }
-
-    switch (item.action) {
-        case 'share':
-            handleShare();
-            break;
-        case 'help':
-            const helpCenterUrl = appSettings?.supportPhoneNumber 
-                ? `https://api.whatsapp.com/send?phone=${appSettings.supportPhoneNumber}`
-                : '#';
-            window.open(helpCenterUrl, '_blank');
-            break;
-        case 'developer':
-            setIsDevDialogOpen(true);
-            break;
-    }
-  }
-
-  const handleDeleteOmqy = (id: string) => {
+  const handleDeleteBankNotif = (id: string) => {
     if (!firestore) return;
-    const docRef = doc(firestore, 'alomqyNotifications', id);
+    const docRef = doc(firestore, 'bankNotifications', id);
     deleteDocumentNonBlocking(docRef);
     toast({ title: "تم الإلغاء", description: "تم حذف إشعار الإيداع بنجاح." });
   };
@@ -268,9 +190,7 @@ export default function AccountPage() {
     }
   };
 
-  if (isUserLoading || !user) {
-    return <LoadingSpinner />;
-  }
+  if (isUserLoading || !user) return <LoadingSpinner />;
 
   return (
     <>
@@ -282,14 +202,8 @@ export default function AccountPage() {
             <div className="flex-grow text-right">
               <h2 className="text-lg font-black text-white">{userProfile?.displayName || 'مستخدم جديد'}</h2>
               <div className="text-xs text-white/80 mt-1.5 space-y-1.5">
-                <div className="flex items-center justify-start gap-2">
-                  <Phone className="h-3.5 w-3.5 opacity-70" />
-                  <span className="font-bold text-white/90">{userProfile?.phoneNumber || '...'}</span>
-                </div>
-                <div className="flex items-center justify-start gap-2">
-                  <MapPin className="h-3.5 w-3.5 opacity-70" />
-                  <span className="font-bold text-white/90">{userProfile?.location ? `حضرموت - ${userProfile.location}` : '...'}</span>
-                </div>
+                <div className="flex items-center justify-start gap-2"><Phone className="h-3.5 w-3.5 opacity-70" /><span className="font-bold text-white/90">{userProfile?.phoneNumber || '...'}</span></div>
+                <div className="flex items-center justify-start gap-2"><MapPin className="h-3.5 w-3.5 opacity-70" /><span className="font-bold text-white/90">{userProfile?.location || '...'}</span></div>
               </div>
             </div>
             <div className="h-16 w-16 rounded-full border-2 border-white/30 bg-white flex items-center justify-center shrink-0 shadow-xl overflow-hidden">
@@ -298,29 +212,29 @@ export default function AccountPage() {
           </CardContent>
         </Card>
 
-        {/* قسم إشعارات العمقي للمدير */}
-        {isUserAdmin && omqyNotifs && omqyNotifs.length > 0 && (
+        {/* إشعارات الإيداعات للمدير */}
+        {isUserAdmin && bankNotifs && bankNotifs.length > 0 && (
             <div className="space-y-3 animate-in fade-in slide-in-from-top-4 duration-500">
                 <div className="flex items-center justify-between px-2">
                     <h3 className="text-xs font-black text-primary uppercase tracking-widest flex items-center gap-2">
-                        <Bell className="w-3.5 h-3.5" /> إيداعات العمقي الواردة
+                        <Bell className="w-3.5 h-3.5" /> آخر الإيداعات الواردة
                     </h3>
                     <Link href="/omqy-management" className="text-[10px] font-black text-primary hover:underline">عرض الكل</Link>
                 </div>
                 <div className="space-y-2">
-                    {omqyNotifs.map(notif => (
+                    {bankNotifs.map(notif => (
                         <Card key={notif.id} className="rounded-2xl border-none shadow-sm overflow-hidden bg-card group">
                             <CardContent className="p-3 flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-3 flex-1 overflow-hidden">
                                     <div className={cn(
-                                        "p-2 rounded-xl shrink-0",
-                                        notif.status === 'unpaid' ? "bg-green-500/10 text-green-600" : "bg-muted text-muted-foreground"
+                                        "p-2 rounded-xl shrink-0 bg-muted text-muted-foreground",
+                                        notif.status === 'unpaid' && "bg-green-500/10 text-green-600"
                                     )}>
-                                        {notif.status === 'unpaid' ? <Zap className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+                                        {notif.bank === 'alomqy' ? <Zap className="w-4 h-4" /> : <CreditCard className="w-4 h-4" />}
                                     </div>
                                     <div className="text-right flex-1 truncate">
-                                        <p className="text-[11px] font-black text-foreground truncate">{notif.senderName || 'غير معروف'}</p>
-                                        <p className="text-[9px] font-bold text-muted-foreground">حساب: {notif.account}</p>
+                                        <p className="text-[11px] font-black text-foreground truncate">{notif.senderName}</p>
+                                        <p className="text-[9px] font-bold text-muted-foreground">{notif.bank === 'alomqy' ? `حساب: ${notif.account}` : `مرجع: ${notif.reference}`}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
@@ -334,11 +248,7 @@ export default function AccountPage() {
                                         </div>
                                     </div>
                                     {notif.status === 'unpaid' && (
-                                        <button 
-                                            onClick={() => handleDeleteOmqy(notif.id)}
-                                            className="p-1.5 hover:bg-destructive/10 rounded-lg text-destructive transition-colors opacity-0 group-hover:opacity-100"
-                                            title="إلغاء الإيداع"
-                                        >
+                                        <button onClick={() => handleDeleteBankNotif(notif.id)} className="p-1.5 hover:bg-destructive/10 rounded-lg text-destructive transition-colors opacity-0 group-hover:opacity-100">
                                             <XCircle className="w-4 h-4" />
                                         </button>
                                     )}
@@ -353,56 +263,24 @@ export default function AccountPage() {
         <div>
             <h3 className="text-xs font-black text-muted-foreground text-center mb-3 uppercase tracking-widest">الوضع المفضل</h3>
             <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => handleThemeChange('light')}
-                className={cn(
-                  'flex flex-col items-center justify-center gap-2 p-4 rounded-2xl cursor-pointer transition-all w-full border-2 bg-card',
-                  activeTheme === 'light'
-                    ? 'border-primary text-primary shadow-md scale-[1.02]'
-                    : 'border-transparent text-muted-foreground hover:bg-muted/50'
-                )}
-              >
-                <span className="h-5 w-5"><Suspense fallback={<Sun className="h-5 w-5" />}><Sun className="h-5 w-5" /></Suspense></span>
-                <span className="text-xs font-bold">فاتح</span>
+              <button onClick={() => handleThemeChange('light')} className={cn('flex flex-col items-center justify-center gap-2 p-4 rounded-2xl cursor-pointer transition-all w-full border-2 bg-card', activeTheme === 'light' ? 'border-primary text-primary shadow-md scale-[1.02]' : 'border-transparent text-muted-foreground hover:bg-muted/50')}>
+                <Sun className="h-5 w-5" /><span className="text-xs font-bold">فاتح</span>
               </button>
-              <button
-                onClick={() => handleThemeChange('dark')}
-                className={cn(
-                  'flex flex-col items-center justify-center gap-2 p-4 rounded-2xl cursor-pointer transition-all w-full border-2 bg-card',
-                  activeTheme === 'dark'
-                    ? 'border-primary text-primary shadow-md scale-[1.02]'
-                    : 'border-transparent text-muted-foreground hover:bg-muted/50'
-                )}
-              >
-                <span className="h-5 w-5"><Moon className="h-5 w-5" /></span>
-                <span className="text-xs font-bold">داكن</span>
+              <button onClick={() => handleThemeChange('dark')} className={cn('flex flex-col items-center justify-center gap-2 p-4 rounded-2xl cursor-pointer transition-all w-full border-2 bg-card', activeTheme === 'dark' ? 'border-primary text-primary shadow-md scale-[1.02]' : 'border-transparent text-muted-foreground hover:bg-muted/50')}>
+                <Moon className="h-5 w-5" /><span className="text-xs font-bold">داكن</span>
               </button>
             </div>
         </div>
 
         <div>
-            <div className="flex items-center justify-center gap-2 mb-3">
-                <Settings className="h-4 w-4 text-primary" />
-                <h3 className="text-xs font-black text-primary uppercase tracking-widest">إعدادات الحساب</h3>
-            </div>
+            <div className="flex items-center justify-center gap-2 mb-3"><Settings className="h-4 w-4 text-primary" /><h3 className="text-xs font-black text-primary uppercase tracking-widest">إعدادات الحساب</h3></div>
             <Card className="bg-card rounded-3xl border-none shadow-sm overflow-hidden">
                 <CardContent className="p-0">
                     {userAppSettingsLinks.map((link, index) => {
                         const Icon = link.icon;
                         return (
-                            <div
-                                key={link.id}
-                                onClick={() => handleAction(link)}
-                                className={`group flex items-center justify-between p-4 cursor-pointer transition-colors hover:bg-muted/30 ${
-                                    index < userAppSettingsLinks.length - 1 ? 'border-b border-muted' : ''
-                                }`}
-                            >
-                                <div className="flex items-center gap-3">
-                                    <Icon className={cn("h-5 w-5", "text-primary")} />
-                                    <span className="text-sm font-bold text-foreground">
-                                        {link.title}
-                                    </span>
-                                </div>
+                            <div key={link.id} onClick={() => { if(link.href) router.push(link.href); else if(link.action === 'developer') setIsDevDialogOpen(true); }} className={cn("group flex items-center justify-between p-4 cursor-pointer transition-colors hover:bg-muted/30", index < userAppSettingsLinks.length - 1 && 'border-b border-muted')}>
+                                <div className="flex items-center gap-3"><Icon className="h-5 w-5 text-primary" /><span className="text-sm font-bold text-foreground">{link.title}</span></div>
                                 <ChevronLeft className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-transform group-hover:-translate-x-1" />
                             </div>
                         )
@@ -412,105 +290,24 @@ export default function AccountPage() {
         </div>
 
         {isUserAdmin && (
-          <>
             <div>
-              <div className="flex items-center justify-center gap-2 mb-3">
-                <LayoutGrid className="h-4 w-4 text-primary" />
-                <h3 className="text-xs font-black text-primary uppercase tracking-widest">
-                  لوحة التحكم
-                </h3>
-              </div>
-
+              <div className="flex items-center justify-center gap-2 mb-3"><LayoutGrid className="h-4 w-4 text-primary" /><h3 className="text-xs font-black text-primary uppercase tracking-widest">لوحة التحكم</h3></div>
               <Card className="bg-card rounded-3xl border-none shadow-sm overflow-hidden">
                 <CardContent className="p-0">
-                  {managementLinks.map((link, index) => {
-                    const Icon = link.icon;
-                    return (
-                        <a
-                        href={link.href}
-                        key={link.title}
-                        className={`group flex items-center justify-between p-4 cursor-pointer transition-colors hover:bg-muted/30 ${
-                            index < managementLinks.length - 1 ? 'border-b border-muted' : ''
-                        }`}
-                        >
-                        <div className="flex items-center gap-3">
-                            <Icon className="h-5 w-5 text-primary" />
-                            <span className="text-sm font-bold text-foreground">{link.title}</span>
-                        </div>
-                        <ChevronLeft className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-transform group-hover:-translate-x-1" />
-                        </a>
-                    )
-                  })}
+                  {managementLinks.map((link, index) => (
+                        <Link href={link.href} key={link.title} className={cn("group flex items-center justify-between p-4 cursor-pointer transition-colors hover:bg-muted/30", index < managementLinks.length - 1 && 'border-b border-muted')}>
+                            <div className="flex items-center gap-3"><link.icon className="h-5 w-5 text-primary" /><span className="text-sm font-bold text-foreground">{link.title}</span></div>
+                            <ChevronLeft className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-transform group-hover:-translate-x-1" />
+                        </Link>
+                  ))}
                 </CardContent>
               </Card>
             </div>
-          </>
         )}
 
-        <div className="pt-4 pb-8">
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Card className="bg-card cursor-pointer rounded-2xl border-none shadow-sm hover:bg-destructive/5 transition-colors">
-                  <CardContent className="p-0">
-                      <div className="group flex items-center justify-center p-4 w-full">
-                        <div className="flex items-center gap-3 text-destructive">
-                            <LogOut className="h-5 w-5" />
-                            <span className="text-sm font-black uppercase tracking-widest">تسجيل الخروج</span>
-                        </div>
-                      </div>
-                  </CardContent>
-              </Card>
-            </AlertDialogTrigger>
-            <AlertDialogContent className="rounded-[32px]">
-              <AlertDialogHeader>
-                <AlertDialogTitle className="text-center font-black">هل أنت متأكد؟</AlertDialogTitle>
-                <AlertDialogDescription className="text-center">
-                  سيؤدي هذا الإجراء إلى تسجيل خروجك من التطبيق.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter className="grid grid-cols-2 gap-3 pt-4">
-                <AlertDialogCancel className="w-full rounded-2xl h-12 mt-0">إلغاء</AlertDialogCancel>
-                <AlertDialogAction onClick={handleLogout} className="w-full rounded-2xl h-12 bg-destructive hover:bg-destructive/90 font-bold">
-                  تأكيد الخروج
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-
+        <div className="pt-4 pb-8 text-center"><Button variant="ghost" onClick={handleLogout} className="text-destructive font-black gap-2"><LogOut className="h-5 w-5" /> تسجيل الخروج</Button></div>
       </div>
     </div>
-
-    {/* Developer Dialog */}
-    <Dialog open={isDevDialogOpen} onOpenChange={setIsDevDialogOpen}>
-        <DialogContent className="rounded-[40px] max-sm overflow-hidden p-0 border-none shadow-2xl [&>button]:hidden">
-            <div className="bg-mesh-gradient h-32 relative">
-                <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 border-4 border-background rounded-[32px] overflow-hidden shadow-xl">
-                    <Image 
-                        src="https://i.postimg.cc/zfV1rDTs/file-000000004c3071fd88d2020b27f37402.png" 
-                        alt="Developer" 
-                        width={100} 
-                        height={100} 
-                        className="object-cover"
-                        data-ai-hint="developer portrait"
-                    />
-                </div>
-            </div>
-            <div className="pt-16 pb-8 px-6 text-center space-y-4">
-                <DialogHeader>
-                    <DialogTitle className="text-2xl font-black text-primary">محمد راضي باشادي</DialogTitle>
-                    <DialogDescription className="text-foreground/80 font-bold text-base leading-relaxed pt-2">
-                        مطور برمجيات شغوف ببناء حلول رقمية مبتكرة تسهل حياة المستخدمين. متخصص في تقنيات الويب وتطبيقات المحافظ الرقمية.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="bg-muted/50 p-4 rounded-2xl border border-primary/5">
-                    <p className="text-xs text-muted-foreground font-bold">تم تطوير هذا التطبيق لتقديم أفضل تجربة سداد وخدمات إلكترونية في اليمن.</p>
-                </div>
-                <Button className="w-full rounded-2xl h-12 font-black" onClick={() => setIsDevDialogOpen(false)}>إغلاق</Button>
-            </div>
-        </DialogContent>
-    </Dialog>
-
     <Toaster />
     </>
   );
