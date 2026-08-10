@@ -172,10 +172,18 @@ export default function TopUpPage() {
                 setShowSuccess(true);
                 audioRef.current?.play().catch(() => {});
 
+                // إرسال SMS لنجاح العملية (سواء كريمي أو عمقي)
                 if (userProfile.phoneNumber) {
                     const newBalance = (userProfile.balance || 0) + notifData.amount;
                     const smsMessage = `ستار موبايل: تم إيداع (${notifData.amount.toLocaleString('en-US')}) ريال لحسابك بنجاح. رصيدك الآن: (${newBalance.toLocaleString('en-US')}) ريال.`;
-                    fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phoneNumber: userProfile.phoneNumber, message: smsMessage }) }).catch(() => {});
+                    fetch('/api/sms', { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify({ 
+                            phoneNumber: userProfile.phoneNumber, 
+                            message: smsMessage 
+                        }) 
+                    }).catch(e => console.error("SMS Notify Error:", e));
                 }
             }
         } catch (error: any) {
@@ -312,6 +320,7 @@ export default function TopUpPage() {
                                                         value={isAlOmqy ? alomqyAccount : kuraimiReference} 
                                                         onChange={e => isAlOmqy ? setAlomqyAccount(e.target.value.replace(/\D/g, '')) : setKuraimiReference(e.target.value.replace(/\D/g, ''))} 
                                                         placeholder={isAlOmqy ? "25**********" : "أدخل رقم المرجع هنا"} 
+                                                        dir="ltr"
                                                         className="h-14 rounded-2xl bg-muted/20 border-2 border-primary/5 text-center font-black text-xl shadow-inner focus-visible:ring-2 focus-visible:ring-[#0048ad]/30" 
                                                     />
                                                     {isAlOmqy ? (
