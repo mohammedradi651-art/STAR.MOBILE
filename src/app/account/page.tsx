@@ -35,7 +35,9 @@ import {
   Droplets,
   Bell,
   CheckCircle2,
-  Clock
+  Clock,
+  XCircle,
+  Trash2
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { SimpleHeader } from '@/components/layout/simple-header';
@@ -57,7 +59,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { useAuth, useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase';
+import { useAuth, useUser, useFirestore, useDoc, useMemoFirebase, useCollection, deleteDocumentNonBlocking } from '@/firebase';
 import { doc, collection, query, orderBy, limit } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -80,6 +82,7 @@ type AlOmqyNotif = {
 
 const managementLinks = [
   { title: 'إدارة المستخدمين', icon: Users, href: '/users' },
+  { title: 'إدارة إيداعات العمقي', icon: Banknote, href: '/omqy-management' },
   { title: 'إدارة الشبكات', icon: Wifi, href: '/networks-management' },
   { title: 'إدارة المتجر', icon: ShoppingBag, href: '/store-management' },
   { title: 'طلبات المتجر', icon: PackageCheck, href: '/store-orders' },
@@ -250,6 +253,13 @@ export default function AccountPage() {
     }
   }
 
+  const handleDeleteOmqy = (id: string) => {
+    if (!firestore) return;
+    const docRef = doc(firestore, 'alomqyNotifications', id);
+    deleteDocumentNonBlocking(docRef);
+    toast({ title: "تم الإلغاء", description: "تم حذف إشعار الإيداع بنجاح." });
+  };
+
   const handleLogout = () => {
     if (auth) {
         auth.signOut();
@@ -292,33 +302,45 @@ export default function AccountPage() {
             <div className="space-y-3 animate-in fade-in slide-in-from-top-4 duration-500">
                 <div className="flex items-center justify-between px-2">
                     <h3 className="text-xs font-black text-primary uppercase tracking-widest flex items-center gap-2">
-                        <Bell className="w-3.5 h-3.5" /> إيداعات العمقي (الويب هوك)
+                        <Bell className="w-3.5 h-3.5" /> إيداعات العمقي الواردة
                     </h3>
+                    <Link href="/omqy-management" className="text-[10px] font-black text-primary hover:underline">عرض الكل</Link>
                 </div>
                 <div className="space-y-2">
                     {omqyNotifs.map(notif => (
-                        <Card key={notif.id} className="rounded-2xl border-none shadow-sm overflow-hidden bg-card">
+                        <Card key={notif.id} className="rounded-2xl border-none shadow-sm overflow-hidden bg-card group">
                             <CardContent className="p-3 flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-3 flex-1 overflow-hidden">
                                     <div className={cn(
                                         "p-2 rounded-xl shrink-0",
                                         notif.status === 'unpaid' ? "bg-green-500/10 text-green-600" : "bg-muted text-muted-foreground"
                                     )}>
                                         {notif.status === 'unpaid' ? <Zap className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-[11px] font-black text-foreground">{notif.senderName}</p>
+                                    <div className="text-right flex-1 truncate">
+                                        <p className="text-[11px] font-black text-foreground truncate">{notif.senderName}</p>
                                         <p className="text-[9px] font-bold text-muted-foreground">حساب: {notif.account}</p>
                                     </div>
                                 </div>
-                                <div className="text-left">
-                                    <p className={cn("text-xs font-black", notif.status === 'unpaid' ? "text-green-600" : "text-muted-foreground")}>
-                                        {notif.amount.toLocaleString()} ر.ي
-                                    </p>
-                                    <div className="flex items-center gap-1 opacity-40">
-                                        <Clock className="w-2.5 h-2.5" />
-                                        <span className="text-[8px] font-bold">{format(parseISO(notif.timestamp), 'h:mm a', { locale: ar })}</span>
+                                <div className="flex items-center gap-3">
+                                    <div className="text-left">
+                                        <p className={cn("text-xs font-black", notif.status === 'unpaid' ? "text-green-600" : "text-muted-foreground")}>
+                                            {notif.amount.toLocaleString()} ر.ي
+                                        </p>
+                                        <div className="flex items-center gap-1 opacity-40">
+                                            <Clock className="w-2.5 h-2.5" />
+                                            <span className="text-[8px] font-bold">{format(parseISO(notif.timestamp), 'h:mm a', { locale: ar })}</span>
+                                        </div>
                                     </div>
+                                    {notif.status === 'unpaid' && (
+                                        <button 
+                                            onClick={() => handleDeleteOmqy(notif.id)}
+                                            className="p-1.5 hover:bg-destructive/10 rounded-lg text-destructive transition-colors opacity-0 group-hover:opacity-100"
+                                            title="إلغاء الإيداع"
+                                        >
+                                            <XCircle className="w-4 h-4" />
+                                        </button>
+                                    )}
                                 </div>
                             </CardContent>
                         </Card>
