@@ -1,10 +1,10 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc } from '@/firebase';
 import { collection, doc, query, where, getDocs, limit, writeBatch, increment } from 'firebase/firestore';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
@@ -15,11 +15,9 @@ import {
     Loader2,
     Smartphone,
     CheckCircle,
-    User as UserIcon,
     Building2,
     CreditCard,
     Zap,
-    ChevronLeft,
     Hash
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -31,6 +29,7 @@ import { Label } from '@/components/ui/label';
 import { useRouter } from 'next/navigation';
 import { format, parseISO } from 'date-fns';
 import { ar } from 'date-fns/locale';
+import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 
 export const dynamic = 'force-dynamic';
 
