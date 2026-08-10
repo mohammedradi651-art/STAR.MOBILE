@@ -19,7 +19,8 @@ import {
     Building2,
     CreditCard,
     Zap,
-    ChevronLeft
+    ChevronLeft,
+    Hash
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -285,7 +286,7 @@ export default function TopUpPage() {
                             
                             <Card className="border-none shadow-xl rounded-[40px] overflow-hidden bg-white dark:bg-slate-900 border border-primary/5">
                                 <CardContent className="p-8 text-center space-y-6">
-                                    <div className="bg-primary/5 p-5 rounded-[32px] border-2 border-dashed border-primary/10 flex flex-col items-center gap-3">
+                                    <div className="bg-primary/5 p-5 rounded-3xl border-2 border-dashed border-primary/10 flex flex-col items-center gap-3">
                                         <p className="text-[10px] font-black text-primary/60 uppercase tracking-widest">حول إلى هذا الحساب</p>
                                         <div className="flex items-center gap-4">
                                             <span className="text-3xl font-black font-mono tracking-tighter text-[#0048ad]">{selectedMethod.accountNumber}</span>
