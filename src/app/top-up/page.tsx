@@ -170,6 +170,7 @@ export default function TopUpPage() {
                 setShowSuccess(true);
                 audioRef.current?.play().catch(() => {});
 
+                // إرسال SMS تلقائي عند النجاح
                 if (userProfile.phoneNumber) {
                     const newBalance = (userProfile.balance || 0) + notifData.amount;
                     const smsMessage = `ستار موبايل: تم إيداع (${notifData.amount.toLocaleString('en-US')}) ريال لحسابك بنجاح. رصيدك الآن: (${newBalance.toLocaleString('en-US')}) ريال.`;
@@ -195,28 +196,26 @@ export default function TopUpPage() {
 
     if (showSuccess && lastTxDetails) {
         return (
-            <div className="fixed inset-0 bg-black/10 backdrop-blur-[2px] z-[100] flex items-center justify-center p-4 animate-in fade-in-0 duration-500">
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-transparent animate-in fade-in-0 duration-500">
                 <audio ref={audioRef} src="/sdad.mp3" preload="auto" />
-                <Card className="w-full max-w-[320px] text-center shadow-2xl rounded-[40px] overflow-hidden border-none bg-card/95 backdrop-blur-xl animate-in zoom-in-95">
-                    <div className="bg-green-500 p-8 flex justify-center">
-                        <CheckCircle className="h-14 w-14 text-white animate-bounce" />
+                <Card className="w-full max-w-[340px] text-center shadow-[0_20px_60px_rgba(0,0,0,0.15)] rounded-[40px] overflow-hidden border border-border/40 bg-white animate-in zoom-in-95">
+                    <div className="bg-green-50/50 p-8 flex justify-center border-b border-green-100/50">
+                        <div className="bg-green-500/10 p-4 rounded-full">
+                            <CheckCircle className="h-12 w-12 text-green-500 animate-bounce" />
+                        </div>
                     </div>
-                    <CardContent className="p-8 space-y-6">
-                        <div>
-                            <h2 className="text-xl font-black text-green-600">تم الإيداع بنجاح</h2>
-                            <p className="text-[10px] text-muted-foreground mt-1 font-bold">تغذية آلية عبر {lastTxDetails.bank === 'alomqy' ? 'العمقي' : 'الكريمي'}</p>
+                    <CardContent className="p-10 space-y-6">
+                        <div className="space-y-2">
+                            <p className="text-base font-black text-foreground/80 leading-relaxed">
+                                تم اضافة مبلغ <span className="text-green-600 underline underline-offset-4">{lastTxDetails.amount.toLocaleString()}</span> في حسابك بنجاح
+                            </p>
                         </div>
-                        <div className="w-full space-y-3 text-sm bg-muted/40 backdrop-blur-md p-5 rounded-[24px] text-right border-2 border-dashed border-primary/10">
-                            <div className="flex justify-between items-center border-b border-white/20 pb-2">
-                                <span className="text-muted-foreground text-[10px] flex items-center gap-2"><Smartphone className="w-3.5 h-3.5" /> الحساب/المرجع:</span>
-                                <span className="font-mono font-black tracking-widest text-[#0048ad]">{lastTxDetails.account}</span>
-                            </div>
-                            <div className="flex justify-between items-center pt-1">
-                                <span className="text-muted-foreground text-[10px] flex items-center gap-2"><Wallet className="w-3.5 h-3.5" /> المبلغ المضاف:</span>
-                                <span className="font-black text-green-600 text-lg">{lastTxDetails.amount.toLocaleString()} ر.ي</span>
-                            </div>
-                        </div>
-                        <Button className="w-full h-12 rounded-2xl font-black bg-[#0048ad] text-white shadow-lg active:scale-95 transition-transform" onClick={() => router.push('/login')}>إغلاق</Button>
+                        <Button 
+                            className="w-full h-12 rounded-2xl font-black bg-mesh-gradient text-white shadow-lg active:scale-95 transition-transform border-none" 
+                            onClick={() => router.push('/login')}
+                        >
+                            حسناً
+                        </Button>
                     </CardContent>
                 </Card>
             </div>
@@ -244,8 +243,8 @@ export default function TopUpPage() {
                             </div>
                         </div>
                         <h2 className="text-2xl font-black text-white tracking-tight">غذي حسابك بنفسك</h2>
-                        <div className="bg-white/10 backdrop-blur-sm px-8 py-2 rounded-full border border-white/10">
-                            <p className="text-[14px] text-white font-black uppercase tracking-[0.2em]">عبر البنوك وشبكات الصرافة</p>
+                        <div className="bg-white/10 backdrop-blur-sm px-10 py-2.5 rounded-full border border-white/10 shadow-inner">
+                            <p className="text-[16px] text-white font-black uppercase tracking-[0.1em]">عبر البنوك وشبكات الصرافة</p>
                         </div>
                     </div>
                 </div>
@@ -290,48 +289,48 @@ export default function TopUpPage() {
                     {selectedMethod && (
                         <div className="space-y-6 animate-in fade-in-0 slide-in-from-bottom-4 duration-700">
                             
-                            <Card className="border-none shadow-xl rounded-[40px] overflow-hidden bg-white dark:bg-slate-900 border border-primary/5">
-                                <CardContent className="p-8 text-center space-y-8">
-                                    <div className="bg-mesh-gradient p-6 rounded-[32px] border-2 border-dashed border-white/20 flex flex-col items-center gap-4 text-white shadow-xl">
-                                        <p className="text-[10px] font-black text-white/70 uppercase tracking-widest">حول إلى هذا الحساب</p>
-                                        <div className="flex items-center gap-5">
-                                            <span className="text-3xl font-black font-mono tracking-widest text-white drop-shadow-md">{selectedMethod.accountNumber}</span>
+                            <Card className="border-none shadow-[0_20px_50px_rgba(0,0,0,0.08)] rounded-[48px] overflow-hidden bg-white dark:bg-slate-900 border border-primary/5 w-full max-w-lg mx-auto">
+                                <CardContent className="p-10 text-center space-y-10">
+                                    <div className="bg-mesh-gradient p-8 rounded-[40px] border-2 border-dashed border-white/20 flex flex-col items-center gap-5 text-white shadow-2xl">
+                                        <p className="text-[11px] font-black text-white/70 uppercase tracking-widest">حول إلى هذا الحساب</p>
+                                        <div className="flex items-center gap-6">
+                                            <span className="text-4xl font-black font-mono tracking-widest text-white drop-shadow-lg">{selectedMethod.accountNumber}</span>
                                             <button 
                                                 onClick={() => handleCopy(selectedMethod.accountNumber)} 
-                                                className="p-2.5 bg-white/20 text-white rounded-2xl shadow-lg active:scale-90 transition-transform backdrop-blur-md border border-white/10"
+                                                className="p-3 bg-white/20 text-white rounded-2xl shadow-xl active:scale-90 transition-transform backdrop-blur-md border border-white/10"
                                             >
-                                                <Copy className="w-4 h-4" />
+                                                <Copy className="w-5 h-5" />
                                             </button>
                                         </div>
-                                        <div className="bg-white/20 px-5 py-2 rounded-full border border-white/10 backdrop-blur-md">
-                                            <p className="text-[11px] font-black text-white">باسم: {selectedMethod.accountHolderName}</p>
+                                        <div className="bg-white/20 px-8 py-2.5 rounded-full border border-white/10 backdrop-blur-md shadow-inner">
+                                            <p className="text-[12px] font-black text-white uppercase tracking-tight">باسم: {selectedMethod.accountHolderName}</p>
                                         </div>
                                     </div>
 
                                     {(isAlOmqy || isKuraimi) && (
-                                        <div className="space-y-8 pt-4 animate-in fade-in duration-500">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="space-y-1.5 text-right">
-                                                    <Label className="text-[10px] font-black text-muted-foreground uppercase mr-1">
+                                        <div className="space-y-10 pt-4 animate-in fade-in duration-500">
+                                            <div className="grid grid-cols-2 gap-5">
+                                                <div className="space-y-2 text-right">
+                                                    <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">
                                                         {isAlOmqy ? 'حسابك بالعمقي' : 'رقم المرجع'}
                                                     </Label>
                                                     <Input 
                                                         value={isAlOmqy ? alomqyAccount : kuraimiReference} 
                                                         onChange={e => isAlOmqy ? setAlomqyAccount(e.target.value.replace(/\D/g, '')) : setKuraimiReference(e.target.value.replace(/\D/g, ''))} 
                                                         placeholder={isAlOmqy ? "25******" : "الرقم"} 
-                                                        className="h-11 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-base focus-visible:ring-0 placeholder:text-primary/20 tracking-widest w-full"
+                                                        className="h-12 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-lg focus-visible:ring-0 placeholder:text-primary/20 tracking-widest w-full"
                                                         style={{ direction: 'ltr' }}
                                                     />
                                                 </div>
 
-                                                <div className="space-y-1.5 text-right">
-                                                    <Label className="text-[10px] font-black text-muted-foreground uppercase mr-1">المبلغ المودع</Label>
+                                                <div className="space-y-2 text-right">
+                                                    <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">المبلغ المودع</Label>
                                                     <Input 
                                                         type="number" 
                                                         value={bankAmount} 
                                                         onChange={e => setBankAmount(e.target.value)} 
                                                         placeholder="0.00" 
-                                                        className="h-11 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-base focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10 w-full" 
+                                                        className="h-12 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-lg focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10 w-full" 
                                                     />
                                                 </div>
                                             </div>
@@ -360,7 +359,7 @@ export default function TopUpPage() {
                                         <div className="pt-4">
                                             <Button 
                                                 onClick={() => window.open(`https://api.whatsapp.com/send?phone=967770326828`, '_blank')} 
-                                                className="w-full h-12 rounded-2xl bg-mesh-gradient text-white font-black text-base shadow-xl active:scale-95 transition-all border-none"
+                                                className="w-full h-14 rounded-3xl bg-mesh-gradient text-white font-black text-lg shadow-2xl active:scale-95 transition-all border-none"
                                             >
                                                 أرسل الإيصال عبر واتساب
                                             </Button>
