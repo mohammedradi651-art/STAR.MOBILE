@@ -1,15 +1,16 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SimpleHeader } from '@/components/layout/simple-header';
-import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc, addDocumentNonBlocking } from '@/firebase';
-import { collection, doc, query, where, getDocs, writeBatch, increment } from 'firebase/firestore';
+import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc, updateDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
+import { collection, doc, query, where, getDocs, limit, writeBatch, increment } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
     Copy, 
     Wallet, 
+    MapPin, 
     ExternalLink, 
     HelpCircle, 
     PhoneCall, 
@@ -17,12 +18,10 @@ import {
     ChevronDown,
     CircleDollarSign,
     CheckCircle2,
-    Scan,
-    Sparkles,
-    Loader2,
-    CheckCircle,
-    Smartphone,
-    AlertCircle
+    Info,
+    Hash,
+    Coins,
+    Loader2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -31,8 +30,6 @@ import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useRouter } from 'next/navigation';
-import { processBankReceipt } from '@/ai/flows/process-bank-receipt-flow';
-import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +46,7 @@ type AppSettings = {
 };
 
 type UserProfile = {
+    id: string;
     displayName?: string;
     phoneNumber?: string;
     balance?: number;
@@ -61,6 +59,7 @@ const getLogoSrc = (url?: string) => {
     return 'https://placehold.co/100x100/e2e8f0/e2e8f0'; 
 };
 
+// مكون واجهة القطيبي المباشرة بتصميم متناسق
 const QutaibiDirectForm = ({ onToggleTransactions }: { onToggleTransactions: () => void }) => {
     return (
         <div className="bg-[#A3D133] rounded-[40px] p-6 text-white space-y-5 shadow-2xl animate-in zoom-in-95 duration-500 max-w-sm mx-auto border-t-4 border-white/10">
@@ -72,7 +71,12 @@ const QutaibiDirectForm = ({ onToggleTransactions }: { onToggleTransactions: () 
                     <h3 className="font-black text-base text-white drop-shadow-md">بنك القطيبي (ريال جديد)</h3>
                     <div className="bg-white rounded-full w-11 h-11 flex items-center justify-center shadow-lg overflow-hidden border-2 border-white">
                         <div className="relative w-full h-full">
-                            <Image src="https://i.postimg.cc/QN4zjX32/Asset-24x-8.png" alt="Qutaibi" fill className="object-cover" />
+                            <Image 
+                                src="https://i.postimg.cc/QN4zjX32/Asset-24x-8.png" 
+                                alt="Qutaibi" 
+                                fill 
+                                className="object-cover"
+                            />
                         </div>
                     </div>
                 </div>
@@ -80,15 +84,25 @@ const QutaibiDirectForm = ({ onToggleTransactions }: { onToggleTransactions: () 
 
             <div className="space-y-4 pt-2">
                 <div className="relative group">
-                    <Input className="h-14 bg-[#E6F4D7] border-2 border-black/80 rounded-2xl text-right font-black text-lg text-black pr-12 focus-visible:ring-black placeholder:text-black/30 shadow-inner" placeholder="رقم الحساب" />
+                    <Input 
+                        className="h-14 bg-[#E6F4D7] border-2 border-black/80 rounded-2xl text-right font-black text-lg text-black pr-12 focus-visible:ring-black placeholder:text-black/30 shadow-inner" 
+                        placeholder="رقم الحساب" 
+                    />
                     <PhoneCall className="absolute right-4 top-1/2 -translate-y-1/2 text-black w-5 h-5 opacity-70" />
                 </div>
                 <div className="relative group">
-                    <Input className="h-14 bg-[#E6F4D7] border-2 border-black/80 rounded-2xl text-right font-black text-lg text-black pr-12 focus-visible:ring-black placeholder:text-black/30 shadow-inner" placeholder="كود الشراء" />
+                    <Input 
+                        className="h-14 bg-[#E6F4D7] border-2 border-black/80 rounded-2xl text-right font-black text-lg text-black pr-12 focus-visible:ring-black placeholder:text-black/30 shadow-inner" 
+                        placeholder="كود الشراء" 
+                    />
                     <QrCode className="absolute right-4 top-1/2 -translate-y-1/2 text-black w-5 h-5 opacity-70" />
                 </div>
                 <div className="relative group">
-                    <Input className="h-14 bg-[#E6F4D7] border-2 border-black/80 rounded-2xl text-right font-black text-lg text-black pr-12 focus-visible:ring-black placeholder:text-black/30 shadow-inner" placeholder="المبلغ" type="number" />
+                    <Input 
+                        className="h-14 bg-[#E6F4D7] border-2 border-black/80 rounded-2xl text-right font-black text-lg text-black pr-12 focus-visible:ring-black placeholder:text-black/30 shadow-inner" 
+                        placeholder="المبلغ" 
+                        type="number"
+                    />
                     <div className="absolute right-4 top-1/2 -translate-y-1/2 text-black font-black text-2xl opacity-70">$</div>
                 </div>
             </div>
@@ -99,7 +113,10 @@ const QutaibiDirectForm = ({ onToggleTransactions }: { onToggleTransactions: () 
                 </Button>
             </div>
 
-            <div className="flex justify-between items-center px-4 pt-3 cursor-pointer group" onClick={onToggleTransactions}>
+            <div 
+                className="flex justify-between items-center px-4 pt-3 cursor-pointer group"
+                onClick={onToggleTransactions}
+            >
                 <div className="bg-black/10 p-1 rounded-full group-hover:bg-black/20 transition-colors">
                     <ChevronDown className="w-5 h-5 text-black" />
                 </div>
@@ -114,14 +131,14 @@ export default function TopUpPage() {
     const { toast } = useToast();
     const { user } = useUser();
     const router = useRouter();
-    const fileInputRef = useRef<HTMLInputElement>(null);
     
     const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
-    const [isAiProcessing, setIsAiProcessing] = useState(false);
-    const [aiResult, setAiResult] = useState<any>(null);
+    const [alomqyAccount, setAlomqyAccount] = useState('');
+    const [alomqyAmount, setAlomqyAmount] = useState('');
+    const [isVerifyingOmqy, setIsVerifyingOmqy] = useState(false);
 
     const userDocRef = useMemoFirebase(
-      () => (user && firestore ? doc(firestore, 'users', user.uid) : null),
+      () => (user ? doc(firestore, 'users', user.uid) : null),
       [firestore, user]
     );
     const { data: userProfile } = useDoc<UserProfile>(userDocRef);
@@ -146,113 +163,158 @@ export default function TopUpPage() {
 
     const handleCopy = (accountNumber: string) => {
         navigator.clipboard.writeText(accountNumber);
-        toast({ title: "تم النسخ", description: "تم نسخ رقم الحساب بنجاح." });
+        toast({
+            title: "تم النسخ",
+            description: "تم نسخ رقم الحساب بنجاح.",
+        });
     };
 
-    const handleSendManualRequest = () => {
+    const handleSendRequest = () => {
         const phone = appSettings?.supportPhoneNumber;
         if (!phone) {
             toast({ variant: 'destructive', title: 'خطأ', description: 'رقم الدعم غير متوفر حالياً.' });
             return;
         }
-        window.open(`https://api.whatsapp.com/send?phone=${phone}`, '_blank');
+
+        const whatsappUrl = `https://api.whatsapp.com/send?phone=${phone}`;
+        window.open(whatsappUrl, '_blank');
     };
 
-    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+    const handleConfirmAlOmqyDeposit = async () => {
+        if (!alomqyAccount || !alomqyAmount || !firestore || !userProfile || !userDocRef) {
+            toast({ variant: 'destructive', title: 'بيانات ناقصة', description: 'الرجاء إدخال رقم الحساب والمبلغ.' });
+            return;
+        }
 
-        setIsAiProcessing(true);
-        setAiResult(null);
-
+        setIsVerifyingOmqy(true);
         try {
-            const reader = new FileReader();
-            const base64Promise = new Promise<string>((resolve) => {
-                reader.onload = () => resolve(reader.result as string);
-                reader.readAsDataURL(file);
-            });
-            const dataUri = await base64Promise;
-
-            // استدعاء محرك الذكاء الاصطناعي الجبار Gemini 2.0 Flash
-            const result = await processBankReceipt({ receiptImage: dataUri });
+            // البحث عن إشعار مطابق في alomqyNotifications
+            const notifsRef = collection(firestore, 'alomqyNotifications');
+            const q = query(
+                notifsRef, 
+                where('account', '==', alomqyAccount.trim()), 
+                where('amount', '==', parseFloat(alomqyAmount)),
+                where('status', '==', 'unpaid'),
+                limit(1)
+            );
             
-            if (!result.isValid) {
-                throw new Error("عذراً، هذا الإيصال لا يخص العمقي أو الكريمي أو أن الصورة غير واضحة بما يكفي.");
-            }
+            const querySnapshot = await getDocs(q);
 
-            // التحقق من عدم تكرار الإيصال
-            if (firestore && user) {
-                const q = query(collection(firestore, 'users', user.uid, 'transactions'), where('receiptReference', '==', result.receiptNumber));
-                const snap = await getDocs(q);
-                if (!snap.empty) {
-                    throw new Error("هذا الإيصال تم استخدامه مسبقاً في عملية شحن أخرى.");
-                }
-            }
+            if (querySnapshot.empty) {
+                toast({ 
+                    variant: 'destructive', 
+                    title: 'لم يتم العثور على الإيداع', 
+                    description: 'تأكد من رقم الحساب والمبلغ، أو انتظر لحظات حتى يصل الإشعار للنظام.' 
+                });
+            } else {
+                const notifDoc = querySnapshot.docs[0];
+                const notifData = notifDoc.data();
+                
+                const batch = writeBatch(firestore);
+                const now = new Date().toISOString();
 
-            setAiResult(result);
-            toast({ title: "تم فحص الإيصال", description: "يرجى مراجعة المبلغ والتأكيد للإيداع." });
+                // 1. تحديث رصيد المستخدم
+                batch.update(userDocRef, { balance: increment(notifData.amount) });
+
+                // 2. تحديث حالة الإشعار إلى "مدفوع"
+                batch.update(notifDoc.ref, { status: 'paid', paidTo: userProfile.id, paidAt: now });
+
+                // 3. تسجيل العملية
+                const txRef = doc(collection(firestore, `users/${userProfile.id}/transactions`));
+                batch.set(txRef, {
+                    userId: userProfile.id,
+                    transactionDate: now,
+                    amount: notifData.amount,
+                    transactionType: 'تغذية حساب (آلي - العمقي)',
+                    notes: `إيداع آلي عبر حساب العمقي: ${notifData.account}`,
+                    status: 'success'
+                });
+
+                await batch.commit();
+
+                toast({ title: "تم الإيداع بنجاح", description: `تم إضافة ${notifData.amount.toLocaleString()} ريال إلى رصيدك فوراً.` });
+                setAlomqyAccount('');
+                setAlomqyAmount('');
+                router.push('/login');
+            }
         } catch (error: any) {
-            toast({ variant: "destructive", title: "فشل التحليل", description: error.message });
+            toast({ variant: 'destructive', title: 'خطأ', description: 'حدث خطأ أثناء معالجة الطلب.' });
         } finally {
-            setIsAiProcessing(false);
-            if (fileInputRef.current) fileInputRef.current.value = '';
+            setIsVerifyingOmqy(false);
         }
     };
 
-    const handleConfirmAiTopUp = async () => {
-        if (!user || !userProfile || !aiResult || !firestore || !userDocRef) return;
-
-        setIsAiProcessing(true);
-        const amount = aiResult.amount;
-        const now = new Date().toISOString();
-
-        try {
-            const batch = writeBatch(firestore);
-            
-            // 1. تحديث الرصيد فورياً
-            batch.update(userDocRef, { balance: increment(amount) });
-
-            // 2. تسجيل العملية في كشف الحساب
-            const txRef = doc(collection(firestore, `users/${user.uid}/transactions`));
-            batch.set(txRef, {
-                userId: user.uid,
-                transactionDate: now,
-                amount: amount,
-                transactionType: 'تغذية رصيد (ذكاء آلي)',
-                notes: `شحن آلي لإيصال ${aiResult.bankName === 'Al-Omqy' ? 'العمقي' : 'الكريمي'}: ${aiResult.receiptNumber}`,
-                receiptReference: aiResult.receiptNumber,
-                status: 'success'
-            });
-
-            // 3. إرسال إشعار للمستخدم
-            const notifRef = doc(collection(firestore, `users/${user.uid}/notifications`));
-            batch.set(notifRef, {
-                title: 'تم شحن رصيدك آلياً ✅',
-                body: `تم إيداع ${amount.toLocaleString()} ريال في حسابك بعد فحص إيصال ${aiResult.bankName === 'Al-Omqy' ? 'العمقي' : 'الكريمي'}.`,
-                timestamp: now
-            });
-
-            await batch.commit();
-            setAiResult(null);
-            toast({ title: "تم الإيداع!", description: "تمت إضافة الرصيد إلى محفظتك بنجاح." });
-            router.push('/login');
-        } catch (error: any) {
-            toast({ variant: "destructive", title: "خطأ في الإيداع", description: "حدث خطأ غير متوقع، يرجى المحاولة لاحقاً." });
-        } finally {
-            setIsAiProcessing(false);
-        }
-    };
-
-    const isAiSupported = selectedMethod?.name.includes('العمقي') || selectedMethod?.name.includes('الكريمي');
     const isQutaibiSelected = selectedMethod?.name.includes('القطيبي');
+    const isAlOmqySelected = selectedMethod?.name.includes('العمقي');
+
+    const renderPaymentMethods = () => {
+        if (isLoadingMethods) {
+            return (
+                <div className="grid grid-cols-2 gap-4">
+                    {[...Array(2)].map((_, i) => (
+                         <div key={i} className="flex flex-col items-center justify-center space-y-2 rounded-3xl bg-card p-4 aspect-square border-2 border-border/50 animate-pulse">
+                            <div className="h-12 w-12 rounded-2xl bg-muted" />
+                            <div className="h-3 w-20 bg-muted rounded" />
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+
+        if (!paymentMethods || paymentMethods.length === 0) {
+            return (
+                <div className="flex flex-col items-center justify-center text-center py-10 opacity-40">
+                    <Info className="h-12 w-12" />
+                    <p className="mt-2 text-sm font-bold">لا توجد طرق دفع متاحة حالياً</p>
+                </div>
+            );
+        }
+
+        return (
+            <div className="grid grid-cols-2 gap-4">
+                {paymentMethods.map(method => (
+                    <div
+                        key={method.id}
+                        onClick={() => setSelectedMethod(method)}
+                        className={cn(
+                            "group flex flex-col items-center justify-center space-y-3 rounded-[32px] p-4 aspect-square cursor-pointer transition-all duration-300 border-2 relative overflow-hidden",
+                            selectedMethod?.id === method.id 
+                                ? 'border-primary bg-primary/5 shadow-xl shadow-primary/10 scale-[1.02]' 
+                                : 'border-transparent bg-white dark:bg-slate-900 shadow-sm hover:border-primary/20'
+                        )}
+                    >
+                        <div className={cn(
+                            "w-16 h-16 rounded-2xl transition-all duration-300 overflow-hidden relative shadow-sm",
+                            selectedMethod?.id === method.id ? "" : "bg-muted/50"
+                        )}>
+                            <Image 
+                                src={getLogoSrc(method.logoUrl)} 
+                                alt={method.name} 
+                                fill
+                                className="object-cover" 
+                            />
+                        </div>
+                        <p className={cn(
+                            "text-center text-xs font-black transition-colors",
+                            selectedMethod?.id === method.id ? "text-primary" : "text-foreground/70"
+                        )}>{method.name}</p>
+                        
+                        {selectedMethod?.id === method.id && (
+                            <div className="absolute top-2 left-2 animate-in zoom-in-50 duration-300">
+                                <CheckCircle2 className="w-5 h-5 text-primary" />
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+        );
+    };
 
     return (
         <div className="flex flex-col h-full bg-[#F8FAFC] dark:bg-slate-950">
             <SimpleHeader title="تغذية الحساب" />
             
             <div className="flex-1 overflow-y-auto pb-32 no-scrollbar">
-                {isAiProcessing && <ProcessingOverlay message="جاري تحليل الإيصال بمحرك Gemini 2.0..." />}
-
                 <div className="bg-mesh-gradient pt-6 pb-12 px-6 rounded-b-[50px] shadow-xl relative overflow-hidden mb-8">
                     <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
                     <div className="relative flex flex-col items-center text-center space-y-4">
@@ -260,8 +322,8 @@ export default function TopUpPage() {
                             <CircleDollarSign className="h-8 w-8 text-white" />
                         </div>
                         <div className="space-y-1">
-                            <h2 className="text-2xl font-black text-white tracking-tight">تغذية المحفظة</h2>
-                            <p className="text-[10px] text-white/80 font-bold uppercase tracking-[0.2em]">اشحن رصيدك بالذكاء الاصطناعي فوراً</p>
+                            <h2 className="text-2xl font-black text-white tracking-tight">إيداع رصيد جديد</h2>
+                            <p className="text-[10px] text-white/80 font-bold uppercase tracking-[0.2em]">قم بتغذية محفظتك لتستمتع بخدماتنا</p>
                         </div>
                     </div>
                 </div>
@@ -269,8 +331,8 @@ export default function TopUpPage() {
                 <div className="px-4 space-y-8 pb-10">
                     <div className="space-y-4">
                         <div className="flex items-center gap-3 px-2">
-                            <div className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-[10px] font-black shadow-lg">1</div>
-                            <h3 className="text-sm font-black text-foreground/80 uppercase tracking-widest">اختر البنك أو المصرف</h3>
+                            <div className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-[10px] font-black shadow-lg shadow-primary/20">1</div>
+                            <h3 className="text-sm font-black text-foreground/80 uppercase tracking-widest">اختر طريقة التحويل</h3>
                         </div>
                         {renderPaymentMethods()}
                     </div>
@@ -278,148 +340,152 @@ export default function TopUpPage() {
                     {selectedMethod && (
                         <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
                             <div className="flex items-center gap-3 px-2">
-                                <div className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-[10px] font-black shadow-lg">2</div>
+                                <div className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-[10px] font-black shadow-lg shadow-primary/20">2</div>
                                 <h3 className="text-sm font-black text-foreground/80 uppercase tracking-widest">بيانات التحويل</h3>
                             </div>
 
                             {isQutaibiSelected ? (
                                 <QutaibiDirectForm onToggleTransactions={() => router.push('/transactions')} />
                             ) : (
-                                <div className="space-y-4">
-                                    <Card className="border-none shadow-lg rounded-[32px] overflow-hidden bg-white dark:bg-slate-900">
-                                        <CardContent className="p-6 text-center space-y-5">
-                                            <div className="flex items-center justify-center gap-4">
-                                                <div className="relative w-14 h-14 rounded-2xl overflow-hidden shadow-md border-2 border-primary/5">
-                                                    <Image src={getLogoSrc(selectedMethod.logoUrl)} alt={selectedMethod.name} fill className="object-cover" />
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-tighter">اسم صاحب الحساب</p>
-                                                    <p className="text-base font-black text-foreground">{selectedMethod.accountHolderName}</p>
-                                                </div>
-                                            </div>
-                                            <div className="bg-primary/5 p-4 rounded-[24px] border-2 border-dashed border-primary/10 flex flex-col items-center gap-2">
-                                                <p className="text-[10px] font-black text-primary uppercase tracking-widest">رقم الحساب</p>
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-2xl font-black font-mono tracking-wider text-primary">{selectedMethod.accountNumber}</span>
-                                                    <button onClick={() => handleCopy(selectedMethod.accountNumber)} className="p-2 bg-primary text-white rounded-xl shadow-md active:scale-90 transition-transform"><Copy className="w-4 h-4" /></button>
-                                                </div>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-
-                                    {/* نظام المسح الذكي لعمقي وكريمي بمحرك Gemini 2.0 */}
-                                    {isAiSupported ? (
-                                        <div className="space-y-4 animate-in slide-in-from-top-4 duration-700">
-                                            <div className="bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800 rounded-[32px] p-6 text-center space-y-4">
-                                                <div className="bg-orange-500/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto">
-                                                    <Sparkles className="h-8 w-8 text-orange-600 animate-pulse" />
-                                                </div>
-                                                <div>
-                                                    <h3 className="font-black text-orange-700 dark:text-orange-400">نظام المسح الآلي (Beta)</h3>
-                                                    <p className="text-[10px] text-orange-600/80 dark:text-orange-500 font-bold leading-relaxed">
-                                                        ارفع صورة الإيصال وسيقوم Gemini 2.0 بقراءتها وإيداع المبلغ فوراً في حسابك.
-                                                    </p>
-                                                </div>
-                                                <input 
-                                                    type="file" 
-                                                    accept="image/*" 
-                                                    className="hidden" 
-                                                    ref={fileInputRef} 
-                                                    onChange={handleFileSelect}
+                                <Card className="border-none shadow-lg rounded-[32px] overflow-hidden bg-white dark:bg-slate-900">
+                                    <CardContent className="p-6 text-center space-y-5">
+                                        <div className="flex items-center justify-center gap-4">
+                                            <div className="relative w-14 h-14 rounded-2xl overflow-hidden shadow-md border-2 border-primary/5">
+                                                <Image 
+                                                    src={getLogoSrc(selectedMethod.logoUrl)} 
+                                                    alt={selectedMethod.name} 
+                                                    fill
+                                                    className="object-cover" 
                                                 />
-                                                <Button 
-                                                    className="w-full h-14 rounded-2xl bg-orange-600 hover:bg-orange-700 text-white font-black shadow-xl transition-all active:scale-95"
-                                                    onClick={() => fileInputRef.current?.click()}
-                                                >
-                                                    <Scan className="ml-2 h-5 w-5" />
-                                                    اختيار الإيصال والمسح
-                                                </Button>
                                             </div>
+                                            <div className="text-right">
+                                                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-tighter">اسم صاحب الحساب</p>
+                                                <p className="text-base font-black text-foreground">{selectedMethod.accountHolderName}</p>
+                                            </div>
+                                        </div>
 
-                                            {/* لوحة تأكيد بيانات الذكاء الاصطناعي */}
-                                            {aiResult && (
-                                                <div className="bg-white dark:bg-slate-900 rounded-[32px] p-6 shadow-2xl border-t-4 border-green-500 animate-in zoom-in-95 duration-500">
-                                                    <div className="flex items-center gap-2 mb-4">
-                                                        <CheckCircle className="h-5 w-5 text-green-500" />
-                                                        <h4 className="font-black text-sm text-foreground">البيانات المستخرجة من الإيصال</h4>
-                                                    </div>
-                                                    <div className="space-y-3 mb-6 bg-muted/30 p-4 rounded-2xl">
-                                                        <div className="flex justify-between items-center text-xs py-1 border-b border-dashed">
-                                                            <span className="text-muted-foreground font-bold">مصدر الإيصال:</span>
-                                                            <span className="font-black text-primary">{aiResult.bankName === 'Al-Omqy' ? 'العمقي للصرافة' : 'بنك الكريمي'}</span>
-                                                        </div>
-                                                        <div className="flex justify-between items-center text-xs py-1 border-b border-dashed">
-                                                            <span className="text-muted-foreground font-bold">رقم العملية:</span>
-                                                            <span className="font-mono font-black">{aiResult.receiptNumber}</span>
-                                                        </div>
-                                                        <div className="flex justify-between items-center pt-2">
-                                                            <span className="text-muted-foreground text-xs font-black">المبلغ المكتشف:</span>
-                                                            <div className="text-left" dir="rtl">
-                                                                <span className="text-2xl font-black text-green-600">{aiResult.amount.toLocaleString()}</span>
-                                                                <span className="text-[10px] font-bold text-green-600/70 mr-1">ر.ي</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <Button className="rounded-2xl h-12 font-black shadow-lg" onClick={handleConfirmAiTopUp}>
-                                                            تأكيد وشحن الآن
-                                                        </Button>
-                                                        <Button variant="outline" className="rounded-2xl h-12 font-bold" onClick={() => setAiResult(null)}>إلغاء</Button>
+                                        <div className="bg-primary/5 p-4 rounded-[24px] border-2 border-dashed border-primary/10 flex flex-col items-center gap-2">
+                                            <p className="text-[10px] font-black text-primary uppercase tracking-widest">رقم الحساب</p>
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-2xl font-black font-mono tracking-wider text-primary">{selectedMethod.accountNumber}</span>
+                                                <button 
+                                                    onClick={() => handleCopy(selectedMethod.accountNumber)}
+                                                    className="p-2 bg-primary text-white rounded-xl active:scale-90 transition-transform shadow-md"
+                                                >
+                                                    <Copy className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* حقول المطابقة للعمقي */}
+                                        {isAlOmqySelected && (
+                                            <div className="pt-4 space-y-4 border-t border-dashed border-primary/10 mt-4 animate-in fade-in-0 slide-in-from-top-2">
+                                                <div className="space-y-2 text-right">
+                                                    <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mr-1">رقم حسابك في العمقي</Label>
+                                                    <div className="relative">
+                                                        <Input 
+                                                            type="tel"
+                                                            value={alomqyAccount}
+                                                            onChange={(e) => setAlomqyAccount(e.target.value.replace(/\D/g, ''))}
+                                                            placeholder="ادخل رقم حسابك"
+                                                            className="h-12 rounded-2xl bg-muted/20 border-none text-center font-bold text-lg"
+                                                        />
+                                                        <Hash className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary opacity-30" />
                                                     </div>
                                                 </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <Card className="border-none shadow-xl rounded-[32px] overflow-hidden bg-card">
-                                            <CardContent className="p-4">
-                                                <Button className="w-full h-11 rounded-2xl bg-mesh-gradient text-white font-black text-sm shadow-xl" onClick={handleSendManualRequest}>
-                                                    أرسل الإيصال عبر واتساب
+                                                <div className="space-y-2 text-right">
+                                                    <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mr-1">المبلغ المودع</Label>
+                                                    <div className="relative">
+                                                        <Input 
+                                                            type="number"
+                                                            value={alomqyAmount}
+                                                            onChange={(e) => setAlomqyAmount(e.target.value)}
+                                                            placeholder="0.00"
+                                                            className="h-12 rounded-2xl bg-muted/20 border-none text-center font-black text-xl"
+                                                        />
+                                                        <Coins className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary opacity-30" />
+                                                    </div>
+                                                </div>
+                                                <Button 
+                                                    onClick={handleConfirmAlOmqyDeposit}
+                                                    disabled={isVerifyingOmqy}
+                                                    className="w-full h-12 rounded-2xl bg-primary text-white font-black shadow-lg active:scale-95 transition-all"
+                                                >
+                                                    {isVerifyingOmqy ? <Loader2 className="animate-spin h-5 w-5" /> : "تأكيد الإيداع الآن"}
                                                 </Button>
-                                            </CardContent>
-                                        </Card>
-                                    )}
-                                </div>
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
                             )}
                         </div>
                     )}
 
-                    {/* معلومات الوكيل الرسمي */}
+                    {selectedMethod && !isQutaibiSelected && (
+                        <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
+                            <div className="flex items-center gap-3 px-2">
+                                <div className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-[10px] font-black shadow-lg shadow-primary/20">3</div>
+                                <h3 className="text-sm font-black text-foreground/80 uppercase tracking-widest">تأكيد الإيداع</h3>
+                            </div>
+
+                            <Card className="border-none shadow-2xl rounded-[32px] overflow-hidden bg-card">
+                                <CardContent className="p-4">
+                                    <Button 
+                                        className="w-full h-11 rounded-2xl bg-mesh-gradient text-white font-black text-sm shadow-xl active:scale-95 transition-transform border-none"
+                                        onClick={handleSendRequest} 
+                                    >
+                                        أرسل الإيصال عبر واتساب
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    )}
+
                     <div className="pt-10 border-t border-muted-foreground/10">
-                        <h2 className="text-lg font-black text-primary text-center mb-4">الوكيل الرسمي (حضرموت)</h2>
-                        <Card className="border-none shadow-xl bg-mesh-gradient text-white rounded-[32px] overflow-hidden">
-                            <CardContent className="p-6 space-y-6 text-center">
-                                <div className="relative w-24 h-24 mx-auto mb-2 overflow-hidden rounded-2xl border-2 border-white/30 shadow-lg bg-white/10">
-                                    <Image src="https://i.postimg.cc/fLVNsBZx/967-770-326-828-20260218-132606.jpg" alt="Official Agent" fill className="object-cover" />
-                                </div>
-                                <h3 className="text-xl font-black">مكتب ستار ميديا</h3>
-                                <p className="text-xs font-bold opacity-80">حضرموت - شبام - بجانب سوبر ماركت البر</p>
-                                <Button className="w-full h-14 rounded-2xl bg-white text-primary hover:bg-white/90 font-black transition-all active:scale-95" onClick={() => window.open('https://maps.app.goo.gl/Qs6cNBxMutA6SsvH6', '_blank')}>
-                                    <ExternalLink className="ml-2 h-5 w-5" /> عرض الموقع على الخريطة
-                                </Button>
-                            </CardContent>
-                        </Card>
+                        <div className="px-0 pb-10 space-y-4">
+                            <h2 className="text-lg font-black text-primary text-center">غذي حسابك عبر الوكيل الرسمي</h2>
+                            <Card className="border-none shadow-xl bg-mesh-gradient text-white rounded-[32px] overflow-hidden">
+                                <CardContent className="p-6 space-y-6">
+                                    <div className="flex flex-col items-center text-center gap-2">
+                                        <div className="relative w-24 h-24 mb-2 overflow-hidden rounded-2xl border-2 border-white/30 shadow-lg bg-white/10 backdrop-blur-md">
+                                            <Image 
+                                                src="https://i.postimg.cc/fLVNsBZx/967-770-326-828-20260218-132606.jpg"
+                                                alt="Official Agent Logo"
+                                                fill
+                                                className="object-cover"
+                                            />
+                                        </div>
+                                        <h3 className="text-xl font-black text-white">مكتب ستار ميديا للاعلان والتسويق</h3>
+                                        <div className="flex items-center gap-2 opacity-80">
+                                            <MapPin className="h-4 w-4 text-white" />
+                                            <p className="text-xs font-bold text-white">حضرموت - شبام - بجانب سوبر ماركت البر</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <Button 
+                                            className="w-full h-14 rounded-2xl bg-white text-primary hover:bg-white/90 font-black text-base shadow-lg"
+                                            onClick={() => window.open('https://maps.app.goo.gl/Qs6cNBxMutA6SsvH6', '_blank')}
+                                        >
+                                            <ExternalLink className="ml-2 h-5 w-5" />
+                                            عرض الموقع على الخريطة
+                                        </Button>
+                                        <div className="bg-black/10 rounded-2xl p-4 text-center">
+                                            <p className="text-[10px] font-bold opacity-70 uppercase tracking-widest mb-1 text-white">ساعات العمل</p>
+                                            <p className="text-base font-black leading-relaxed text-white">
+                                                الفترة الصباحية: 8:00 صباحاً - 12:30 ظهراً<br/>
+                                                الفترة المسائية: 4:00 عصراً - 9:00 مساءً
+                                            </p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
                     </div>
                 </div>
             </div>
+
             <Toaster />
         </div>
     );
-
-    function renderPaymentMethods() {
-        if (isLoadingMethods) return <div className="grid grid-cols-2 gap-4">{[1, 2].map(i => <Skeleton key={i} className="h-36 w-full rounded-[32px]" />)}</div>;
-        return (
-            <div className="grid grid-cols-2 gap-4">
-                {paymentMethods?.map(method => (
-                    <div key={method.id} onClick={() => setSelectedMethod(method)} className={cn(
-                        "group flex flex-col items-center justify-center space-y-3 rounded-[32px] p-4 aspect-square cursor-pointer transition-all duration-300 border-2 relative overflow-hidden",
-                        selectedMethod?.id === method.id ? 'border-primary bg-primary/5 shadow-xl scale-[1.02]' : 'border-transparent bg-white dark:bg-slate-900 shadow-sm hover:border-primary/20'
-                    )}>
-                        <div className="w-16 h-16 rounded-2xl relative shadow-sm overflow-hidden bg-white"><Image src={getLogoSrc(method.logoUrl)} alt={method.name} fill className="object-contain" /></div>
-                        <p className={cn("text-center text-[11px] font-black", selectedMethod?.id === method.id ? "text-primary" : "text-foreground/70")}>{method.name}</p>
-                        {selectedMethod?.id === method.id && <div className="absolute top-2 left-2 animate-in zoom-in-50"><CheckCircle2 className="w-5 h-5 text-primary" /></div>}
-                    </div>
-                ))}
-            </div>
-        );
-    }
 }

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useEffect, useState, Suspense } from 'react';
@@ -33,7 +32,10 @@ import {
   ShieldCheck,
   TrendingUp,
   Zap,
-  Droplets
+  Droplets,
+  Bell,
+  CheckCircle2,
+  Clock
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { SimpleHeader } from '@/components/layout/simple-header';
@@ -55,15 +57,26 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { useAuth, useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { useAuth, useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase';
+import { doc, collection, query, orderBy, limit } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { Button } from '@/components/ui/button';
 import Image from 'next/image';
+import { format, parseISO } from 'date-fns';
+import { ar } from 'date-fns/locale';
 
 export const dynamic = 'force-dynamic';
+
+type AlOmqyNotif = {
+    id: string;
+    account: string;
+    amount: number;
+    status: 'unpaid' | 'paid';
+    timestamp: string;
+    senderName: string;
+};
 
 const managementLinks = [
   { title: 'إدارة المستخدمين', icon: Users, href: '/users' },
@@ -156,6 +169,13 @@ export default function AccountPage() {
   const { data: appSettings } = useDoc<AppSettings>(settingsDocRef);
   
   const isUserAdmin = user?.email === '770326828@shabakat.com' || user?.uid === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2';
+
+  // جلب إشعارات العمقي للمدير
+  const omqyQuery = useMemoFirebase(
+    () => (firestore ? query(collection(firestore, 'alomqyNotifications'), orderBy('timestamp', 'desc'), limit(5)) : null),
+    [firestore]
+  );
+  const { data: omqyNotifs } = useCollection<AlOmqyNotif>(omqyQuery);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'light';
@@ -266,6 +286,46 @@ export default function AccountPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* قسم إشعارات العمقي للمدير */}
+        {isUserAdmin && omqyNotifs && omqyNotifs.length > 0 && (
+            <div className="space-y-3 animate-in fade-in slide-in-from-top-4 duration-500">
+                <div className="flex items-center justify-between px-2">
+                    <h3 className="text-xs font-black text-primary uppercase tracking-widest flex items-center gap-2">
+                        <Bell className="w-3.5 h-3.5" /> إيداعات العمقي (الويب هوك)
+                    </h3>
+                </div>
+                <div className="space-y-2">
+                    {omqyNotifs.map(notif => (
+                        <Card key={notif.id} className="rounded-2xl border-none shadow-sm overflow-hidden bg-card">
+                            <CardContent className="p-3 flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <div className={cn(
+                                        "p-2 rounded-xl shrink-0",
+                                        notif.status === 'unpaid' ? "bg-green-500/10 text-green-600" : "bg-muted text-muted-foreground"
+                                    )}>
+                                        {notif.status === 'unpaid' ? <Zap className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[11px] font-black text-foreground">{notif.senderName}</p>
+                                        <p className="text-[9px] font-bold text-muted-foreground">حساب: {notif.account}</p>
+                                    </div>
+                                </div>
+                                <div className="text-left">
+                                    <p className={cn("text-xs font-black", notif.status === 'unpaid' ? "text-green-600" : "text-muted-foreground")}>
+                                        {notif.amount.toLocaleString()} ر.ي
+                                    </p>
+                                    <div className="flex items-center gap-1 opacity-40">
+                                        <Clock className="w-2.5 h-2.5" />
+                                        <span className="text-[8px] font-bold">{format(parseISO(notif.timestamp), 'h:mm a', { locale: ar })}</span>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+            </div>
+        )}
         
         <div>
             <h3 className="text-xs font-black text-muted-foreground text-center mb-3 uppercase tracking-widest">الوضع المفضل</h3>
