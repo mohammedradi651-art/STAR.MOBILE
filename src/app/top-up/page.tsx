@@ -461,7 +461,7 @@ export default function TopUpPage() {
                                                             type="tel"
                                                             value={alomqyAccount}
                                                             onChange={(e) => setAlomqyAccount(e.target.value.replace(/\D/g, ''))}
-                                                            placeholder="ادخل رقم حسابك"
+                                                            placeholder="25*******"
                                                             className="h-12 rounded-2xl bg-white dark:bg-slate-900 border-2 border-primary/20 focus-visible:ring-primary text-center font-bold text-lg shadow-sm"
                                                         />
                                                         <Hash className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary opacity-30" />
