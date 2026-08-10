@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { SimpleHeader } from '@/components/layout/simple-header';
-import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc, updateDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc } from '@/firebase';
 import { collection, doc, query, where, getDocs, limit, writeBatch, increment } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
@@ -21,7 +21,11 @@ import {
     Info,
     Hash,
     Coins,
-    Loader2
+    Loader2,
+    Smartphone,
+    CheckCircle,
+    Calendar,
+    ArrowLeft
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -30,6 +34,8 @@ import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useRouter } from 'next/navigation';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
 
 export const dynamic = 'force-dynamic';
 
@@ -131,11 +137,14 @@ export default function TopUpPage() {
     const { toast } = useToast();
     const { user } = useUser();
     const router = useRouter();
+    const audioRef = useRef<HTMLAudioElement>(null);
     
     const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
     const [alomqyAccount, setAlomqyAccount] = useState('');
     const [alomqyAmount, setAlomqyAmount] = useState('');
     const [isVerifyingOmqy, setIsVerifyingOmqy] = useState(false);
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [lastTxDetails, setLastTxDetails] = useState<any>(null);
 
     const userDocRef = useMemoFirebase(
       () => (user ? doc(firestore, 'users', user.uid) : null),
@@ -188,7 +197,6 @@ export default function TopUpPage() {
 
         setIsVerifyingOmqy(true);
         try {
-            // البحث عن إشعار مطابق في alomqyNotifications
             const notifsRef = collection(firestore, 'alomqyNotifications');
             const q = query(
                 notifsRef, 
@@ -213,13 +221,9 @@ export default function TopUpPage() {
                 const batch = writeBatch(firestore);
                 const now = new Date().toISOString();
 
-                // 1. تحديث رصيد المستخدم
                 batch.update(userDocRef, { balance: increment(notifData.amount) });
-
-                // 2. تحديث حالة الإشعار إلى "مدفوع"
                 batch.update(notifDoc.ref, { status: 'paid', paidTo: userProfile.id, paidAt: now });
 
-                // 3. تسجيل العملية
                 const txRef = doc(collection(firestore, `users/${userProfile.id}/transactions`));
                 batch.set(txRef, {
                     userId: userProfile.id,
@@ -232,10 +236,16 @@ export default function TopUpPage() {
 
                 await batch.commit();
 
-                toast({ title: "تم الإيداع بنجاح", description: `تم إضافة ${notifData.amount.toLocaleString()} ريال إلى رصيدك فوراً.` });
+                setLastTxDetails({
+                    account: alomqyAccount,
+                    amount: notifData.amount,
+                    date: now
+                });
+                setShowSuccess(true);
+                audioRef.current?.play().catch(() => {});
+                
                 setAlomqyAccount('');
                 setAlomqyAmount('');
-                router.push('/login');
             }
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'خطأ', description: 'حدث خطأ أثناء معالجة الطلب.' });
@@ -310,9 +320,55 @@ export default function TopUpPage() {
         );
     };
 
+    if (showSuccess && lastTxDetails) {
+        return (
+            <div className="flex flex-col h-full bg-[#F4F7F9] dark:bg-slate-950">
+                <audio ref={audioRef} src="/sdad.mp3" preload="auto" />
+                <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-[100] flex items-center justify-center animate-in fade-in-0 p-4">
+                    <Card className="w-full max-sm text-center shadow-2xl rounded-[40px] overflow-hidden border-none bg-card">
+                        <div className="bg-green-500 p-8 flex justify-center">
+                            <div className="bg-white/20 p-4 rounded-full animate-bounce">
+                                <CheckCircle className="h-16 w-16 text-white" />
+                            </div>
+                        </div>
+                        <CardContent className="p-8 space-y-6">
+                            <div>
+                                <h2 className="text-2xl font-black text-green-600">تم الإيداع بنجاح</h2>
+                                <p className="text-sm text-muted-foreground mt-1">تغذية آلية عبر حساب العمقي</p>
+                            </div>
+
+                            <div className="w-full space-y-3 text-sm bg-muted/50 p-5 rounded-[24px] text-right border-2 border-dashed border-[#B32C4C]/10">
+                                <div className="flex justify-between items-center border-b border-muted pb-2">
+                                    <span className="text-muted-foreground flex items-center gap-2"><Smartphone className="w-3.5 h-3.5" /> حساب العميل:</span>
+                                    <span className="font-mono font-bold tracking-widest">{lastTxDetails.account}</span>
+                                </div>
+                                <div className="flex justify-between items-center border-b border-muted pb-2">
+                                    <span className="text-muted-foreground flex items-center gap-2"><Wallet className="w-3.5 h-3.5" /> المبلغ المضاف:</span>
+                                    <span className="font-black text-green-600">{lastTxDetails.amount.toLocaleString('en-US')} ريال</span>
+                                </div>
+                                <div className="flex justify-between items-center pt-1">
+                                    <span className="text-muted-foreground flex items-center gap-2"><Calendar className="w-3.5 h-3.5" /> التاريخ:</span>
+                                    <span className="text-[10px] font-bold">{format(parseISO(lastTxDetails.date), 'Pp', { locale: ar })}</span>
+                                </div>
+                            </div>
+
+                            <Button 
+                                className="w-full h-14 rounded-2xl font-black text-lg shadow-lg active:scale-95 transition-transform" 
+                                onClick={() => router.push('/login')}
+                            >
+                                العودة للرئيسية
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="flex flex-col h-full bg-[#F8FAFC] dark:bg-slate-950">
             <SimpleHeader title="تغذية الحساب" />
+            <audio ref={audioRef} src="/sdad.mp3" preload="auto" />
             
             <div className="flex-1 overflow-y-auto pb-32 no-scrollbar">
                 <div className="bg-mesh-gradient pt-6 pb-12 px-6 rounded-b-[50px] shadow-xl relative overflow-hidden mb-8">
@@ -377,7 +433,7 @@ export default function TopUpPage() {
                                             </div>
                                         </div>
 
-                                        {/* حقول المطابقة للعمقي - تم تعديلها لتكون أكثر وضوحاً */}
+                                        {/* حقول المطابقة للعمقي */}
                                         {isAlOmqySelected && (
                                             <div className="pt-4 space-y-4 border-t border-dashed border-primary/10 mt-4 animate-in fade-in-0 slide-in-from-top-2">
                                                 <div className="space-y-2 text-right">
@@ -421,7 +477,7 @@ export default function TopUpPage() {
                         </div>
                     )}
 
-                    {selectedMethod && !isQutaibiSelected && (
+                    {selectedMethod && !isQutaibiSelected && !isAlOmqySelected && (
                         <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
                             <div className="flex items-center gap-3 px-2">
                                 <div className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-[10px] font-black shadow-lg shadow-primary/20">3</div>
