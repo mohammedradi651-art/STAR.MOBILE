@@ -213,7 +213,7 @@ export default function TopUpPage() {
                 toast({ 
                     variant: 'destructive', 
                     title: 'لم يتم العثور على الإيداع', 
-                    description: 'تأكد من رقم الحساب والمبلغ، أو انتظر لحظات حتى يصل الإشعار للنظام.' 
+                    description: 'نعتذر، لم يتم العثور على إيصال مطابق للعملية المرسلة في النظام.' 
                 });
             } else {
                 const notifDoc = querySnapshot.docs[0];
@@ -237,19 +237,15 @@ export default function TopUpPage() {
 
                 await batch.commit();
 
-                // إعداد بيانات النجاح للمنبثق
                 setLastTxDetails({
                     account: alomqyAccount,
                     amount: notifData.amount,
-                    senderName: notifData.senderName || 'غير معروف',
                     date: now
                 });
                 
-                // إظهار منبثق النجاح فوراً
                 setShowSuccess(true);
                 audioRef.current?.play().catch(() => {});
 
-                // إرسال رسالة SMS للعميل للتأكيد
                 if (userProfile.phoneNumber) {
                     const newBalance = (userProfile.balance || 0) + notifData.amount;
                     const smsMessage = `ستار موبايل: تم إيداع (${notifData.amount.toLocaleString('en-US')}) ريال لحسابك بنجاح. رصيدك الآن: (${newBalance.toLocaleString('en-US')}) ريال.`;
@@ -359,16 +355,12 @@ export default function TopUpPage() {
                                 <p className="text-xs text-muted-foreground mt-1 font-bold">تغذية آلية عبر حساب العمقي</p>
                             </div>
 
-                            <div className="w-full space-y-3 text-sm bg-muted/50 p-5 rounded-[24px] text-right border-2 border-dashed border-[#B32C4C]/10">
-                                <div className="flex justify-between items-center border-b border-muted pb-2">
-                                    <span className="text-muted-foreground flex items-center gap-2"><UserIcon className="w-3.5 h-3.5" /> اسم المودع:</span>
-                                    <span className="font-bold text-foreground truncate max-w-[120px]">{lastTxDetails.senderName}</span>
-                                </div>
-                                <div className="flex justify-between items-center border-b border-muted pb-2">
+                            <div className="w-full space-y-3 text-sm bg-muted/40 backdrop-blur-md p-5 rounded-[24px] text-right border-2 border-dashed border-primary/10">
+                                <div className="flex justify-between items-center border-b border-white/20 pb-2">
                                     <span className="text-muted-foreground flex items-center gap-2"><Smartphone className="w-3.5 h-3.5" /> حساب العميل:</span>
                                     <span className="font-mono font-bold tracking-widest">{lastTxDetails.account}</span>
                                 </div>
-                                <div className="flex justify-between items-center border-b border-muted pb-2">
+                                <div className="flex justify-between items-center border-b border-white/20 pb-2">
                                     <span className="text-muted-foreground flex items-center gap-2"><Wallet className="w-3.5 h-3.5" /> المبلغ المضاف:</span>
                                     <span className="font-black text-green-600">{lastTxDetails.amount.toLocaleString('en-US')} ريال</span>
                                 </div>
@@ -379,7 +371,7 @@ export default function TopUpPage() {
                             </div>
 
                             <Button 
-                                className="w-full h-12 rounded-2xl font-black text-base shadow-lg active:scale-95 transition-transform bg-[#B32C4C] hover:bg-[#B32C4C]/90 text-white" 
+                                className="w-full h-12 rounded-2xl font-black text-base shadow-lg active:scale-95 transition-transform bg-[#0048ad] hover:bg-[#0048ad]/90 text-white" 
                                 onClick={() => router.push('/login')}
                             >
                                 العودة للرئيسية
