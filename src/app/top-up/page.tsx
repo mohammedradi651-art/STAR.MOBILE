@@ -34,7 +34,7 @@ import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ar } from 'date-fns/locale';
 
 export const dynamic = 'force-dynamic';
@@ -147,7 +147,7 @@ export default function TopUpPage() {
     const [lastTxDetails, setLastTxDetails] = useState<any>(null);
 
     const userDocRef = useMemoFirebase(
-      () => (user ? doc(firestore, 'users', user.uid) : null),
+      () => (user && firestore ? doc(firestore, 'users', user.uid) : null),
       [firestore, user]
     );
     const { data: userProfile } = useDoc<UserProfile>(userDocRef);
@@ -236,19 +236,38 @@ export default function TopUpPage() {
 
                 await batch.commit();
 
+                // إعداد بيانات النجاح للمنبثق
                 setLastTxDetails({
                     account: alomqyAccount,
                     amount: notifData.amount,
                     date: now
                 });
+                
+                // إظهار منبثق النجاح فوراً
                 setShowSuccess(true);
                 audioRef.current?.play().catch(() => {});
+
+                // إرسال رسالة SMS للعميل للتأكيد
+                if (userProfile.phoneNumber) {
+                    const newBalance = (userProfile.balance || 0) + notifData.amount;
+                    const smsMessage = `ستار موبايل: تم إيداع (${notifData.amount.toLocaleString('en-US')}) ريال لحسابك بنجاح. رصيدك الآن: (${newBalance.toLocaleString('en-US')}) ريال.`;
+                    
+                    fetch('/api/sms', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            phoneNumber: userProfile.phoneNumber,
+                            message: smsMessage
+                        })
+                    }).catch(e => console.error("SMS Notify Error", e));
+                }
                 
                 setAlomqyAccount('');
                 setAlomqyAmount('');
             }
         } catch (error: any) {
-            toast({ variant: 'destructive', title: 'خطأ', description: 'حدث خطأ أثناء معالجة الطلب.' });
+            console.error("AlOmqy Deposit Error:", error);
+            toast({ variant: 'destructive', title: 'خطأ في العملية', description: 'حدث خطأ غير متوقع أثناء معالجة طلب الإيداع.' });
         } finally {
             setIsVerifyingOmqy(false);
         }
