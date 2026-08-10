@@ -270,7 +270,7 @@ export default function TopUpPage() {
                             </div>
                         </div>
                         <h2 className="text-2xl font-black text-white tracking-tight">غذي حسابك بنفسك</h2>
-                        <div className="bg-white/10 backdrop-blur-sm px-10 py-2.5 rounded-full border border-white/10 shadow-inner">
+                        <div className="bg-white/10 backdrop-blur-md px-10 py-2.5 rounded-full border border-white/10 shadow-inner">
                             <p className="text-[16px] text-white font-black uppercase tracking-[0.1em]">عبر البنوك وشبكات الصرافة</p>
                         </div>
                     </div>
@@ -316,19 +316,19 @@ export default function TopUpPage() {
                     {selectedMethod && (
                         <div className="space-y-6 animate-in fade-in-0 slide-in-from-bottom-4 duration-700">
                             
-                            <div className="bg-mesh-gradient py-10 px-8 rounded-none sm:rounded-[48px] border-y-2 sm:border-2 border-dashed border-white/20 flex flex-col items-center gap-6 text-white shadow-2xl w-full text-center">
-                                <p className="text-[11px] font-black text-white/70 uppercase tracking-widest">حول إلى هذا الحساب الموحد</p>
-                                <div className="flex items-center gap-6">
-                                    <span className="text-4xl font-black font-mono tracking-widest text-white drop-shadow-lg">{selectedMethod.accountNumber}</span>
+                            <div className="bg-mesh-gradient py-6 px-8 rounded-none sm:rounded-[48px] border-y-2 sm:border-2 border-dashed border-white/20 flex flex-col items-center gap-3 text-white shadow-2xl w-full text-center">
+                                <p className="text-[10px] font-black text-white/70 uppercase tracking-widest">حول إلى هذا الحساب الموحد</p>
+                                <div className="flex items-center gap-4">
+                                    <span className="text-3xl font-black font-mono tracking-widest text-white drop-shadow-lg">{selectedMethod.accountNumber}</span>
                                     <button 
                                         onClick={() => handleCopy(selectedMethod.accountNumber)} 
-                                        className="p-3 bg-white/20 text-white rounded-2xl shadow-xl active:scale-90 transition-transform backdrop-blur-md border border-white/10"
+                                        className="p-2.5 bg-white/20 text-white rounded-xl shadow-xl active:scale-90 transition-transform backdrop-blur-md border border-white/10"
                                     >
-                                        <Copy className="w-5 h-5" />
+                                        <Copy className="w-4 h-4" />
                                     </button>
                                 </div>
-                                <div className="bg-white/20 px-10 py-3 rounded-full border border-white/10 backdrop-blur-md shadow-inner">
-                                    <p className="text-[14px] font-black text-white uppercase tracking-tight">باسم: {selectedMethod.accountHolderName}</p>
+                                <div className="bg-white/15 px-6 py-2 rounded-full border border-white/10 backdrop-blur-md shadow-inner">
+                                    <p className="text-[12px] font-black text-white uppercase tracking-tight">باسم: {selectedMethod.accountHolderName}</p>
                                 </div>
                             </div>
 
@@ -338,13 +338,13 @@ export default function TopUpPage() {
                                         <div className="grid grid-cols-2 gap-5">
                                             <div className="space-y-2 text-right">
                                                 <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">
-                                                    {isAlOmqy ? 'حسابك بالعمقي' : 'رقم المرجع (العملية)'}
+                                                    {isAlOmqy ? 'حسابك بالعمقي' : 'رقم المرجع'}
                                                 </Label>
                                                 <Input 
                                                     value={isAlOmqy ? alomqyAccount : kuraimiReference} 
                                                     onChange={e => isAlOmqy ? setAlomqyAccount(e.target.value.replace(/\D/g, '')) : setKuraimiReference(e.target.value.replace(/\D/g, ''))} 
-                                                    placeholder={isAlOmqy ? "25******" : "رقم العملية"} 
-                                                    className="h-16 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-xl focus-visible:ring-0 placeholder:text-primary/20 tracking-widest w-full"
+                                                    placeholder={isAlOmqy ? "25******" : "الرقم"} 
+                                                    className="h-11 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-base focus-visible:ring-0 placeholder:text-primary/20 tracking-widest w-full"
                                                     style={{ direction: 'ltr' }}
                                                 />
                                             </div>
@@ -356,7 +356,7 @@ export default function TopUpPage() {
                                                     value={bankAmount} 
                                                     onChange={e => setBankAmount(e.target.value)} 
                                                     placeholder="0.00" 
-                                                    className="h-16 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-2xl focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10 w-full" 
+                                                    className="h-11 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-base focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10 w-full" 
                                                 />
                                             </div>
                                         </div>
@@ -364,10 +364,10 @@ export default function TopUpPage() {
                                         <Button 
                                             onClick={() => handleConfirmBankDeposit(isAlOmqy ? 'alomqy' : 'kuraimi')} 
                                             disabled={isVerifyingBank} 
-                                            className="w-full h-14 rounded-3xl bg-[#0048ad] hover:bg-[#003a8c] text-white font-black text-lg shadow-xl shadow-primary/20 active:scale-95 transition-all border-none"
+                                            className="w-full h-12 rounded-2xl bg-[#0048ad] hover:bg-[#003a8c] text-white font-black text-base shadow-xl shadow-primary/20 active:scale-95 transition-all border-none"
                                         >
                                             {isVerifyingBank ? (
-                                                <Loader2 className="animate-spin h-7 w-7" />
+                                                <Loader2 className="animate-spin h-6 w-6" />
                                             ) : (
                                                 "اضافة المبلغ الى حسابي"
                                             )}
