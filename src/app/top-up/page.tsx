@@ -244,8 +244,8 @@ export default function TopUpPage() {
                             </div>
                         </div>
                         <h2 className="text-2xl font-black text-white tracking-tight">غذي حسابك بنفسك</h2>
-                        <div className="bg-white/10 backdrop-blur-sm px-5 py-2 rounded-full border border-white/10">
-                            <p className="text-[11px] text-white font-bold uppercase tracking-[0.2em]">عبر البنوك وشبكات الصرافة</p>
+                        <div className="bg-white/10 backdrop-blur-sm px-6 py-2 rounded-full border border-white/10">
+                            <p className="text-[12px] text-white font-black uppercase tracking-[0.2em]">عبر البنوك وشبكات الصرافة</p>
                         </div>
                     </div>
                 </div>
@@ -311,32 +311,28 @@ export default function TopUpPage() {
                                     {(isAlOmqy || isKuraimi) && (
                                         <div className="space-y-6 pt-4 animate-in fade-in duration-500">
                                             <div className="grid grid-cols-2 gap-4">
-                                                <div className="space-y-2">
-                                                    <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-tighter block text-right pr-1">
+                                                <div className="bg-primary/5 p-2 rounded-2xl border-2 border-solid border-[#0048ad]/40 flex flex-col items-center">
+                                                    <span className="text-[9px] font-black text-muted-foreground uppercase opacity-70 mb-0.5">
                                                         {isAlOmqy ? 'حسابك بالعمقي' : 'رقم المرجع'}
-                                                    </Label>
-                                                    <div className="bg-primary/5 p-2.5 rounded-2xl border-2 border-solid border-[#0048ad]/40 relative" dir="ltr">
-                                                        <Input 
-                                                            value={isAlOmqy ? alomqyAccount : kuraimiReference} 
-                                                            onChange={e => isAlOmqy ? setAlomqyAccount(e.target.value.replace(/\D/g, '')) : setKuraimiReference(e.target.value.replace(/\D/g, ''))} 
-                                                            placeholder={isAlOmqy ? "25**********" : "الرقم"} 
-                                                            className="bg-transparent border-none font-black text-base text-center p-0 h-auto focus-visible:ring-0 placeholder:text-primary/20 tracking-widest"
-                                                            style={{ direction: 'ltr' }}
-                                                        />
-                                                    </div>
+                                                    </span>
+                                                    <Input 
+                                                        value={isAlOmqy ? alomqyAccount : kuraimiReference} 
+                                                        onChange={e => isAlOmqy ? setAlomqyAccount(e.target.value.replace(/\D/g, '')) : setKuraimiReference(e.target.value.replace(/\D/g, ''))} 
+                                                        placeholder={isAlOmqy ? "25**********" : "الرقم"} 
+                                                        className="bg-transparent border-none font-black text-base text-center p-0 h-auto focus-visible:ring-0 placeholder:text-primary/20 tracking-widest w-full"
+                                                        style={{ direction: 'ltr' }}
+                                                    />
                                                 </div>
 
-                                                <div className="space-y-2">
-                                                    <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-tighter block text-right pr-1">المبلغ المودع</Label>
-                                                    <div className="bg-primary/5 p-2.5 rounded-2xl border-2 border-solid border-[#0048ad]/40 relative">
-                                                        <Input 
-                                                            type="number" 
-                                                            value={bankAmount} 
-                                                            onChange={e => setBankAmount(e.target.value)} 
-                                                            placeholder="0.00" 
-                                                            className="bg-transparent border-none font-black text-base text-center p-0 h-auto focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10" 
-                                                        />
-                                                    </div>
+                                                <div className="bg-primary/5 p-2 rounded-2xl border-2 border-solid border-[#0048ad]/40 flex flex-col items-center">
+                                                    <span className="text-[9px] font-black text-muted-foreground uppercase opacity-70 mb-0.5">المبلغ المودع</span>
+                                                    <Input 
+                                                        type="number" 
+                                                        value={bankAmount} 
+                                                        onChange={e => setBankAmount(e.target.value)} 
+                                                        placeholder="0.00" 
+                                                        className="bg-transparent border-none font-black text-base text-center p-0 h-auto focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10 w-full" 
+                                                    />
                                                 </div>
                                             </div>
 
