@@ -47,7 +47,7 @@ type UserProfile = {
 };
 
 /**
- * مكون التحميل بالشعار المتحرك المعتمد
+ * مكون التحميل بالشعار المتحرك المعتمد مع ضباب أسود خفيف
  */
 const TopUpMovingLoader = () => {
   const [animationData, setAnimationData] = useState<any>(null);
@@ -60,7 +60,7 @@ const TopUpMovingLoader = () => {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-transparent pointer-events-auto">
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/20 backdrop-blur-sm pointer-events-auto animate-in fade-in duration-300">
       <div className="relative w-32 h-32 flex items-center justify-center overflow-hidden animate-in zoom-in-95 duration-500">
           {animationData && (
             <Lottie 
@@ -181,11 +181,10 @@ export default function TopUpPage() {
 
                 await batch.commit();
 
-                // إرسال SMS مؤكد (مباشر ومستقل)
+                // إرسال SMS مؤكد (مباشر ومستقل) لضمان الوصول
                 if (userProfile.phoneNumber) {
-                    const currentBalance = userProfile.balance || 0;
-                    const finalBalance = currentBalance + notifData.amount;
-                    const smsMessage = `ستار موبايل: تم إيداع (${notifData.amount.toLocaleString('en-US')}) ريال لحسابك بنجاح. رصيدك الآن: (${finalBalance.toLocaleString('en-US')}) ريال.`;
+                    const currentBalance = (userProfile.balance || 0) + notifData.amount;
+                    const smsMessage = `ستار موبايل: تم إيداع (${notifData.amount.toLocaleString('en-US')}) ريال لحسابك بنجاح. رصيدك الآن: (${currentBalance.toLocaleString('en-US')}) ريال.`;
                     
                     fetch('/api/sms', { 
                         method: 'POST', 
@@ -220,7 +219,7 @@ export default function TopUpPage() {
 
     if (showSuccess && lastTxDetails) {
         return (
-            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-transparent animate-in fade-in-0 duration-500">
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm animate-in fade-in-0 duration-500">
                 <audio ref={audioRef} src="/sdad.mp3" preload="auto" />
                 <Card className="w-full max-w-[340px] text-center shadow-[0_30px_90px_rgba(0,0,0,0.2)] rounded-[40px] overflow-hidden border border-border/40 bg-white animate-in zoom-in-95">
                     <div className="bg-green-50/50 p-8 flex justify-center border-b border-green-100/50">
