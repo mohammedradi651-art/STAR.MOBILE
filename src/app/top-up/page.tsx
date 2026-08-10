@@ -255,13 +255,6 @@ export default function TopUpPage() {
 
                 <div className="px-4 space-y-8 pb-10">
                     <div className="space-y-4">
-                        <div className="flex items-center justify-between px-2">
-                             <h3 className="text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                                 <Building2 className="w-4 h-4 text-primary" />
-                                 اختر وسيلة التحويل
-                             </h3>
-                        </div>
-
                         <div className="grid grid-cols-2 gap-4">
                             {isLoadingMethods ? (
                                 [1, 2].map(i => <div key={i} className="h-32 rounded-[32px] bg-muted animate-pulse" />)
