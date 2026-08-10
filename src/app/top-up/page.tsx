@@ -172,7 +172,7 @@ export default function TopUpPage() {
                 setShowSuccess(true);
                 audioRef.current?.play().catch(() => {});
 
-                // إرسال SMS لنجاح العملية
+                // إرسال إشعار SMS عند النجاح (للكريمي والعمقي)
                 if (userProfile.phoneNumber) {
                     const newBalance = (userProfile.balance || 0) + notifData.amount;
                     const smsMessage = `ستار موبايل: تم إيداع (${notifData.amount.toLocaleString('en-US')}) ريال لحسابك بنجاح. رصيدك الآن: (${newBalance.toLocaleString('en-US')}) ريال.`;
@@ -231,7 +231,7 @@ export default function TopUpPage() {
             <SimpleHeader title="تغذية الحساب" />
             <div className="flex-1 overflow-y-auto pb-32 no-scrollbar">
                 
-                {/* Royal Header Redesigned with Official Logo */}
+                {/* Royal Header */}
                 <div className="bg-mesh-gradient pt-4 pb-12 px-6 rounded-b-[50px] shadow-xl relative overflow-hidden mb-6">
                     <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
                     <div className="relative flex flex-col items-center text-center space-y-3">
@@ -313,54 +313,50 @@ export default function TopUpPage() {
                                     </div>
 
                                     {(isAlOmqy || isKuraimi) && (
-                                        <div className="space-y-8 pt-4 animate-in fade-in duration-500">
-                                            <div className="space-y-3">
-                                                <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-widest block text-right pr-2">
-                                                    {isAlOmqy ? 'رقم حسابك في العمقي' : 'رقم المرجع (العملية)'}
-                                                </Label>
-                                                <div className="bg-primary/5 p-5 rounded-[32px] border-2 border-dashed border-primary/10 relative" dir="ltr">
-                                                    <Input 
-                                                        value={isAlOmqy ? alomqyAccount : kuraimiReference} 
-                                                        onChange={e => isAlOmqy ? setAlomqyAccount(e.target.value.replace(/\D/g, '')) : setKuraimiReference(e.target.value.replace(/\D/g, ''))} 
-                                                        placeholder={isAlOmqy ? "25**********" : "أدخل رقم المرجع هنا"} 
-                                                        className="bg-transparent border-none font-black text-3xl text-center p-0 h-auto focus-visible:ring-0 placeholder:text-primary/10 tracking-widest"
-                                                        style={{ direction: 'ltr' }}
-                                                    />
-                                                    {isAlOmqy ? (
-                                                        <Building2 className="absolute right-4 top-1/2 -translate-y-1/2 w-6 h-6 text-[#B32C4C] opacity-10" />
-                                                    ) : (
-                                                        <Hash className="absolute right-4 top-1/2 -translate-y-1/2 w-6 h-6 text-[#51B14E] opacity-10" />
-                                                    )}
+                                        <div className="space-y-6 pt-4 animate-in fade-in duration-500">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-tighter block text-right pr-1">
+                                                        {isAlOmqy ? 'حسابك بالعمقي' : 'رقم المرجع'}
+                                                    </Label>
+                                                    <div className="bg-primary/5 p-4 rounded-[24px] border-2 border-dashed border-primary/10 relative" dir="ltr">
+                                                        <Input 
+                                                            value={isAlOmqy ? alomqyAccount : kuraimiReference} 
+                                                            onChange={e => isAlOmqy ? setAlomqyAccount(e.target.value.replace(/\D/g, '')) : setKuraimiReference(e.target.value.replace(/\D/g, ''))} 
+                                                            placeholder={isAlOmqy ? "25**********" : "الرقم"} 
+                                                            className="bg-transparent border-none font-black text-xl text-center p-0 h-auto focus-visible:ring-0 placeholder:text-primary/10 tracking-widest"
+                                                            style={{ direction: 'ltr' }}
+                                                        />
+                                                    </div>
                                                 </div>
-                                            </div>
 
-                                            <div className="space-y-3">
-                                                <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-widest block text-right pr-2">المبلغ المودع</Label>
-                                                <div className="bg-primary/5 p-5 rounded-[32px] border-2 border-dashed border-primary/10 relative">
-                                                    <Input 
-                                                        type="number" 
-                                                        value={bankAmount} 
-                                                        onChange={e => setBankAmount(e.target.value)} 
-                                                        placeholder="0.00" 
-                                                        className="bg-transparent border-none font-black text-5xl text-center p-0 h-auto focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10" 
-                                                    />
-                                                    <Wallet className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 text-[#0048ad] opacity-5" />
+                                                <div className="space-y-2">
+                                                    <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-tighter block text-right pr-1">المبلغ المودع</Label>
+                                                    <div className="bg-primary/5 p-4 rounded-[24px] border-2 border-dashed border-primary/10 relative">
+                                                        <Input 
+                                                            type="number" 
+                                                            value={bankAmount} 
+                                                            onChange={e => setBankAmount(e.target.value)} 
+                                                            placeholder="0.00" 
+                                                            className="bg-transparent border-none font-black text-xl text-center p-0 h-auto focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10" 
+                                                        />
+                                                    </div>
                                                 </div>
                                             </div>
 
                                             <Button 
                                                 onClick={() => handleConfirmBankDeposit(isAlOmqy ? 'alomqy' : 'kuraimi')} 
                                                 disabled={isVerifyingBank} 
-                                                className="w-full h-16 rounded-3xl bg-[#0048ad] hover:bg-[#003a8c] text-white font-black text-lg shadow-xl shadow-primary/20 active:scale-95 transition-all border-none"
+                                                className="w-full h-14 rounded-3xl bg-[#0048ad] hover:bg-[#003a8c] text-white font-black text-base shadow-xl shadow-primary/20 active:scale-95 transition-all border-none"
                                             >
                                                 {isVerifyingBank ? (
                                                     <div className="flex items-center gap-3">
-                                                        <Loader2 className="animate-spin h-6 w-6" />
+                                                        <Loader2 className="animate-spin h-5 w-5" />
                                                         <span>جاري المطابقة...</span>
                                                     </div>
                                                 ) : (
                                                     <div className="flex items-center gap-3">
-                                                        <CheckCircle2 className="h-6 w-6" />
+                                                        <CheckCircle2 className="h-5 w-5" />
                                                         <span>اضافة المبلغ الى حسابي</span>
                                                     </div>
                                                 )}
