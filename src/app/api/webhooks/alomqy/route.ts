@@ -17,18 +17,19 @@ export async function POST(req: Request) {
     }
 
     const { firestore } = initializeServerFirebase();
-    const notificationsRef = collection(firestore, 'alomqyNotifications');
+    const notificationsRef = collection(firestore, 'bankNotifications');
 
     await addDoc(notificationsRef, {
+      bank: 'alomqy',
       account: account.toString().trim(),
       amount: parseFloat(amount),
       senderName: senderName || 'غير معروف',
       rawMessage: rawMessage || '',
-      status: 'unpaid', // الحالة الافتراضية "غير مدفوع" (أخضر في الواجهة)
+      status: 'unpaid',
       timestamp: new Date().toISOString()
     });
 
-    return NextResponse.json({ success: true, message: 'تم استلام الإشعار وحفظه' });
+    return NextResponse.json({ success: true, message: 'تم استلام إشعار العمقي وحفظه' });
   } catch (error: any) {
     console.error('Al-Omqy Webhook Error:', error);
     return NextResponse.json({ success: false, message: 'خطأ داخلي' }, { status: 500 });

@@ -6,13 +6,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
     Trash2, 
-    Bell, 
-    CheckCircle2, 
     Zap, 
     Clock, 
     Search, 
-    XCircle,
-    User,
+    CheckCircle2,
     Building2,
     CreditCard
 } from 'lucide-react';
@@ -67,7 +64,7 @@ export default function DepositManagementPage() {
     const filterNotifs = (bank: string) => {
         return notifications?.filter(n => {
             const isBank = n.bank === bank;
-            const matchesSearch = (n.senderName || '').includes(searchTerm) || 
+            const matchesSearch = (n.senderName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
                                  (n.account || '').includes(searchTerm) || 
                                  (n.reference || '').includes(searchTerm) ||
                                  String(n.amount).includes(searchTerm);
@@ -144,7 +141,7 @@ export default function DepositManagementPage() {
                                                         "p-2.5 rounded-2xl shrink-0",
                                                         notif.status === 'unpaid' ? "bg-green-500/10 text-green-600" : "bg-muted text-muted-foreground"
                                                     )}>
-                                                        {notif.status === 'unpaid' ? <Zap className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+                                                        {notif.bank === 'alomqy' ? <Zap className="w-5 h-5" /> : <CreditCard className="w-5 h-5" />}
                                                     </div>
                                                     <div className="text-right">
                                                         <h4 className="font-black text-sm text-foreground">{notif.senderName}</h4>

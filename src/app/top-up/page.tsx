@@ -10,25 +10,15 @@ import { Button } from '@/components/ui/button';
 import { 
     Copy, 
     Wallet, 
-    MapPin, 
-    ExternalLink, 
-    HelpCircle, 
-    PhoneCall, 
-    QrCode, 
-    ChevronDown,
     CircleDollarSign,
     CheckCircle2,
-    Info,
-    Hash,
-    Coins,
     Loader2,
     Smartphone,
     CheckCircle,
-    Calendar,
-    ArrowLeft,
     User as UserIcon,
     Building2,
-    CreditCard
+    CreditCard,
+    Zap
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -48,10 +38,6 @@ type PaymentMethod = {
   accountHolderName: string;
   accountNumber: string;
   logoUrl?: string;
-};
-
-type AppSettings = {
-    supportPhoneNumber: string;
 };
 
 type UserProfile = {
@@ -88,12 +74,6 @@ export default function TopUpPage() {
       [firestore, user]
     );
     const { data: userProfile } = useDoc<UserProfile>(userDocRef);
-
-    const settingsDocRef = useMemoFirebase(
-        () => (firestore ? doc(firestore, 'appSettings', 'global') : null),
-        [firestore]
-    );
-    const { data: appSettings } = useDoc<AppSettings>(settingsDocRef);
     
     const methodsCollection = useMemoFirebase(
         () => (firestore ? collection(firestore, 'paymentMethods') : null),
@@ -110,12 +90,6 @@ export default function TopUpPage() {
     const handleCopy = (accountNumber: string) => {
         navigator.clipboard.writeText(accountNumber);
         toast({ title: "تم النسخ", description: "تم نسخ رقم الحساب بنجاح." });
-    };
-
-    const handleSendWhatsApp = () => {
-        const phone = appSettings?.supportPhoneNumber;
-        if (!phone) { toast({ variant: 'destructive', title: 'خطأ', description: 'رقم الدعم غير متوفر.' }); return; }
-        window.open(`https://api.whatsapp.com/send?phone=${phone}`, '_blank');
     };
 
     const handleConfirmBankDeposit = async (bankType: 'alomqy' | 'kuraimi') => {
@@ -212,7 +186,6 @@ export default function TopUpPage() {
 
     const isAlOmqy = selectedMethod?.name.includes('العمقي');
     const isKuraimi = selectedMethod?.name.includes('الكريمي');
-    const isQutaibi = selectedMethod?.name.includes('القطيبي');
 
     if (showSuccess && lastTxDetails) {
         return (
@@ -318,7 +291,7 @@ export default function TopUpPage() {
                                         <div className="pt-4 space-y-4 border-t border-dashed border-primary/10 mt-4 animate-in fade-in-0">
                                             <div className="space-y-2 text-right">
                                                 <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mr-1">رقم المرجع (العملية)</Label>
-                                                <Input value={kuraimiReference} onChange={e => setKuraimiReference(e.target.value.replace(/\D/g, ''))} placeholder="مثال: 12345678" className="h-12 rounded-2xl bg-white border-2 border-primary/20 text-center font-bold text-lg shadow-sm" />
+                                                <Input value={kuraimiReference} onChange={e => setKuraimiReference(e.target.value.replace(/\D/g, ''))} placeholder="أدخل رقم المرجع هنا" className="h-12 rounded-2xl bg-white border-2 border-primary/20 text-center font-bold text-lg shadow-sm" />
                                             </div>
                                             <div className="space-y-2 text-right">
                                                 <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mr-1">المبلغ المودع</Label>
@@ -330,9 +303,9 @@ export default function TopUpPage() {
                                         </div>
                                     )}
 
-                                    {!isAlOmqy && !isKuraimi && !isQutaibi && (
+                                    {!isAlOmqy && !isKuraimi && (
                                         <div className="pt-4">
-                                            <Button onClick={handleSendWhatsApp} className="w-full h-12 rounded-2xl bg-mesh-gradient text-white font-black shadow-xl active:scale-95 transition-all border-none">أرسل الإيصال عبر واتساب</Button>
+                                            <Button onClick={() => window.open(`https://api.whatsapp.com/send?phone=967770326828`, '_blank')} className="w-full h-12 rounded-2xl bg-mesh-gradient text-white font-black shadow-xl active:scale-95 transition-all border-none">أرسل الإيصال عبر واتساب</Button>
                                         </div>
                                     )}
                                 </CardContent>
