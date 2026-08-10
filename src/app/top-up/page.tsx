@@ -377,7 +377,7 @@ export default function TopUpPage() {
                                             </div>
                                         </div>
 
-                                        {/* حقول المطابقة للعمقي */}
+                                        {/* حقول المطابقة للعمقي - تم تعديلها لتكون أكثر وضوحاً */}
                                         {isAlOmqySelected && (
                                             <div className="pt-4 space-y-4 border-t border-dashed border-primary/10 mt-4 animate-in fade-in-0 slide-in-from-top-2">
                                                 <div className="space-y-2 text-right">
@@ -388,7 +388,7 @@ export default function TopUpPage() {
                                                             value={alomqyAccount}
                                                             onChange={(e) => setAlomqyAccount(e.target.value.replace(/\D/g, ''))}
                                                             placeholder="ادخل رقم حسابك"
-                                                            className="h-12 rounded-2xl bg-muted/20 border-none text-center font-bold text-lg"
+                                                            className="h-12 rounded-2xl bg-white dark:bg-slate-900 border-2 border-primary/20 focus-visible:ring-primary text-center font-bold text-lg shadow-sm"
                                                         />
                                                         <Hash className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary opacity-30" />
                                                     </div>
@@ -401,7 +401,7 @@ export default function TopUpPage() {
                                                             value={alomqyAmount}
                                                             onChange={(e) => setAlomqyAmount(e.target.value)}
                                                             placeholder="0.00"
-                                                            className="h-12 rounded-2xl bg-muted/20 border-none text-center font-black text-xl"
+                                                            className="h-12 rounded-2xl bg-white dark:bg-slate-900 border-2 border-primary/20 focus-visible:ring-primary text-center font-black text-xl shadow-sm"
                                                         />
                                                         <Coins className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary opacity-30" />
                                                     </div>
