@@ -319,12 +319,12 @@ export default function TopUpPage() {
                                                     <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-tighter block text-right pr-1">
                                                         {isAlOmqy ? 'حسابك بالعمقي' : 'رقم المرجع'}
                                                     </Label>
-                                                    <div className="bg-primary/5 p-4 rounded-[24px] border-2 border-dashed border-primary/10 relative" dir="ltr">
+                                                    <div className="bg-primary/5 p-2.5 rounded-2xl border-2 border-dashed border-primary/10 relative" dir="ltr">
                                                         <Input 
                                                             value={isAlOmqy ? alomqyAccount : kuraimiReference} 
                                                             onChange={e => isAlOmqy ? setAlomqyAccount(e.target.value.replace(/\D/g, '')) : setKuraimiReference(e.target.value.replace(/\D/g, ''))} 
                                                             placeholder={isAlOmqy ? "25**********" : "الرقم"} 
-                                                            className="bg-transparent border-none font-black text-xl text-center p-0 h-auto focus-visible:ring-0 placeholder:text-primary/10 tracking-widest"
+                                                            className="bg-transparent border-none font-black text-base text-center p-0 h-auto focus-visible:ring-0 placeholder:text-primary/10 tracking-widest"
                                                             style={{ direction: 'ltr' }}
                                                         />
                                                     </div>
@@ -332,13 +332,13 @@ export default function TopUpPage() {
 
                                                 <div className="space-y-2">
                                                     <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-tighter block text-right pr-1">المبلغ المودع</Label>
-                                                    <div className="bg-primary/5 p-4 rounded-[24px] border-2 border-dashed border-primary/10 relative">
+                                                    <div className="bg-primary/5 p-2.5 rounded-2xl border-2 border-dashed border-primary/10 relative">
                                                         <Input 
                                                             type="number" 
                                                             value={bankAmount} 
                                                             onChange={e => setBankAmount(e.target.value)} 
                                                             placeholder="0.00" 
-                                                            className="bg-transparent border-none font-black text-xl text-center p-0 h-auto focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10" 
+                                                            className="bg-transparent border-none font-black text-base text-center p-0 h-auto focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10" 
                                                         />
                                                     </div>
                                                 </div>
@@ -347,7 +347,7 @@ export default function TopUpPage() {
                                             <Button 
                                                 onClick={() => handleConfirmBankDeposit(isAlOmqy ? 'alomqy' : 'kuraimi')} 
                                                 disabled={isVerifyingBank} 
-                                                className="w-full h-14 rounded-3xl bg-[#0048ad] hover:bg-[#003a8c] text-white font-black text-base shadow-xl shadow-primary/20 active:scale-95 transition-all border-none"
+                                                className="w-full h-12 rounded-2xl bg-[#0048ad] hover:bg-[#003a8c] text-white font-black text-base shadow-xl shadow-primary/20 active:scale-95 transition-all border-none"
                                             >
                                                 {isVerifyingBank ? (
                                                     <div className="flex items-center gap-3">
@@ -368,7 +368,7 @@ export default function TopUpPage() {
                                         <div className="pt-4">
                                             <Button 
                                                 onClick={() => window.open(`https://api.whatsapp.com/send?phone=967770326828`, '_blank')} 
-                                                className="w-full h-14 rounded-3xl bg-mesh-gradient text-white font-black text-base shadow-xl active:scale-95 transition-all border-none"
+                                                className="w-full h-12 rounded-2xl bg-mesh-gradient text-white font-black text-base shadow-xl active:scale-95 transition-all border-none"
                                             >
                                                 أرسل الإيصال عبر واتساب
                                             </Button>
