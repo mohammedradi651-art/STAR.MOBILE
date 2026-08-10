@@ -18,7 +18,9 @@ import {
     Building2,
     CreditCard,
     Zap,
-    Hash
+    Hash,
+    Clock,
+    MapPin
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -377,15 +379,25 @@ export default function TopUpPage() {
                                 </CardContent>
                             </Card>
 
-                            <div className="bg-primary/5 p-6 rounded-[36px] border border-primary/5 flex items-start gap-4">
-                                <div className="bg-primary/10 p-2.5 rounded-xl mt-0.5">
-                                    <Building2 className="h-5 w-5 text-primary" />
+                            <div className="bg-white dark:bg-slate-900 rounded-[32px] p-6 shadow-sm border border-primary/5 flex items-center gap-4 animate-in fade-in duration-700" dir="rtl">
+                                <div className="relative h-16 w-16 overflow-hidden rounded-2xl border-2 border-primary/10 shrink-0 shadow-sm bg-white">
+                                    <Image 
+                                        src="https://i.postimg.cc/2551nF1s/20260308-183624.jpg" 
+                                        alt="Star Media Logo" 
+                                        fill 
+                                        className="object-cover" 
+                                    />
                                 </div>
-                                <div className="text-right space-y-1">
-                                    <h4 className="text-xs font-black text-primary uppercase">الوكيل الرسمي ستار ميديا</h4>
-                                    <p className="text-[10px] text-muted-foreground font-bold leading-relaxed">
-                                        يمكنك تغذية حسابك نقداً عبر زيارة فرعنا "ستار ميديا" في شبام - حضرموت، أو التواصل مع الإدارة مباشرة لإرسال إيصال التحويل يدوياً.
-                                    </p>
+                                <div className="text-right flex-1 space-y-1">
+                                    <h4 className="text-sm font-black text-primary">الوكيل الرسمي ستار ميديا</h4>
+                                    <div className="flex items-center gap-1.5 opacity-80">
+                                        <MapPin className="w-3 h-3 text-primary/60" />
+                                        <p className="text-[10px] font-bold text-muted-foreground">شبام - حضرموت - الوادي</p>
+                                    </div>
+                                    <div className="flex items-center gap-2 pt-1 border-t border-muted-foreground/10">
+                                        <Clock className="w-3 h-3 text-primary/40" />
+                                        <span className="text-[9px] font-black text-muted-foreground">أوقات العمل: 8:00 صباحاً - 10:00 مساءً</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -396,3 +408,4 @@ export default function TopUpPage() {
         </div>
     );
 }
+
