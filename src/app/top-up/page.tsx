@@ -155,7 +155,7 @@ export default function TopUpPage() {
                 toast({ 
                     variant: 'destructive', 
                     title: 'فشل المطابقة', 
-                    description: 'نعتذر، لم يتم العثور على إيصال مطابق للعملية المرسلة في النظام.' 
+                    description: 'نعتذر، لم يتم العثور على إيصال مطابق للعملية في النظام.' 
                 });
             } else {
                 const notifDoc = querySnapshot.docs[0];
@@ -164,9 +164,11 @@ export default function TopUpPage() {
                 const batch = writeBatch(firestore);
                 const now = new Date().toISOString();
 
+                // تحديث الرصيد وحالة الإشعار
                 batch.update(userDocRef, { balance: increment(notifData.amount) });
                 batch.update(notifDoc.ref, { status: 'paid', paidTo: userProfile.id, paidAt: now });
 
+                // سجل العملية
                 const txRef = doc(collection(firestore, `users/${userProfile.id}/transactions`));
                 batch.set(txRef, {
                     userId: userProfile.id,
@@ -179,6 +181,22 @@ export default function TopUpPage() {
 
                 await batch.commit();
 
+                // إرسال SMS مؤكد (مباشر ومستقل)
+                if (userProfile.phoneNumber) {
+                    const currentBalance = userProfile.balance || 0;
+                    const finalBalance = currentBalance + notifData.amount;
+                    const smsMessage = `ستار موبايل: تم إيداع (${notifData.amount.toLocaleString('en-US')}) ريال لحسابك بنجاح. رصيدك الآن: (${finalBalance.toLocaleString('en-US')}) ريال.`;
+                    
+                    fetch('/api/sms', { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify({ 
+                            phoneNumber: userProfile.phoneNumber.trim(), 
+                            message: smsMessage 
+                        }) 
+                    }).catch(e => console.error("SMS Confirmation Error:", e));
+                }
+
                 setLastTxDetails({
                     account: bankType === 'alomqy' ? alomqyAccount : kuraimiReference,
                     amount: notifData.amount,
@@ -188,23 +206,10 @@ export default function TopUpPage() {
                 
                 setShowSuccess(true);
                 audioRef.current?.play().catch(() => {});
-
-                // إرسال SMS تلقائي عند النجاح
-                if (userProfile.phoneNumber) {
-                    const newBalance = (userProfile.balance || 0) + notifData.amount;
-                    const smsMessage = `ستار موبايل: تم إيداع (${notifData.amount.toLocaleString('en-US')}) ريال لحسابك بنجاح. رصيدك الآن: (${newBalance.toLocaleString('en-US')}) ريال.`;
-                    fetch('/api/sms', { 
-                        method: 'POST', 
-                        headers: { 'Content-Type': 'application/json' }, 
-                        body: JSON.stringify({ 
-                            phoneNumber: userProfile.phoneNumber, 
-                            message: smsMessage 
-                        }) 
-                    }).catch(e => console.error("SMS Notify Error:", e));
-                }
             }
         } catch (error: any) {
-            toast({ variant: 'destructive', title: 'خطأ', description: 'حدث خطأ غير متوقع أثناء معالجة الطلب.' });
+            console.error("Bank Deposit Processing Error:", error);
+            toast({ variant: 'destructive', title: 'خطأ', description: 'حدث خطأ تقني أثناء معالجة الطلب.' });
         } finally {
             setIsVerifyingBank(false);
         }
@@ -217,13 +222,13 @@ export default function TopUpPage() {
         return (
             <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-transparent animate-in fade-in-0 duration-500">
                 <audio ref={audioRef} src="/sdad.mp3" preload="auto" />
-                <Card className="w-full max-w-[340px] text-center shadow-[0_20px_60px_rgba(0,0,0,0.15)] rounded-[40px] overflow-hidden border border-border/40 bg-white animate-in zoom-in-95">
+                <Card className="w-full max-w-[340px] text-center shadow-[0_30px_90px_rgba(0,0,0,0.2)] rounded-[40px] overflow-hidden border border-border/40 bg-white animate-in zoom-in-95">
                     <div className="bg-green-50/50 p-8 flex justify-center border-b border-green-100/50">
                         <div className="bg-green-500/10 p-4 rounded-full">
                             <CheckCircle className="h-12 w-12 text-green-500 animate-bounce" />
                         </div>
                     </div>
-                    <CardContent className="p-10 space-y-6">
+                    <CardContent className="p-8 space-y-6">
                         <div className="space-y-2">
                             <p className="text-base font-black text-foreground/80 leading-relaxed">
                                 تم اضافة مبلغ <span className="text-green-600 underline underline-offset-4">{lastTxDetails.amount.toLocaleString()}</span> في حسابك بنجاح
@@ -271,8 +276,8 @@ export default function TopUpPage() {
                     </div>
                 </div>
 
-                <div className="px-4 space-y-8 pb-10">
-                    <div className="space-y-4">
+                <div className="space-y-8 pb-10">
+                    <div className="px-4 space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                             {isLoadingMethods ? (
                                 [1, 2].map(i => <div key={i} className="h-32 rounded-[32px] bg-muted animate-pulse" />)
@@ -311,78 +316,76 @@ export default function TopUpPage() {
                     {selectedMethod && (
                         <div className="space-y-6 animate-in fade-in-0 slide-in-from-bottom-4 duration-700">
                             
-                            <Card className="border-none shadow-[0_20px_50px_rgba(0,0,0,0.08)] rounded-[48px] overflow-hidden bg-white dark:bg-slate-900 border border-primary/5 w-full">
-                                <CardContent className="p-10 text-center space-y-10">
-                                    <div className="bg-mesh-gradient p-8 rounded-[40px] border-2 border-dashed border-white/20 flex flex-col items-center gap-5 text-white shadow-2xl w-full">
-                                        <p className="text-[11px] font-black text-white/70 uppercase tracking-widest">حول إلى هذا الحساب</p>
-                                        <div className="flex items-center gap-6">
-                                            <span className="text-4xl font-black font-mono tracking-widest text-white drop-shadow-lg">{selectedMethod.accountNumber}</span>
-                                            <button 
-                                                onClick={() => handleCopy(selectedMethod.accountNumber)} 
-                                                className="p-3 bg-white/20 text-white rounded-2xl shadow-xl active:scale-90 transition-transform backdrop-blur-md border border-white/10"
-                                            >
-                                                <Copy className="w-5 h-5" />
-                                            </button>
-                                        </div>
-                                        <div className="bg-white/20 px-8 py-2.5 rounded-full border border-white/10 backdrop-blur-md shadow-inner">
-                                            <p className="text-[12px] font-black text-white uppercase tracking-tight">باسم: {selectedMethod.accountHolderName}</p>
-                                        </div>
-                                    </div>
+                            <div className="bg-mesh-gradient py-10 px-8 rounded-none sm:rounded-[48px] border-y-2 sm:border-2 border-dashed border-white/20 flex flex-col items-center gap-6 text-white shadow-2xl w-full text-center">
+                                <p className="text-[11px] font-black text-white/70 uppercase tracking-widest">حول إلى هذا الحساب الموحد</p>
+                                <div className="flex items-center gap-6">
+                                    <span className="text-4xl font-black font-mono tracking-widest text-white drop-shadow-lg">{selectedMethod.accountNumber}</span>
+                                    <button 
+                                        onClick={() => handleCopy(selectedMethod.accountNumber)} 
+                                        className="p-3 bg-white/20 text-white rounded-2xl shadow-xl active:scale-90 transition-transform backdrop-blur-md border border-white/10"
+                                    >
+                                        <Copy className="w-5 h-5" />
+                                    </button>
+                                </div>
+                                <div className="bg-white/20 px-10 py-3 rounded-full border border-white/10 backdrop-blur-md shadow-inner">
+                                    <p className="text-[14px] font-black text-white uppercase tracking-tight">باسم: {selectedMethod.accountHolderName}</p>
+                                </div>
+                            </div>
 
-                                    {(isAlOmqy || isKuraimi) && (
-                                        <div className="space-y-10 pt-4 animate-in fade-in duration-500">
-                                            <div className="grid grid-cols-2 gap-5">
-                                                <div className="space-y-2 text-right">
-                                                    <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">
-                                                        {isAlOmqy ? 'حسابك بالعمقي' : 'رقم المرجع'}
-                                                    </Label>
-                                                    <Input 
-                                                        value={isAlOmqy ? alomqyAccount : kuraimiReference} 
-                                                        onChange={e => isAlOmqy ? setAlomqyAccount(e.target.value.replace(/\D/g, '')) : setKuraimiReference(e.target.value.replace(/\D/g, ''))} 
-                                                        placeholder={isAlOmqy ? "25******" : "الرقم"} 
-                                                        className="h-16 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-xl focus-visible:ring-0 placeholder:text-primary/20 tracking-widest w-full"
-                                                        style={{ direction: 'ltr' }}
-                                                    />
-                                                </div>
-
-                                                <div className="space-y-2 text-right">
-                                                    <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">المبلغ المودع</Label>
-                                                    <Input 
-                                                        type="number" 
-                                                        value={bankAmount} 
-                                                        onChange={e => setBankAmount(e.target.value)} 
-                                                        placeholder="0.00" 
-                                                        className="h-16 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-2xl focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10 w-full" 
-                                                    />
-                                                </div>
+                            <div className="px-4">
+                                {(isAlOmqy || isKuraimi) && (
+                                    <div className="space-y-8 pt-4 animate-in fade-in duration-500">
+                                        <div className="grid grid-cols-2 gap-5">
+                                            <div className="space-y-2 text-right">
+                                                <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">
+                                                    {isAlOmqy ? 'حسابك بالعمقي' : 'رقم المرجع (العملية)'}
+                                                </Label>
+                                                <Input 
+                                                    value={isAlOmqy ? alomqyAccount : kuraimiReference} 
+                                                    onChange={e => isAlOmqy ? setAlomqyAccount(e.target.value.replace(/\D/g, '')) : setKuraimiReference(e.target.value.replace(/\D/g, ''))} 
+                                                    placeholder={isAlOmqy ? "25******" : "رقم العملية"} 
+                                                    className="h-16 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-xl focus-visible:ring-0 placeholder:text-primary/20 tracking-widest w-full"
+                                                    style={{ direction: 'ltr' }}
+                                                />
                                             </div>
 
-                                            <Button 
-                                                onClick={() => handleConfirmBankDeposit(isAlOmqy ? 'alomqy' : 'kuraimi')} 
-                                                disabled={isVerifyingBank} 
-                                                className="w-full h-14 rounded-3xl bg-[#0048ad] hover:bg-[#003a8c] text-white font-black text-lg shadow-xl shadow-primary/20 active:scale-95 transition-all border-none"
-                                            >
-                                                {isVerifyingBank ? (
-                                                    <Loader2 className="animate-spin h-7 w-7" />
-                                                ) : (
-                                                    "اضافة المبلغ الى حسابي"
-                                                )}
-                                            </Button>
+                                            <div className="space-y-2 text-right">
+                                                <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">المبلغ المودع</Label>
+                                                <Input 
+                                                    type="number" 
+                                                    value={bankAmount} 
+                                                    onChange={e => setBankAmount(e.target.value)} 
+                                                    placeholder="0.00" 
+                                                    className="h-16 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-2xl focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10 w-full" 
+                                                />
+                                            </div>
                                         </div>
-                                    )}
 
-                                    {!isAlOmqy && !isKuraimi && (
-                                        <div className="pt-4">
-                                            <Button 
-                                                onClick={() => window.open(`https://api.whatsapp.com/send?phone=967770326828`, '_blank')} 
-                                                className="w-full h-14 rounded-3xl bg-mesh-gradient text-white font-black text-lg shadow-2xl active:scale-95 transition-all border-none"
-                                            >
-                                                أرسل الإيصال عبر واتساب
-                                            </Button>
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
+                                        <Button 
+                                            onClick={() => handleConfirmBankDeposit(isAlOmqy ? 'alomqy' : 'kuraimi')} 
+                                            disabled={isVerifyingBank} 
+                                            className="w-full h-14 rounded-3xl bg-[#0048ad] hover:bg-[#003a8c] text-white font-black text-lg shadow-xl shadow-primary/20 active:scale-95 transition-all border-none"
+                                        >
+                                            {isVerifyingBank ? (
+                                                <Loader2 className="animate-spin h-7 w-7" />
+                                            ) : (
+                                                "اضافة المبلغ الى حسابي"
+                                            )}
+                                        </Button>
+                                    </div>
+                                )}
+
+                                {!isAlOmqy && !isKuraimi && (
+                                    <div className="pt-4">
+                                        <Button 
+                                            onClick={() => window.open(`https://api.whatsapp.com/send?phone=967770326828`, '_blank')} 
+                                            className="w-full h-14 rounded-3xl bg-mesh-gradient text-white font-black text-lg shadow-2xl active:scale-95 transition-all border-none"
+                                        >
+                                            أرسل الإيصال عبر واتساب
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>
