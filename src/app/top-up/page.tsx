@@ -25,7 +25,8 @@ import {
     Smartphone,
     CheckCircle,
     Calendar,
-    ArrowLeft
+    ArrowLeft,
+    User as UserIcon
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -240,6 +241,7 @@ export default function TopUpPage() {
                 setLastTxDetails({
                     account: alomqyAccount,
                     amount: notifData.amount,
+                    senderName: notifData.senderName || 'غير معروف',
                     date: now
                 });
                 
@@ -341,22 +343,27 @@ export default function TopUpPage() {
 
     if (showSuccess && lastTxDetails) {
         return (
-            <div className="flex flex-col h-full bg-[#F4F7F9] dark:bg-slate-950">
+            <div className="flex flex-col h-full">
                 <audio ref={audioRef} src="/sdad.mp3" preload="auto" />
                 <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-[100] flex items-center justify-center animate-in fade-in-0 p-4">
-                    <Card className="w-full max-sm text-center shadow-2xl rounded-[40px] overflow-hidden border-none bg-card">
-                        <div className="bg-green-500 p-8 flex justify-center">
-                            <div className="bg-white/20 p-4 rounded-full animate-bounce">
-                                <CheckCircle className="h-16 w-16 text-white" />
+                    <Card className="w-full max-w-[320px] text-center shadow-2xl rounded-[40px] overflow-hidden border-none bg-card/95 backdrop-blur-xl scale-[0.98]">
+                        <div className="bg-green-500 p-8 flex justify-center relative overflow-hidden">
+                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,white/20,transparent_70%)]" />
+                            <div className="bg-white/20 p-4 rounded-full animate-bounce relative z-10">
+                                <CheckCircle className="h-12 w-12 text-white" />
                             </div>
                         </div>
                         <CardContent className="p-8 space-y-6">
                             <div>
-                                <h2 className="text-2xl font-black text-green-600">تم الإيداع بنجاح</h2>
-                                <p className="text-sm text-muted-foreground mt-1">تغذية آلية عبر حساب العمقي</p>
+                                <h2 className="text-xl font-black text-green-600">تم الإيداع بنجاح</h2>
+                                <p className="text-xs text-muted-foreground mt-1 font-bold">تغذية آلية عبر حساب العمقي</p>
                             </div>
 
                             <div className="w-full space-y-3 text-sm bg-muted/50 p-5 rounded-[24px] text-right border-2 border-dashed border-[#B32C4C]/10">
+                                <div className="flex justify-between items-center border-b border-muted pb-2">
+                                    <span className="text-muted-foreground flex items-center gap-2"><UserIcon className="w-3.5 h-3.5" /> اسم المودع:</span>
+                                    <span className="font-bold text-foreground truncate max-w-[120px]">{lastTxDetails.senderName}</span>
+                                </div>
                                 <div className="flex justify-between items-center border-b border-muted pb-2">
                                     <span className="text-muted-foreground flex items-center gap-2"><Smartphone className="w-3.5 h-3.5" /> حساب العميل:</span>
                                     <span className="font-mono font-bold tracking-widest">{lastTxDetails.account}</span>
@@ -367,12 +374,12 @@ export default function TopUpPage() {
                                 </div>
                                 <div className="flex justify-between items-center pt-1">
                                     <span className="text-muted-foreground flex items-center gap-2"><Calendar className="w-3.5 h-3.5" /> التاريخ:</span>
-                                    <span className="text-[10px] font-bold">{format(parseISO(lastTxDetails.date), 'Pp', { locale: ar })}</span>
+                                    <span className="text-[9px] font-bold">{format(parseISO(lastTxDetails.date), 'Pp', { locale: ar })}</span>
                                 </div>
                             </div>
 
                             <Button 
-                                className="w-full h-14 rounded-2xl font-black text-lg shadow-lg active:scale-95 transition-transform" 
+                                className="w-full h-12 rounded-2xl font-black text-base shadow-lg active:scale-95 transition-transform bg-[#B32C4C] hover:bg-[#B32C4C]/90 text-white" 
                                 onClick={() => router.push('/login')}
                             >
                                 العودة للرئيسية

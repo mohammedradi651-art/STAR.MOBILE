@@ -67,7 +67,7 @@ export default function OmqyManagementPage() {
     const { data: notifications, isLoading } = useCollection<AlOmqyNotif>(omqyQuery);
 
     const filteredNotifs = notifications?.filter(n => {
-        const matchesSearch = n.senderName.includes(searchTerm) || n.account.includes(searchTerm) || String(n.amount).includes(searchTerm);
+        const matchesSearch = (n.senderName || '').includes(searchTerm) || n.account.includes(searchTerm) || String(n.amount).includes(searchTerm);
         const matchesStatus = statusFilter === 'all' || n.status === statusFilter;
         return matchesSearch && matchesStatus;
     });
@@ -170,7 +170,7 @@ export default function OmqyManagementPage() {
                                                 {notif.status === 'unpaid' ? <Zap className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
                                             </div>
                                             <div className="text-right">
-                                                <h4 className="font-black text-sm text-foreground">{notif.senderName}</h4>
+                                                <h4 className="font-black text-sm text-foreground">{notif.senderName || 'غير معروف'}</h4>
                                                 <p className="text-[10px] font-bold text-muted-foreground">رقم الحساب: <span className="font-mono tracking-wider">{notif.account}</span></p>
                                             </div>
                                         </div>
@@ -212,7 +212,7 @@ export default function OmqyManagementPage() {
                                                 </AlertDialogHeader>
                                                 <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-6 sm:space-x-0">
                                                     <AlertDialogAction onClick={() => handleDelete(notif.id)} className="w-full rounded-2xl h-12 bg-destructive hover:bg-destructive/90 font-bold">تأكيد الحذف</AlertDialogAction>
-                                                    <AlertDialogCancel className="w-full rounded-2xl h-12 mt-0 font-bold">إلغاء</AlertDialogCancel>
+                                                    <AlertDialogCancel className="w-full rounded-2xl h-12 mt-0 font-black">إلغاء</AlertDialogCancel>
                                                 </AlertDialogFooter>
                                             </AlertDialogContent>
                                         </AlertDialog>

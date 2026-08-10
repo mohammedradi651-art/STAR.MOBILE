@@ -319,7 +319,7 @@ export default function AccountPage() {
                                         {notif.status === 'unpaid' ? <Zap className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
                                     </div>
                                     <div className="text-right flex-1 truncate">
-                                        <p className="text-[11px] font-black text-foreground truncate">{notif.senderName}</p>
+                                        <p className="text-[11px] font-black text-foreground truncate">{notif.senderName || 'غير معروف'}</p>
                                         <p className="text-[9px] font-bold text-muted-foreground">حساب: {notif.account}</p>
                                     </div>
                                 </div>
