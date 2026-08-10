@@ -172,7 +172,6 @@ export default function TopUpPage() {
                 setShowSuccess(true);
                 audioRef.current?.play().catch(() => {});
 
-                // إرسال إشعار SMS عند النجاح (للكريمي والعمقي)
                 if (userProfile.phoneNumber) {
                     const newBalance = (userProfile.balance || 0) + notifData.amount;
                     const smsMessage = `ستار موبايل: تم إيداع (${notifData.amount.toLocaleString('en-US')}) ريال لحسابك بنجاح. رصيدك الآن: (${newBalance.toLocaleString('en-US')}) ريال.`;
@@ -231,7 +230,6 @@ export default function TopUpPage() {
             <SimpleHeader title="تغذية الحساب" />
             <div className="flex-1 overflow-y-auto pb-32 no-scrollbar">
                 
-                {/* Royal Header */}
                 <div className="bg-mesh-gradient pt-4 pb-12 px-6 rounded-b-[50px] shadow-xl relative overflow-hidden mb-6">
                     <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
                     <div className="relative flex flex-col items-center text-center space-y-3">
@@ -296,19 +294,19 @@ export default function TopUpPage() {
                             
                             <Card className="border-none shadow-xl rounded-[40px] overflow-hidden bg-white dark:bg-slate-900 border border-primary/5">
                                 <CardContent className="p-8 text-center space-y-8">
-                                    <div className="bg-primary/5 p-5 rounded-3xl border-2 border-dashed border-primary/10 flex flex-col items-center gap-3">
-                                        <p className="text-[10px] font-black text-primary/60 uppercase tracking-widest">حول إلى هذا الحساب</p>
-                                        <div className="flex items-center gap-4">
-                                            <span className="text-3xl font-black font-mono tracking-tighter text-[#0048ad]">{selectedMethod.accountNumber}</span>
+                                    <div className="bg-mesh-gradient p-6 rounded-[32px] border-2 border-dashed border-white/20 flex flex-col items-center gap-4 text-white shadow-xl">
+                                        <p className="text-[10px] font-black text-white/70 uppercase tracking-widest">حول إلى هذا الحساب</p>
+                                        <div className="flex items-center gap-5">
+                                            <span className="text-3xl font-black font-mono tracking-[0.2em] text-white drop-shadow-md">{selectedMethod.accountNumber}</span>
                                             <button 
                                                 onClick={() => handleCopy(selectedMethod.accountNumber)} 
-                                                className="p-2.5 bg-[#0048ad] text-white rounded-2xl shadow-lg active:scale-90 transition-transform"
+                                                className="p-2.5 bg-white/20 text-white rounded-2xl shadow-lg active:scale-90 transition-transform backdrop-blur-md border border-white/10"
                                             >
                                                 <Copy className="w-4 h-4" />
                                             </button>
                                         </div>
-                                        <div className="bg-white/50 px-4 py-1.5 rounded-full border border-primary/5">
-                                            <p className="text-[11px] font-black text-foreground/80">باسم: {selectedMethod.accountHolderName}</p>
+                                        <div className="bg-white/20 px-5 py-2 rounded-full border border-white/10 backdrop-blur-md">
+                                            <p className="text-[11px] font-black text-white">باسم: {selectedMethod.accountHolderName}</p>
                                         </div>
                                     </div>
 
