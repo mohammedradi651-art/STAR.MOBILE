@@ -314,9 +314,9 @@ export default function TopUpPage() {
                     </div>
 
                     {selectedMethod && (
-                        <div className="space-y-6 animate-in fade-in-0 slide-in-from-bottom-4 duration-700">
+                        <div className="space-y-6 animate-in fade-in-0 slide-in-from-bottom-4 duration-700 px-4">
                             
-                            <div className="bg-mesh-gradient py-6 px-8 rounded-none sm:rounded-[48px] border-y-2 sm:border-2 border-dashed border-white/20 flex flex-col items-center gap-3 text-white shadow-2xl w-full text-center">
+                            <div className="bg-mesh-gradient py-6 px-8 rounded-[48px] border-2 border-dashed border-white/20 flex flex-col items-center gap-3 text-white shadow-2xl w-full text-center">
                                 <p className="text-[10px] font-black text-white/70 uppercase tracking-widest">حول إلى هذا الحساب الموحد</p>
                                 <div className="flex items-center gap-4">
                                     <span className="text-3xl font-black font-mono tracking-widest text-white drop-shadow-lg">{selectedMethod.accountNumber}</span>
@@ -332,7 +332,7 @@ export default function TopUpPage() {
                                 </div>
                             </div>
 
-                            <div className="px-4">
+                            <div className="px-0">
                                 {(isAlOmqy || isKuraimi) && (
                                     <div className="space-y-8 pt-4 animate-in fade-in duration-500">
                                         <div className="grid grid-cols-2 gap-5">
