@@ -315,12 +315,11 @@ export default function TopUpPage() {
                                                 <Label className="text-[10px] font-black text-muted-foreground uppercase pr-2 mb-1 block">
                                                     {isAlOmqy ? 'رقم حسابك في العمقي' : 'رقم المرجع (العملية)'}
                                                 </Label>
-                                                <div className="relative">
+                                                <div className="relative" dir="ltr">
                                                     <Input 
                                                         value={isAlOmqy ? alomqyAccount : kuraimiReference} 
                                                         onChange={e => isAlOmqy ? setAlomqyAccount(e.target.value.replace(/\D/g, '')) : setKuraimiReference(e.target.value.replace(/\D/g, ''))} 
                                                         placeholder={isAlOmqy ? "25**********" : "أدخل رقم المرجع هنا"} 
-                                                        dir="ltr"
                                                         className="h-14 rounded-2xl bg-muted/20 border-2 border-primary/5 text-center font-black text-xl shadow-inner focus-visible:ring-2 focus-visible:ring-[#0048ad]/30" 
                                                     />
                                                     {isAlOmqy ? (
@@ -380,12 +379,12 @@ export default function TopUpPage() {
 
                             <div className="bg-primary/5 p-6 rounded-[36px] border border-primary/5 flex items-start gap-4">
                                 <div className="bg-primary/10 p-2.5 rounded-xl mt-0.5">
-                                    <CheckCircle2 className="h-5 w-5 text-primary" />
+                                    <Building2 className="h-5 w-5 text-primary" />
                                 </div>
                                 <div className="text-right space-y-1">
-                                    <h4 className="text-xs font-black text-primary uppercase">نظام المطابقة الذكية</h4>
+                                    <h4 className="text-xs font-black text-primary uppercase">الوكيل الرسمي ستار ميديا</h4>
                                     <p className="text-[10px] text-muted-foreground font-bold leading-relaxed">
-                                        سيقوم النظام بمطابقة بياناتك مع إشعارات البنك فوراً، وفي حال التطابق سيتم شحن حسابك تلقائياً دون انتظار الإدارة.
+                                        يمكنك تغذية حسابك نقداً عبر زيارة فرعنا "ستار ميديا" في شبام - حضرموت، أو التواصل مع الإدارة مباشرة لإرسال إيصال التحويل يدوياً.
                                     </p>
                                 </div>
                             </div>
