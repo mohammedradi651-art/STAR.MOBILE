@@ -13,12 +13,10 @@ import {
     Loader2,
     Smartphone,
     CheckCircle,
-    Building2,
     Zap,
-    Hash,
+    Calendar,
     Clock,
-    ShieldCheck,
-    DollarSign
+    ShieldCheck
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -297,7 +295,7 @@ export default function TopUpPage() {
                                     <div className="bg-mesh-gradient p-6 rounded-[32px] border-2 border-dashed border-white/20 flex flex-col items-center gap-4 text-white shadow-xl">
                                         <p className="text-[10px] font-black text-white/70 uppercase tracking-widest">حول إلى هذا الحساب</p>
                                         <div className="flex items-center gap-5">
-                                            <span className="text-3xl font-black font-mono tracking-[0.2em] text-white drop-shadow-md">{selectedMethod.accountNumber}</span>
+                                            <span className="text-3xl font-black font-mono tracking-widest text-white drop-shadow-md">{selectedMethod.accountNumber}</span>
                                             <button 
                                                 onClick={() => handleCopy(selectedMethod.accountNumber)} 
                                                 className="p-2.5 bg-white/20 text-white rounded-2xl shadow-lg active:scale-90 transition-transform backdrop-blur-md border border-white/10"
@@ -317,12 +315,12 @@ export default function TopUpPage() {
                                                     <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-tighter block text-right pr-1">
                                                         {isAlOmqy ? 'حسابك بالعمقي' : 'رقم المرجع'}
                                                     </Label>
-                                                    <div className="bg-primary/5 p-2.5 rounded-2xl border-2 border-dashed border-primary/10 relative" dir="ltr">
+                                                    <div className="bg-primary/5 p-2.5 rounded-2xl border-2 border-solid border-[#0048ad]/40 relative" dir="ltr">
                                                         <Input 
                                                             value={isAlOmqy ? alomqyAccount : kuraimiReference} 
                                                             onChange={e => isAlOmqy ? setAlomqyAccount(e.target.value.replace(/\D/g, '')) : setKuraimiReference(e.target.value.replace(/\D/g, ''))} 
                                                             placeholder={isAlOmqy ? "25**********" : "الرقم"} 
-                                                            className="bg-transparent border-none font-black text-base text-center p-0 h-auto focus-visible:ring-0 placeholder:text-primary/10 tracking-widest"
+                                                            className="bg-transparent border-none font-black text-base text-center p-0 h-auto focus-visible:ring-0 placeholder:text-primary/20 tracking-widest"
                                                             style={{ direction: 'ltr' }}
                                                         />
                                                     </div>
@@ -330,7 +328,7 @@ export default function TopUpPage() {
 
                                                 <div className="space-y-2">
                                                     <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-tighter block text-right pr-1">المبلغ المودع</Label>
-                                                    <div className="bg-primary/5 p-2.5 rounded-2xl border-2 border-dashed border-primary/10 relative">
+                                                    <div className="bg-primary/5 p-2.5 rounded-2xl border-2 border-solid border-[#0048ad]/40 relative">
                                                         <Input 
                                                             type="number" 
                                                             value={bankAmount} 
