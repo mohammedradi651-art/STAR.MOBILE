@@ -9,18 +9,15 @@ import { Button } from '@/components/ui/button';
 import { 
     Copy, 
     Wallet, 
-    CircleDollarSign,
     CheckCircle2,
     Loader2,
     Smartphone,
     CheckCircle,
     Building2,
-    CreditCard,
     Zap,
     Hash,
     Clock,
-    MapPin,
-    ArrowUpRight
+    ShieldCheck
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -29,7 +26,7 @@ import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useRouter } from 'next/navigation';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 
@@ -233,11 +230,21 @@ export default function TopUpPage() {
             <SimpleHeader title="تغذية الحساب" />
             <div className="flex-1 overflow-y-auto pb-32 no-scrollbar">
                 
-                <div className="bg-mesh-gradient pt-6 pb-12 px-6 rounded-b-[50px] shadow-xl relative overflow-hidden mb-8">
+                {/* Royal Header Redesigned with Official Logo */}
+                <div className="bg-mesh-gradient pt-4 pb-12 px-6 rounded-b-[50px] shadow-xl relative overflow-hidden mb-6">
                     <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-                    <div className="relative flex flex-col items-center text-center space-y-4">
-                        <div className="bg-white/20 p-3 rounded-[24px] backdrop-blur-md border border-white/20 shadow-2xl animate-in zoom-in-95 duration-700">
-                            <CircleDollarSign className="h-8 w-8 text-white" />
+                    <div className="relative flex flex-col items-center text-center space-y-3">
+                        <div className="relative w-20 h-20 mb-2">
+                            <div className="absolute inset-0 bg-white/20 rounded-[30px] blur-xl animate-pulse" />
+                            <div className="relative w-full h-full overflow-hidden rounded-[26px] border-4 border-white/30 shadow-2xl bg-white p-1">
+                                <Image 
+                                    src="https://i.postimg.cc/2551nF1s/20260308-183624.jpg" 
+                                    alt="Star Mobile Logo" 
+                                    fill
+                                    className="object-cover"
+                                    priority
+                                />
+                            </div>
                         </div>
                         <h2 className="text-2xl font-black text-white tracking-tight">غذي حسابك بنفسك</h2>
                         <div className="bg-white/10 backdrop-blur-sm px-4 py-1.5 rounded-full border border-white/10">
