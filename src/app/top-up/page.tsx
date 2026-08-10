@@ -151,7 +151,7 @@ export default function TopUpPage() {
                 const txRef = doc(collection(firestore, `users/${userProfile.id}/transactions`));
                 batch.set(txRef, {
                     userId: userProfile.id,
-                    transactionDate: now,
+                    transactionDate: new Date().toISOString(),
                     amount: notifData.amount,
                     transactionType: `تغذية آلي - ${bankType === 'alomqy' ? 'العمقي' : 'الكريمي'}`,
                     notes: `مطابقة آلية لـ ${bankType === 'alomqy' ? 'حساب' : 'مرجع'}: ${bankType === 'alomqy' ? alomqyAccount : kuraimiReference}`,
@@ -244,8 +244,8 @@ export default function TopUpPage() {
                             </div>
                         </div>
                         <h2 className="text-2xl font-black text-white tracking-tight">غذي حسابك بنفسك</h2>
-                        <div className="bg-white/10 backdrop-blur-sm px-4 py-1.5 rounded-full border border-white/10">
-                            <p className="text-[10px] text-white font-bold uppercase tracking-[0.2em]">عبر البنوك وشبكات الصرافة</p>
+                        <div className="bg-white/10 backdrop-blur-sm px-5 py-2 rounded-full border border-white/10">
+                            <p className="text-[11px] text-white font-bold uppercase tracking-[0.2em]">عبر البنوك وشبكات الصرافة</p>
                         </div>
                     </div>
                 </div>
