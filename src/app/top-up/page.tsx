@@ -149,7 +149,6 @@ export default function TopUpPage() {
                     limit(1)
                 );
             } else {
-                // منطق بنك أمجاد: مطابقة المبلغ والاسم الرباعي للمستخدم
                 q = query(notifsRef,
                     where('bank', '==', 'amjad'),
                     where('amount', '==', amt),
@@ -176,11 +175,9 @@ export default function TopUpPage() {
                 const batch = writeBatch(firestore);
                 const now = new Date().toISOString();
 
-                // تحديث الرصيد وحالة الإشعار
                 batch.update(userDocRef, { balance: increment(notifData.amount) });
                 batch.update(notifDoc.ref, { status: 'paid', paidTo: userProfile.id, paidAt: now });
 
-                // سجل العملية
                 const txRef = doc(collection(firestore, `users/${userProfile.id}/transactions`));
                 batch.set(txRef, {
                     userId: userProfile.id,
@@ -193,7 +190,6 @@ export default function TopUpPage() {
 
                 await batch.commit();
 
-                // إرسال SMS مؤكد للعميل
                 if (userProfile.phoneNumber) {
                     const currentBalance = (userProfile.balance || 0) + notifData.amount;
                     const smsMessage = `ستار موبايل: تم إيداع (${notifData.amount.toLocaleString('en-US')}) ريال لحسابك بنجاح. رصيدك الآن: (${currentBalance.toLocaleString('en-US')}) ريال.`;
@@ -207,7 +203,6 @@ export default function TopUpPage() {
                         }) 
                     }).catch(e => console.error("SMS Confirmation Error:", e));
 
-                    // إرسال واتساب
                     const waMsg = `⭐ ستار موبايل\n\nتم شحن رصيدك آلياً بنجاح ✅\n\nالمبلغ: ${notifData.amount.toLocaleString()} ر.ي\nالرصيد الجديد: ${currentBalance.toLocaleString()} ر.ي\nالوسيلة: ${selectedMethod?.name}\n\nشكراً لاستخدام ستار موبايل 💙`;
                     fetch('/api/send-whatsapp', {
                         method: 'POST',
@@ -234,9 +229,11 @@ export default function TopUpPage() {
         }
     };
 
-    const isAlOmqy = selectedMethod?.name.includes('العمقي');
-    const isKuraimi = selectedMethod?.name.includes('الكريمي');
-    const isAmjad = selectedMethod?.name.includes('أمجاد');
+    // منطق التحقق من نوع البنك لضمان دقة ظهور الحقول
+    const methodName = selectedMethod?.name || '';
+    const isAlOmqy = methodName.includes('العمقي');
+    const isKuraimi = methodName.includes('الكريمي');
+    const isAmjad = methodName.includes('امجاد') || methodName.includes('أمجاد');
 
     if (showSuccess && lastTxDetails) {
         return (
