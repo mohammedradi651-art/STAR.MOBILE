@@ -11,7 +11,8 @@ import {
     Search, 
     CheckCircle2,
     Building2,
-    CreditCard
+    CreditCard,
+    Smartphone
 } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
 import { collection, query, orderBy, doc } from 'firebase/firestore';
@@ -39,7 +40,7 @@ export const dynamic = 'force-dynamic';
 
 type BankNotif = {
     id: string;
-    bank: 'alomqy' | 'kuraimi';
+    bank: 'alomqy' | 'kuraimi' | 'amjad';
     account?: string;
     reference?: string;
     amount: number;
@@ -48,6 +49,7 @@ type BankNotif = {
     senderName: string;
     paidTo?: string;
     paidAt?: string;
+    rawMessage?: string;
 };
 
 export default function DepositManagementPage() {
@@ -115,12 +117,13 @@ export default function DepositManagementPage() {
                 </Card>
 
                 <Tabs defaultValue="alomqy" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2 bg-muted/50 rounded-2xl h-12 p-1 mb-6">
-                        <TabsTrigger value="alomqy" className="rounded-xl font-black text-xs">شركة العمقي</TabsTrigger>
-                        <TabsTrigger value="kuraimi" className="rounded-xl font-black text-xs">بنك الكريمي</TabsTrigger>
+                    <TabsList className="grid w-full grid-cols-3 bg-muted/50 rounded-2xl h-12 p-1 mb-6">
+                        <TabsTrigger value="alomqy" className="rounded-xl font-black text-[10px]">العمقي</TabsTrigger>
+                        <TabsTrigger value="kuraimi" className="rounded-xl font-black text-[10px]">الكريمي</TabsTrigger>
+                        <TabsTrigger value="amjad" className="rounded-xl font-black text-[10px]">أمجاد</TabsTrigger>
                     </TabsList>
 
-                    {['alomqy', 'kuraimi'].map(bank => (
+                    {['alomqy', 'kuraimi', 'amjad'].map(bank => (
                         <TabsContent key={bank} value={bank} className="space-y-3 mt-0">
                             {isLoading ? (
                                 [1, 2].map(i => <Skeleton key={i} className="h-24 w-full rounded-[28px]" />)
@@ -142,12 +145,12 @@ export default function DepositManagementPage() {
                                                         "p-2.5 rounded-2xl shrink-0",
                                                         notif.status === 'unpaid' ? "bg-green-500/10 text-green-600" : "bg-muted text-muted-foreground"
                                                     )}>
-                                                        {notif.bank === 'alomqy' ? <Zap className="w-5 h-5" /> : <CreditCard className="w-5 h-5" />}
+                                                        {notif.bank === 'alomqy' ? <Zap className="w-5 h-5" /> : notif.bank === 'kuraimi' ? <CreditCard className="w-5 h-5" /> : <Smartphone className="w-5 h-5" />}
                                                     </div>
                                                     <div className="text-right">
                                                         <h4 className="font-black text-sm text-foreground">{notif.senderName}</h4>
                                                         <p className="text-[10px] font-bold text-muted-foreground">
-                                                            {bank === 'alomqy' ? `الحساب: ${notif.account}` : `المرجع: ${notif.reference}`}
+                                                            {bank === 'alomqy' ? `الحساب: ${notif.account}` : bank === 'kuraimi' ? `المرجع: ${notif.reference}` : `بنك أمجاد - حوالة واردة`}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -161,6 +164,12 @@ export default function DepositManagementPage() {
                                                     </div>
                                                 </div>
                                             </div>
+
+                                            {notif.rawMessage && (
+                                                <div className="bg-muted/30 p-2 rounded-xl text-[9px] text-muted-foreground italic font-bold">
+                                                    "{notif.rawMessage}"
+                                                </div>
+                                            )}
 
                                             <div className="flex items-center justify-end gap-2 pt-2 border-t border-muted-foreground/10">
                                                 <AlertDialog>
