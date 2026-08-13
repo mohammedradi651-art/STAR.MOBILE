@@ -17,7 +17,7 @@ import {
     Calendar,
     Clock,
     ShieldCheck,
-    Building2
+    CreditCard
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -148,25 +148,25 @@ export default function TopUpPage() {
                     where('status', '==', 'unpaid'),
                     limit(1)
                 );
-            } else if (bankType === 'amjad') {
-                // منطق بنك أمجاد: مطابقة المبلغ والاسم المسجل في التطبيق
-                q = query(notifsRef, 
+            } else {
+                // منطق بنك أمجاد: مطابقة المبلغ والاسم الرباعي للمستخدم
+                q = query(notifsRef,
                     where('bank', '==', 'amjad'),
                     where('amount', '==', amt),
-                    where('senderName', '==', userProfile.displayName), // مطابقة الاسم تماماً كما في التطبيق
+                    where('senderName', '==', userProfile.displayName?.trim()),
                     where('status', '==', 'unpaid'),
                     limit(1)
                 );
             }
             
-            const querySnapshot = await getDocs(q!);
+            const querySnapshot = await getDocs(q);
 
             if (querySnapshot.empty) {
                 toast({ 
                     variant: 'destructive', 
-                    title: 'فشل المطابقة', 
+                    title: 'لم يتم العثور على الإيداع', 
                     description: bankType === 'amjad' 
-                        ? 'نعتذر، لم نجد حوالة مطابقة لاسمك ومبلغك. تأكد أن اسمك في التطبيق يطابق اسمك في الحوالة.'
+                        ? 'عذراً، لم نجد حوالة مطابقة لاسمك ومبلغك في النظام. تأكد من كتابة اسمك الرباعي الصحيح في ملفك الشخصي.'
                         : 'نعتذر، لم يتم العثور على إيصال مطابق للعملية في النظام.' 
                 });
             } else {
@@ -186,14 +186,14 @@ export default function TopUpPage() {
                     userId: userProfile.id,
                     transactionDate: now,
                     amount: notifData.amount,
-                    transactionType: `تغذية آلي - ${selectedMethod?.name}`,
-                    notes: `مطابقة آلية بنجاح بنظام ستار موبايل الذكي.`,
+                    transactionType: `تغذية آلي - ${bankType === 'alomqy' ? 'العمقي' : bankType === 'kuraimi' ? 'الكريمي' : 'بنك أمجاد'}`,
+                    notes: `مطابقة آلية. الوسيلة: ${selectedMethod?.name}`,
                     status: 'success'
                 });
 
                 await batch.commit();
 
-                // إرسال SMS مؤكد
+                // إرسال SMS مؤكد للعميل
                 if (userProfile.phoneNumber) {
                     const currentBalance = (userProfile.balance || 0) + notifData.amount;
                     const smsMessage = `ستار موبايل: تم إيداع (${notifData.amount.toLocaleString('en-US')}) ريال لحسابك بنجاح. رصيدك الآن: (${currentBalance.toLocaleString('en-US')}) ريال.`;
@@ -206,9 +206,18 @@ export default function TopUpPage() {
                             message: smsMessage 
                         }) 
                     }).catch(e => console.error("SMS Confirmation Error:", e));
+
+                    // إرسال واتساب
+                    const waMsg = `⭐ ستار موبايل\n\nتم شحن رصيدك آلياً بنجاح ✅\n\nالمبلغ: ${notifData.amount.toLocaleString()} ر.ي\nالرصيد الجديد: ${currentBalance.toLocaleString()} ر.ي\nالوسيلة: ${selectedMethod?.name}\n\nشكراً لاستخدام ستار موبايل 💙`;
+                    fetch('/api/send-whatsapp', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ phone: userProfile.phoneNumber, message: waMsg })
+                    }).catch(() => {});
                 }
 
                 setLastTxDetails({
+                    account: bankType === 'alomqy' ? alomqyAccount : bankType === 'kuraimi' ? kuraimiReference : 'مطابقة بالاسم',
                     amount: notifData.amount,
                     date: now,
                     bank: bankType
@@ -289,33 +298,33 @@ export default function TopUpPage() {
 
                 <div className="space-y-8 pb-10">
                     <div className="px-4 space-y-4">
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-2 gap-4">
                             {isLoadingMethods ? (
-                                [1, 2, 3].map(i => <div key={i} className="h-24 rounded-[28px] bg-muted animate-pulse" />)
+                                [1, 2].map(i => <div key={i} className="h-32 rounded-[32px] bg-muted animate-pulse" />)
                             ) : (
                                 paymentMethods?.map(method => (
                                     <div 
                                         key={method.id} 
                                         onClick={() => setSelectedMethod(method)} 
                                         className={cn(
-                                            "group flex flex-col items-center justify-center space-y-2 rounded-[28px] p-4 aspect-square cursor-pointer transition-all duration-500 border-2 relative overflow-hidden shadow-sm", 
+                                            "group flex flex-col items-center justify-center space-y-3 rounded-[32px] p-5 aspect-square cursor-pointer transition-all duration-500 border-2 relative overflow-hidden shadow-sm", 
                                             selectedMethod?.id === method.id 
-                                                ? 'border-[#0048ad] bg-primary/5 shadow-lg shadow-primary/10 scale-[1.03]' 
+                                                ? 'border-[#0048ad] bg-primary/5 shadow-xl shadow-primary/10 scale-[1.03]' 
                                                 : 'border-transparent bg-white dark:bg-slate-900 hover:border-primary/20'
                                         )}
                                     >
-                                        <div className="w-10 h-10 rounded-xl relative shadow-sm overflow-hidden bg-white p-0.5 border border-muted">
+                                        <div className="w-16 h-16 rounded-[22px] relative shadow-md overflow-hidden bg-white p-1 border border-muted">
                                             <Image src={getLogoSrc(method.logoUrl)} alt={method.name} fill className="object-contain" />
                                         </div>
                                         <p className={cn(
-                                            "text-center text-[8px] font-black transition-colors truncate w-full", 
+                                            "text-center text-[11px] font-black transition-colors truncate w-full", 
                                             selectedMethod?.id === method.id ? "text-[#0048ad]" : "text-foreground/70"
                                         )}>
                                             {method.name}
                                         </p>
                                         {selectedMethod?.id === method.id && (
-                                            <div className="absolute top-2 left-2 animate-in zoom-in-50 duration-300">
-                                                <CheckCircle2 className="w-3.5 h-3.5 text-[#0048ad] fill-primary/10" />
+                                            <div className="absolute top-3 left-3 animate-in zoom-in-50 duration-300">
+                                                <CheckCircle2 className="w-5 h-5 text-[#0048ad] fill-primary/10" />
                                             </div>
                                         )}
                                     </div>
@@ -346,7 +355,8 @@ export default function TopUpPage() {
                             <div className="px-0">
                                 {(isAlOmqy || isKuraimi || isAmjad) && (
                                     <div className="space-y-8 pt-4 animate-in fade-in duration-500">
-                                        <div className={cn("grid gap-5", isAmjad ? "grid-cols-1" : "grid-cols-2")}>
+                                        <div className="grid grid-cols-2 gap-5">
+                                            {/* لا يظهر حقل الحساب/المرجع لبنك أمجاد لأن المطابقة بالاسم */}
                                             {!isAmjad && (
                                                 <div className="space-y-2 text-right">
                                                     <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">
@@ -362,7 +372,7 @@ export default function TopUpPage() {
                                                 </div>
                                             )}
 
-                                            <div className="space-y-2 text-right">
+                                            <div className={cn("space-y-2 text-right", isAmjad ? "col-span-2" : "col-span-1")}>
                                                 <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">المبلغ المودع</Label>
                                                 <Input 
                                                     type="number" 
