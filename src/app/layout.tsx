@@ -14,7 +14,7 @@ import { doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
 // إصدار التطبيق المحدث لتطهير الكاش وتفعيل الواجهة الملكية
-const APP_VERSION = '1.6.5';
+const APP_VERSION = '1.7.0';
 
 type UserProfile = {
   isPinEnabled?: boolean;
@@ -33,12 +33,23 @@ function AppContent({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const savedVersion = localStorage.getItem('star_app_version');
     if (savedVersion !== APP_VERSION) {
+      console.log('Force clearing cache for version: ' + APP_VERSION);
       // مسح كافة البيانات المخزنة لضمان جلب النسخة الأحدث
       localStorage.clear();
       sessionStorage.clear();
+      
+      // مسح الـ Service Worker إن وجد
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (const registration of registrations) {
+            registration.unregister();
+          }
+        });
+      }
+
       localStorage.setItem('star_app_version', APP_VERSION);
-      // إعادة تحميل إجبارية من السيرفر
-      window.location.reload();
+      // إعادة تحميل إجبارية من السيرفر لتجاوز الكاش
+      window.location.href = window.location.href;
     }
   }, []);
 

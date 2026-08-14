@@ -4,6 +4,10 @@ import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, initializeFirestore, Firestore } from 'firebase/firestore';
 
+/**
+ * تهيئة فايربيس - تم التحديث لضمان إعادة البناء (Build Trigger)
+ * النسخة الحالية: 1.7.0
+ */
 const projectId = "studio-239662212-1b7b6";
 
 const firebaseConfig = {

@@ -31,6 +31,7 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // منع التخزين المؤقت للصفحات لضمان تحميل أحدث ملفات JS/CSS
         source: '/(.*)',
         headers: [
           {
@@ -39,7 +40,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Cache-Control',
-            value: 'public, max-age=0, must-revalidate',
+            value: 'public, s-maxage=0, max-age=0, must-revalidate',
           }
         ],
       },
