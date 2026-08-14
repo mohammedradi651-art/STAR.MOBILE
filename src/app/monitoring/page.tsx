@@ -82,9 +82,17 @@ export default function MonitoringPage() {
     const isUserAdmin = user?.email === '770326828@shabakat.com' || user?.uid === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2';
 
     // استخدام Collection Group لجلب كافة العمليات من جميع المستخدمين
+    // تأكد من وجود Index في Firebase Console إذا كنت تستخدم الـ orderBy
     const allTransactionsQuery = useMemoFirebase(
-        () => (firestore ? query(collectionGroup(firestore, 'transactions'), orderBy('transactionDate', 'desc'), limit(100)) : null),
-        [firestore]
+        () => {
+            if (!firestore || !isUserAdmin) return null;
+            return query(
+                collectionGroup(firestore, 'transactions'), 
+                orderBy('transactionDate', 'desc'), 
+                limit(100)
+            );
+        },
+        [firestore, isUserAdmin]
     );
     const { data: allTransactions, isLoading } = useCollection<Transaction>(allTransactionsQuery);
 
@@ -107,13 +115,18 @@ export default function MonitoringPage() {
     const stats = useMemo(() => {
         if (!allTransactions) return { totalSdad: 0, totalDeposit: 0, totalCards: 0, count: 0 };
         return allTransactions.reduce((acc, tx) => {
-            const date = parseISO(tx.transactionDate);
-            if (isToday(date)) {
-                if (tx.transactionType.includes('سداد') || tx.transactionType.includes('باقة')) acc.totalSdad += tx.amount;
-                if (tx.transactionType.includes('تغذية') || tx.transactionType.includes('إيداع')) acc.totalDeposit += tx.amount;
-                if (tx.transactionType.includes('شراء كرت')) acc.totalCards += tx.amount;
-                acc.count++;
-            }
+            const dateStr = tx.transactionDate;
+            if (!dateStr) return acc;
+            
+            try {
+                const date = parseISO(dateStr);
+                if (isToday(date)) {
+                    if (tx.transactionType.includes('سداد') || tx.transactionType.includes('باقة')) acc.totalSdad += tx.amount;
+                    if (tx.transactionType.includes('تغذية') || tx.transactionType.includes('إيداع')) acc.totalDeposit += tx.amount;
+                    if (tx.transactionType.includes('شراء كرت')) acc.totalCards += tx.amount;
+                    acc.count++;
+                }
+            } catch (e) {}
             return acc;
         }, { totalSdad: 0, totalDeposit: 0, totalCards: 0, count: 0 });
     }, [allTransactions]);
@@ -218,7 +231,7 @@ export default function MonitoringPage() {
                                                 <h4 className="font-black text-sm text-foreground truncate">{tx.transactionType}</h4>
                                                 <p className="text-[10px] font-bold text-muted-foreground flex items-center gap-1.5 mt-0.5">
                                                     <Clock className="w-3 h-3" />
-                                                    {format(parseISO(tx.transactionDate), 'h:mm a - d MMM', { locale: ar })}
+                                                    {tx.transactionDate ? format(parseISO(tx.transactionDate), 'h:mm a - d MMM', { locale: ar }) : '...'}
                                                 </p>
                                             </div>
                                         </div>
@@ -266,7 +279,7 @@ export default function MonitoringPage() {
                             )}
                             <div className="flex justify-between items-center py-2 border-b border-dashed">
                                 <span className="text-muted-foreground flex items-center gap-2"><Calendar className="w-4 h-4" /> التاريخ:</span>
-                                <span className="font-bold">{format(parseISO(selectedTx.transactionDate), 'Pp', { locale: ar })}</span>
+                                <span className="font-bold">{selectedTx.transactionDate ? format(parseISO(selectedTx.transactionDate), 'Pp', { locale: ar }) : '...'}</span>
                             </div>
                             {selectedTx.notes && (
                                 <div className="pt-2">
