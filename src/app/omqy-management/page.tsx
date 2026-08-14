@@ -167,8 +167,9 @@ export default function DepositManagementPage() {
                 setIsSaving(false);
                 return;
             }
-            // في أمجاد، الاسم هو مفتاح المطابقة الأساسي
+            // في أمجاد، الاسم هو مفتاح المطابقة الأساسي ونولد مرجع عشوائي
             data.senderName = manualName;
+            data.reference = Math.floor(10000000 + Math.random() * 90000000).toString();
         }
 
         try {
@@ -260,7 +261,7 @@ export default function DepositManagementPage() {
                                                     <div className="text-right">
                                                         <h4 className="font-black text-sm text-foreground">{notif.senderName}</h4>
                                                         <p className="text-[10px] font-bold text-muted-foreground">
-                                                            {notif.bank === 'alomqy' ? `الحساب: ${notif.account}` : notif.bank === 'kuraimi' ? `المرجع: ${notif.reference}` : `بنك أمجاد - حوالة واردة`}
+                                                            {notif.bank === 'alomqy' ? `الحساب: ${notif.account}` : `المرجع: ${notif.reference}`}
                                                         </p>
                                                     </div>
                                                 </div>
