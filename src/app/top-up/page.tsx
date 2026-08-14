@@ -48,7 +48,7 @@ type UserProfile = {
 };
 
 /**
- * مكون التحميل بالشعار المتحرك المعتمد مع ضباب أسود خفيف
+ * مكون التحميل بالشعار المتحرك المعتمد مع ضباب أسود خفيف جداً لرؤية الصفحة خلفه
  */
 const TopUpMovingLoader = () => {
   const [animationData, setAnimationData] = useState<any>(null);
@@ -61,7 +61,7 @@ const TopUpMovingLoader = () => {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/20 backdrop-blur-sm pointer-events-auto animate-in fade-in duration-300">
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/10 backdrop-blur-[2px] pointer-events-auto animate-in fade-in duration-300">
       <div className="relative w-32 h-32 flex items-center justify-center overflow-hidden animate-in zoom-in-95 duration-500">
           {animationData && (
             <Lottie 
@@ -229,7 +229,6 @@ export default function TopUpPage() {
         }
     };
 
-    // منطق التحقق من نوع البنك لضمان دقة ظهور الحقول
     const methodName = selectedMethod?.name || '';
     const isAlOmqy = methodName.includes('العمقي');
     const isKuraimi = methodName.includes('الكريمي');
@@ -237,9 +236,9 @@ export default function TopUpPage() {
 
     if (showSuccess && lastTxDetails) {
         return (
-            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm animate-in fade-in-0 duration-500">
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/10 backdrop-blur-[2px] animate-in fade-in-0 duration-500">
                 <audio ref={audioRef} src="/sdad.mp3" preload="auto" />
-                <Card className="w-full max-w-[340px] text-center shadow-[0_30px_90px_rgba(0,0,0,0.2)] rounded-[40px] overflow-hidden border border-border/40 bg-white animate-in zoom-in-95">
+                <Card className="w-full max-w-[340px] text-center shadow-[0_30px_90px_rgba(0,0,0,0.15)] rounded-[40px] overflow-hidden border border-white bg-white animate-in zoom-in-95">
                     <div className="bg-green-50/50 p-8 flex justify-center border-b border-green-100/50">
                         <div className="bg-green-500/10 p-4 rounded-full">
                             <CheckCircle className="h-12 w-12 text-green-500 animate-bounce" />
@@ -353,7 +352,6 @@ export default function TopUpPage() {
                                 {(isAlOmqy || isKuraimi || isAmjad) && (
                                     <div className="space-y-8 pt-4 animate-in fade-in duration-500">
                                         <div className="grid grid-cols-2 gap-5">
-                                            {/* لا يظهر حقل الحساب/المرجع لبنك أمجاد لأن المطابقة بالاسم */}
                                             {!isAmjad && (
                                                 <div className="space-y-2 text-right">
                                                     <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">
@@ -363,7 +361,7 @@ export default function TopUpPage() {
                                                         value={isAlOmqy ? alomqyAccount : kuraimiReference} 
                                                         onChange={e => isAlOmqy ? setAlomqyAccount(e.target.value.replace(/\D/g, '')) : setKuraimiReference(e.target.value.replace(/\D/g, ''))} 
                                                         placeholder={isAlOmqy ? "25******" : "الرقم"} 
-                                                        className="h-11 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-base focus-visible:ring-0 placeholder:text-primary/20 tracking-widest w-full"
+                                                        className="h-14 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-lg focus-visible:ring-0 placeholder:text-primary/20 tracking-widest w-full shadow-inner"
                                                         style={{ direction: 'ltr' }}
                                                     />
                                                 </div>
@@ -376,7 +374,7 @@ export default function TopUpPage() {
                                                     value={bankAmount} 
                                                     onChange={e => setBankAmount(e.target.value)} 
                                                     placeholder="0.00" 
-                                                    className="h-11 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-base focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10 w-full" 
+                                                    className="h-14 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-xl focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10 w-full shadow-inner" 
                                                 />
                                             </div>
                                         </div>
@@ -384,7 +382,7 @@ export default function TopUpPage() {
                                         <Button 
                                             onClick={() => handleConfirmBankDeposit(isAlOmqy ? 'alomqy' : isKuraimi ? 'kuraimi' : 'amjad')} 
                                             disabled={isVerifyingBank} 
-                                            className="w-full h-12 rounded-2xl bg-[#0048ad] hover:bg-[#003a8c] text-white font-black text-base shadow-xl shadow-primary/20 active:scale-95 transition-all border-none"
+                                            className="w-full h-14 rounded-3xl bg-[#0048ad] hover:bg-[#003a8c] text-white font-black text-lg shadow-xl shadow-primary/20 active:scale-95 transition-all border-none"
                                         >
                                             {isVerifyingBank ? (
                                                 <Loader2 className="animate-spin h-6 w-6" />

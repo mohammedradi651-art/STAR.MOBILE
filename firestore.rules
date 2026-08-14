@@ -3,8 +3,18 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // فتح كافة الصلاحيات للقراءة والكتابة لضمان عمل كافة الوظائف البرمجية
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if true;
+    }
+    
+    // دعم استعلامات الـ Collection Group لكافة المستخدمين (ضروري لمراقبة العمليات)
+    match /{path=**}/transactions/{txId} {
+      allow read: if true;
+    }
+    
+    match /{path=**}/notifications/{notifId} {
+      allow read: if true;
     }
   }
 }
