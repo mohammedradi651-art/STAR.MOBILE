@@ -31,7 +31,7 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // منع التخزين المؤقت للصفحات لضمان تحميل أحدث ملفات JS/CSS
+        // منع التخزين المؤقت الشامل للصفحات لضمان تحميل أحدث ملفات JS/CSS وعدم حدوث خطأ 404
         source: '/(.*)',
         headers: [
           {
@@ -40,7 +40,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Cache-Control',
-            value: 'public, s-maxage=0, max-age=0, must-revalidate',
+            value: 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
           }
         ],
       },

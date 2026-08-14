@@ -14,7 +14,7 @@ import { doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
 // إصدار التطبيق المحدث لتطهير الكاش وتفعيل الواجهة الملكية
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.7.5';
 
 type UserProfile = {
   isPinEnabled?: boolean;
@@ -29,16 +29,29 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const [showSplash, setShowSplash] = useState(true);
   const [isPinVerified, setIsPinVerified] = useState(false);
 
-  // نظام تطهير الكاش القوي والآلي عند تغيير النسخة
+  // نظام تطهير الكاش القوي والآلي وملفات الارتباط عند تغيير النسخة
   useEffect(() => {
     const savedVersion = localStorage.getItem('star_app_version');
+    
     if (savedVersion !== APP_VERSION) {
-      console.log('Force clearing cache for version: ' + APP_VERSION);
-      // مسح كافة البيانات المخزنة لضمان جلب النسخة الأحدث
+      console.log('Force clearing all data for version: ' + APP_VERSION);
+      
+      // 1. مسح الذاكرة المحلية والجلسات
       localStorage.clear();
       sessionStorage.clear();
       
-      // مسح الـ Service Worker إن وجد
+      // 2. مسح كافة ملفات الارتباط (Cookies) برمجياً
+      if (typeof document !== 'undefined') {
+        const cookies = document.cookie.split(";");
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i];
+          const eqPos = cookie.indexOf("=");
+          const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+          document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+        }
+      }
+
+      // 3. مسح الـ Service Worker إن وجد لضمان عدم تحميل HTML قديم
       if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then((registrations) => {
           for (const registration of registrations) {
@@ -47,13 +60,18 @@ function AppContent({ children }: { children: React.ReactNode }) {
         });
       }
 
+      // 4. حفظ النسخة الجديدة وإعادة تحميل إجبارية وشاملة
       localStorage.setItem('star_app_version', APP_VERSION);
-      // إعادة تحميل إجبارية من السيرفر لتجاوز الكاش
-      window.location.href = window.location.href;
+      
+      // إضافة باراميتر عشوائي للرابط لإجبار السيرفر على تقديم نسخة جديدة
+      const url = new URL(window.location.href);
+      url.searchParams.set('v', APP_VERSION);
+      url.searchParams.set('t', Date.now().toString());
+      window.location.replace(url.toString());
     }
   }, []);
 
-  // تسجيل Service Worker لضمان استقرار PWA مع منع الكاش
+  // تسجيل Service Worker بباراميتر نسخة لضمان التحديث
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js?v=' + APP_VERSION, {
@@ -68,7 +86,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
   );
   const { data: userProfile } = useDoc<UserProfile>(userDocRef);
 
-  // التحقق من الصفحات التي يجب أن يظهر فيها شريط التنقل
   const isNavVisiblePage = [
     '/login', 
     '/renewal-requests', 
@@ -86,7 +103,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
     if (sessionStorage.getItem('is_pin_verified')) setIsPinVerified(true);
   }, []);
 
-  // توجيه تلقائي ذكي: إذا كان المستخدم مسجلاً وهو في صفحة الهبوط، انقله للداخل فوراً
   useEffect(() => {
     if (!isUserLoading && user && pathname === '/') {
         router.replace('/login');
@@ -103,12 +119,10 @@ function AppContent({ children }: { children: React.ReactNode }) {
     sessionStorage.setItem('is_pin_verified', 'true');
   };
 
-  // شروط حماية PIN
   const shouldShowPinLock = user && userProfile?.isPinEnabled && userProfile?.pinCode && !isPinVerified && !showSplash;
 
   return (
     <div className="mx-auto max-w-[450px] bg-white h-[100dvh] flex flex-col shadow-2xl relative overflow-hidden">
-      {/* شاشة البداية هي الحاكم الوحيد للرؤية في البداية */}
       {showSplash && (
         <SplashScreen 
           onComplete={handleSplashComplete} 
