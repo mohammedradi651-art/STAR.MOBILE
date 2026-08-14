@@ -38,7 +38,8 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
-  Building2
+  Building2,
+  Eye
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { SimpleHeader } from '@/components/layout/simple-header';
@@ -84,6 +85,7 @@ type BankNotif = {
 };
 
 const managementLinks = [
+  { title: 'مراقبة العمليات', icon: Eye, href: '/monitoring' },
   { title: 'إدارة المستخدمين', icon: Users, href: '/users' },
   { title: 'إدارة الإيداعات', icon: Building2, href: '/omqy-management' },
   { title: 'إدارة الشبكات', icon: Wifi, href: '/networks-management' },
