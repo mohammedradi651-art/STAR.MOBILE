@@ -12,9 +12,12 @@ import {
     CheckCircle2,
     Building2,
     CreditCard,
-    Smartphone
+    Smartphone,
+    PlusCircle,
+    Loader2,
+    XCircle
 } from 'lucide-react';
-import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
 import { collection, query, orderBy, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -23,6 +26,7 @@ import { format, parseISO } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
@@ -35,6 +39,22 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export const dynamic = 'force-dynamic';
 
@@ -57,6 +77,15 @@ export default function DepositManagementPage() {
     const { toast } = useToast();
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'unpaid' | 'paid'>('all');
+
+    // States for adding manual deposit
+    const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+    const [manualBank, setManualBank] = useState<'alomqy' | 'kuraimi' | 'amjad'>('alomqy');
+    const [manualAccount, setManualAccount] = useState('');
+    const [manualRef, setManualRef] = useState('');
+    const [manualName, setManualName] = useState('');
+    const [manualAmount, setManualAmount] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
     const bankQuery = useMemoFirebase(
         () => (firestore ? query(collection(firestore, 'bankNotifications'), orderBy('timestamp', 'desc')) : null),
@@ -83,12 +112,62 @@ export default function DepositManagementPage() {
         toast({ title: "تم الحذف", description: "تم حذف إشعار الإيداع بنجاح." });
     };
 
+    const handleAddManual = async () => {
+        if (!manualAmount || !firestore) {
+            toast({ variant: 'destructive', title: 'بيانات ناقصة', description: 'يرجى إدخال المبلغ على الأقل.' });
+            return;
+        }
+
+        setIsSaving(true);
+        const amountNum = parseFloat(manualAmount);
+
+        const data: any = {
+            bank: manualBank,
+            amount: amountNum,
+            status: 'unpaid',
+            timestamp: new Date().toISOString(),
+            rawMessage: 'إضافة يدوية من الإدارة',
+            senderName: manualBank === 'amjad' ? manualName : (manualName || 'إيداع يدوي من الإدارة')
+        };
+
+        if (manualBank === 'alomqy') {
+            if (!manualAccount) { toast({ variant: 'destructive', title: 'خطأ', description: 'رقم الحساب مطلوب للعمقي.' }); setIsSaving(false); return; }
+            data.account = manualAccount.trim();
+        } else if (manualBank === 'kuraimi') {
+            if (!manualRef) { toast({ variant: 'destructive', title: 'خطأ', description: 'رقم المرجع مطلوب للكريمي.' }); setIsSaving(false); return; }
+            data.reference = manualRef.trim();
+        } else if (manualBank === 'amjad') {
+            if (!manualName) { toast({ variant: 'destructive', title: 'خطأ', description: 'الاسم الرباعي مطلوب لبنك أمجاد.' }); setIsSaving(false); return; }
+        }
+
+        try {
+            await addDocumentNonBlocking(collection(firestore, 'bankNotifications'), data);
+            toast({ title: "نجاح", description: "تم إضافة الإيداع يدوياً بنجاح." });
+            setIsAddDialogOpen(false);
+            // Reset fields
+            setManualAccount(''); setManualRef(''); setManualName(''); setManualAmount('');
+        } catch (e) {
+            toast({ variant: 'destructive', title: "فشل الحفظ", description: "حدث خطأ أثناء محاولة الحفظ." });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     return (
         <div className="flex flex-col h-full bg-[#F8FAFC] dark:bg-slate-950">
             <SimpleHeader title="إدارة الإيداعات البنكية" />
             
             <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-6 pb-20">
                 
+                {/* زر إضافة إيداع يدوي */}
+                <Button 
+                    onClick={() => setIsAddDialogOpen(true)}
+                    className="w-full h-14 rounded-3xl bg-mesh-gradient text-white font-black text-lg shadow-xl shadow-primary/20 active:scale-95 transition-transform border-none"
+                >
+                    <PlusCircle className="ml-2 h-6 w-6" />
+                    إضافة إيداع يدوي
+                </Button>
+
                 {/* أدوات البحث والفلترة */}
                 <Card className="rounded-[32px] border-none shadow-sm bg-white dark:bg-slate-900 p-4 space-y-4">
                     <div className="relative">
@@ -150,7 +229,7 @@ export default function DepositManagementPage() {
                                                     <div className="text-right">
                                                         <h4 className="font-black text-sm text-foreground">{notif.senderName}</h4>
                                                         <p className="text-[10px] font-bold text-muted-foreground">
-                                                            {bank === 'alomqy' ? `الحساب: ${notif.account}` : bank === 'kuraimi' ? `المرجع: ${notif.reference}` : `بنك أمجاد - حوالة واردة`}
+                                                            {notif.bank === 'alomqy' ? `الحساب: ${notif.account}` : notif.bank === 'kuraimi' ? `المرجع: ${notif.reference}` : `بنك أمجاد - حوالة واردة`}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -199,6 +278,101 @@ export default function DepositManagementPage() {
                     ))}
                 </Tabs>
             </div>
+
+            {/* Dialog for adding manual deposit */}
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                <DialogContent className="rounded-[40px] max-sm p-0 overflow-hidden border-none shadow-2xl outline-none [&>button]:hidden">
+                    <div className="bg-mesh-gradient p-8 text-center text-white relative">
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl animate-pulse" />
+                        <DialogHeader>
+                            <div className="bg-white/20 p-4 rounded-[28px] w-16 h-16 mx-auto mb-4 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl">
+                                <PlusCircle className="h-8 w-8 text-white" />
+                            </div>
+                            <DialogTitle className="text-2xl font-black text-white drop-shadow-md">إضافة إيداع يدوي</DialogTitle>
+                            <DialogDescription className="text-xs text-white/70 font-bold mt-1 uppercase tracking-widest">تجاوز فشل الإرسال الآلي</DialogDescription>
+                        </DialogHeader>
+                    </div>
+
+                    <div className="p-6 space-y-5 bg-[#F8FAFC] dark:bg-slate-950" dir="rtl">
+                        <div className="space-y-2">
+                            <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">اختيار البنك المستلم</Label>
+                            <Select value={manualBank} onValueChange={(v: any) => setManualBank(v)}>
+                                <SelectTrigger className="h-12 rounded-2xl bg-white border-2 border-primary/5 font-bold text-right flex-row-reverse">
+                                    <SelectValue placeholder="اختر البنك" />
+                                </SelectTrigger>
+                                <SelectContent dir="rtl">
+                                    <SelectItem value="alomqy" className="font-bold">شركة العمقي للصرافة</SelectItem>
+                                    <SelectItem value="kuraimi" className="font-bold">بنك الكريمي الإسلامي</SelectItem>
+                                    <SelectItem value="amjad" className="font-bold">بنك أمجاد الإسلامي</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-4 pt-2">
+                            {manualBank === 'alomqy' && (
+                                <div className="space-y-2 animate-in fade-in zoom-in-95">
+                                    <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">رقم الحساب (العمقي)</Label>
+                                    <Input 
+                                        placeholder="مثال: 25******" 
+                                        value={manualAccount} 
+                                        onChange={e => setManualAccount(e.target.value.replace(/\D/g, ''))}
+                                        className="h-12 rounded-2xl bg-white border-2 border-primary/5 text-center font-black text-lg tracking-widest"
+                                    />
+                                </div>
+                            )}
+
+                            {manualBank === 'kuraimi' && (
+                                <div className="space-y-2 animate-in fade-in zoom-in-95">
+                                    <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">رقم المرجع (الكريمي)</Label>
+                                    <Input 
+                                        placeholder="رقم العملية المكون من 8+ أرقام" 
+                                        value={manualRef} 
+                                        onChange={e => setManualRef(e.target.value.replace(/\D/g, ''))}
+                                        className="h-12 rounded-2xl bg-white border-2 border-primary/5 text-center font-black text-lg tracking-widest"
+                                    />
+                                </div>
+                            )}
+
+                            {manualBank === 'amjad' && (
+                                <div className="space-y-2 animate-in fade-in zoom-in-95">
+                                    <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">الاسم الرباعي للمودع</Label>
+                                    <Input 
+                                        placeholder="اكتب الاسم كما في تطبيق البنك تماماً" 
+                                        value={manualName} 
+                                        onChange={e => setManualName(e.target.value)}
+                                        className="h-12 rounded-2xl bg-white border-2 border-primary/5 text-center font-bold text-sm"
+                                    />
+                                </div>
+                            )}
+
+                            <div className="space-y-2">
+                                <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">المبلغ المودع (ر.ي)</Label>
+                                <Input 
+                                    type="number"
+                                    placeholder="0.00" 
+                                    value={manualAmount} 
+                                    onChange={e => setManualAmount(e.target.value)}
+                                    className="h-12 rounded-2xl bg-white border-2 border-primary/5 text-center font-black text-xl text-primary"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="pt-4 grid grid-cols-2 gap-3">
+                            <Button 
+                                onClick={handleAddManual}
+                                className="h-12 rounded-2xl font-black bg-mesh-gradient text-white shadow-lg active:scale-95 transition-all border-none"
+                                disabled={isSaving}
+                            >
+                                {isSaving ? <Loader2 className="animate-spin h-5 w-5" /> : 'إضافة الآن'}
+                            </Button>
+                            <DialogClose asChild>
+                                <Button variant="outline" className="h-12 rounded-2xl font-bold">إلغاء</Button>
+                            </DialogClose>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
             <Toaster />
         </div>
     );
