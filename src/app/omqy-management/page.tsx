@@ -15,7 +15,8 @@ import {
     Smartphone,
     PlusCircle,
     Loader2,
-    XCircle
+    XCircle,
+    User
 } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
 import { collection, query, orderBy, doc } from 'firebase/firestore';
@@ -72,6 +73,12 @@ type BankNotif = {
     rawMessage?: string;
 };
 
+type UserType = {
+    id: string;
+    displayName: string;
+    phoneNumber: string;
+};
+
 export default function DepositManagementPage() {
     const firestore = useFirestore();
     const { toast } = useToast();
@@ -87,11 +94,19 @@ export default function DepositManagementPage() {
     const [manualAmount, setManualAmount] = useState('');
     const [isSaving, setIsSaving] = useState(false);
 
+    // Fetch Notifications
     const bankQuery = useMemoFirebase(
         () => (firestore ? query(collection(firestore, 'bankNotifications'), orderBy('timestamp', 'desc')) : null),
         [firestore]
     );
     const { data: notifications, isLoading } = useCollection<BankNotif>(bankQuery);
+
+    // Fetch Users for Amjad Selection
+    const usersQuery = useMemoFirebase(
+        () => (firestore ? query(collection(firestore, 'users'), orderBy('displayName')) : null),
+        [firestore]
+    );
+    const { data: usersList } = useCollection<UserType>(usersQuery);
 
     const filterNotifs = (bank: string) => {
         return notifications?.filter(n => {
@@ -121,23 +136,39 @@ export default function DepositManagementPage() {
         setIsSaving(true);
         const amountNum = parseFloat(manualAmount);
 
+        // تجهيز البيانات الأساسية
         const data: any = {
             bank: manualBank,
             amount: amountNum,
             status: 'unpaid',
             timestamp: new Date().toISOString(),
             rawMessage: 'إضافة يدوية من الإدارة',
-            senderName: manualBank === 'amjad' ? manualName : (manualName || 'إيداع يدوي من الإدارة')
+            senderName: manualName || 'إيداع يدوي'
         };
 
+        // التحقق حسب نوع البنك
         if (manualBank === 'alomqy') {
-            if (!manualAccount) { toast({ variant: 'destructive', title: 'خطأ', description: 'رقم الحساب مطلوب للعمقي.' }); setIsSaving(false); return; }
+            if (!manualAccount) {
+                toast({ variant: 'destructive', title: 'خطأ', description: 'رقم الحساب مطلوب للعمقي.' });
+                setIsSaving(false);
+                return;
+            }
             data.account = manualAccount.trim();
         } else if (manualBank === 'kuraimi') {
-            if (!manualRef) { toast({ variant: 'destructive', title: 'خطأ', description: 'رقم المرجع مطلوب للكريمي.' }); setIsSaving(false); return; }
+            if (!manualRef) {
+                toast({ variant: 'destructive', title: 'خطأ', description: 'رقم المرجع مطلوب للكريمي.' });
+                setIsSaving(false);
+                return;
+            }
             data.reference = manualRef.trim();
         } else if (manualBank === 'amjad') {
-            if (!manualName) { toast({ variant: 'destructive', title: 'خطأ', description: 'الاسم الرباعي مطلوب لبنك أمجاد.' }); setIsSaving(false); return; }
+            if (!manualName) {
+                toast({ variant: 'destructive', title: 'خطأ', description: 'يجب اختيار العميل لبنك أمجاد.' });
+                setIsSaving(false);
+                return;
+            }
+            // في أمجاد، الاسم هو مفتاح المطابقة الأساسي
+            data.senderName = manualName;
         }
 
         try {
@@ -296,7 +327,7 @@ export default function DepositManagementPage() {
                     <div className="p-6 space-y-5 bg-[#F8FAFC] dark:bg-slate-950" dir="rtl">
                         <div className="space-y-2">
                             <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">اختيار البنك المستلم</Label>
-                            <Select value={manualBank} onValueChange={(v: any) => setManualBank(v)}>
+                            <Select value={manualBank} onValueChange={(v: any) => { setManualBank(v); setManualName(''); }}>
                                 <SelectTrigger className="h-12 rounded-2xl bg-white border-2 border-primary/5 font-bold text-right flex-row-reverse">
                                     <SelectValue placeholder="اختر البنك" />
                                 </SelectTrigger>
@@ -335,9 +366,31 @@ export default function DepositManagementPage() {
 
                             {manualBank === 'amjad' && (
                                 <div className="space-y-2 animate-in fade-in zoom-in-95">
-                                    <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">الاسم الرباعي للمودع</Label>
+                                    <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">اختر العميل (صاحب الحوالة)</Label>
+                                    <Select value={manualName} onValueChange={setManualName}>
+                                        <SelectTrigger className="h-12 rounded-2xl bg-white border-2 border-primary/5 font-bold text-right flex-row-reverse">
+                                            <SelectValue placeholder="ابحث عن اسم العميل..." />
+                                        </SelectTrigger>
+                                        <SelectContent dir="rtl" className="max-h-[300px]">
+                                            {usersList?.map(u => (
+                                                <SelectItem key={u.id} value={u.displayName} className="font-bold">
+                                                    {u.displayName} ({u.phoneNumber})
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <div className="flex items-center gap-2 px-2 opacity-60">
+                                        <User className="w-3.5 h-3.5" />
+                                        <p className="text-[9px] font-bold">يتم جلب الأسماء من قائمة المستخدمين لضمان المطابقة.</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {manualBank !== 'amjad' && (
+                                <div className="space-y-2 animate-in fade-in zoom-in-95">
+                                    <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">الاسم أو ملاحظة (اختياري)</Label>
                                     <Input 
-                                        placeholder="اكتب الاسم كما في تطبيق البنك تماماً" 
+                                        placeholder="اسم المودع" 
                                         value={manualName} 
                                         onChange={e => setManualName(e.target.value)}
                                         className="h-12 rounded-2xl bg-white border-2 border-primary/5 text-center font-bold text-sm"
