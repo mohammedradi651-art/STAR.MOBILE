@@ -25,7 +25,8 @@ import {
     Calendar,
     ArrowUpRight,
     Zap,
-    Banknote
+    Banknote,
+    LayoutGrid
 } from 'lucide-react';
 import { format, parseISO, isToday } from 'date-fns';
 import { ar } from 'date-fns/locale';
