@@ -21,9 +21,9 @@ export async function POST(req: Request) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        // استخدام الأسماء المعتمدة من السيرفر (mobile و code)
+        // استخدام الأسماء المعتمدة من السيرفر بناءً على رسالة الخطأ (Mobile and message are required)
         mobile: phoneNumber.trim(),
-        code: message,
+        message: message,
       }),
       cache: 'no-store'
     });
