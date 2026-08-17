@@ -21,8 +21,9 @@ export async function POST(req: Request) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        phoneNumber: phoneNumber.trim(),
-        message: message,
+        // تم تغيير الأسماء لتتوافق مع متطلبات السيرفر الجديد (mobile و code)
+        mobile: phoneNumber.trim(),
+        code: message,
       }),
       cache: 'no-store'
     });
