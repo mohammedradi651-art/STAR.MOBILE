@@ -12,8 +12,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'بيانات ناقصة' }, { status: 400 });
     }
 
-    // الرابط الجديد المطلوب من العميل
-    const TARGET_URL = 'https://alwdiwse.vercel.app/api/requests/send';
+    // الرابط الجديد المختصر المطلوب من العميل
+    const TARGET_URL = 'https://alwdiwse.vercel.app/api/send';
 
     const response = await fetch(TARGET_URL, {
       method: 'POST',
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        // تم تغيير الأسماء لتتوافق مع متطلبات السيرفر الجديد (mobile و code)
+        // استخدام الأسماء المعتمدة من السيرفر (mobile و code)
         mobile: phoneNumber.trim(),
         code: message,
       }),
