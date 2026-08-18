@@ -13,8 +13,8 @@ export async function POST(req: Request) {
     }
 
     // الرابط المحدث بناءً على طلب العميل
-    const TARGET_URL = 'https://alwdiwse.vercel.app/api/sms/send';
-    // مفتاح الربط الأمني المأخوذ من مثال الـ Curl
+    const TARGET_URL = 'https://alwdiwse.vercel.app/api/send';
+    // مفتاح الربط الأمني المعتمد
     const API_KEY = 'alwadi_pds9eBxXjJwgVnz4jR0sGh6vYGI49m1E';
 
     const response = await fetch(TARGET_URL, {
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
         'X-API-Key': API_KEY,
       },
       body: JSON.stringify({
-        // الهيكلية المطلوبة من السيرفر الجديد بالضبط كما في مثال Curl
+        // الهيكلية المطلوبة من السيرفر لضمان قبول الطلب
         deviceId: 'android-device',
         phoneNumber: phoneNumber.toString().trim(),
         message: message,
