@@ -12,6 +12,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'بيانات ناقصة' }, { status: 400 });
     }
 
+    // تنظيف رقم الهاتف لضمان إرسال 9 أرقام فقط بدون أصفار زائدة أو رموز
+    let cleanPhone = phoneNumber.toString().trim().replace(/\D/g, '');
+    
+    // إزالة أي أصفار في البداية لضمان التنسيق (مثلاً 077 تصبح 77)
+    while (cleanPhone.startsWith('0')) {
+        cleanPhone = cleanPhone.substring(1);
+    }
+    
+    // إذا كان الرقم أطول من 9 أرقام (مثلاً يتضمن مفتاح الدولة)، نأخذ آخر 9 أرقام
+    if (cleanPhone.length > 9) {
+        cleanPhone = cleanPhone.slice(-9);
+    }
+
     // الرابط الجديد المعتمد
     const TARGET_URL = 'https://alwadi-sms.vercel.app/api/messages';
 
@@ -22,8 +35,9 @@ export async function POST(req: Request) {
         'Accept': 'application/json',
       },
       body: JSON.stringify({
-        // استخدام mobile و message كحقول قياسية للرابط الجديد
-        mobile: phoneNumber.toString().trim(),
+        // إرسال كلاً من mobile و phoneNumber لضمان التوافق مع أي مسمى يتوقعه السيرفر
+        mobile: cleanPhone,
+        phoneNumber: cleanPhone,
         message: message,
       }),
       cache: 'no-store'
@@ -41,11 +55,12 @@ export async function POST(req: Request) {
     if (!response.ok) {
         console.error('SMS Gateway Error Details:', {
             status: response.status,
-            response: responseText
+            response: responseText,
+            sentNumber: cleanPhone
         });
         
         let errorMsg = 'فشل إرسال رمز التحقق.';
-        if (response.status === 400) errorMsg = 'بيانات الهاتف أو الرسالة غير صحيحة.';
+        if (response.status === 400) errorMsg = 'بيانات الهاتف أو الرسالة غير صحيحة لدى المزود.';
         
         throw new Error(data.message || errorMsg);
     }
