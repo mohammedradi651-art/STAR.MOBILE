@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 /**
- * مسار API الموحد لإرسال أكواد التحقق (OTP) عبر البوابة الجديدة.
+ * مسار API الموحد لإرسال أكواد التحقق (OTP) عبر الرابط الجديد.
  * يستخدم في: إنشاء الحساب الجديد، واستعادة كلمة المرور.
  */
 export async function POST(req: Request) {
@@ -12,22 +12,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'بيانات ناقصة' }, { status: 400 });
     }
 
-    // الرابط المحدث بناءً على الوصف الأخير
-    const TARGET_URL = 'https://alwdiwse.vercel.app/api/sms/send';
-    // مفتاح الربط الأمني المعتمد
-    const API_KEY = 'alwadi_pds9eBxXjJwgVnz4jR0sGh6vYGI49m1E';
+    // الرابط الجديد المعتمد
+    const TARGET_URL = 'https://alwadi-sms.vercel.app/api/messages';
 
     const response = await fetch(TARGET_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'X-API-Key': API_KEY,
       },
       body: JSON.stringify({
-        // الهيكلية المطلوبة من السيرفر لضمان قبول الطلب
-        deviceId: 'android-device',
-        phoneNumber: phoneNumber.toString().trim(), // تغيير الحقل ليتوافق مع متطلبات السيرفر (phoneNumber)
+        // استخدام mobile و message كحقول قياسية للرابط الجديد
+        mobile: phoneNumber.toString().trim(),
         message: message,
       }),
       cache: 'no-store'
@@ -49,7 +45,6 @@ export async function POST(req: Request) {
         });
         
         let errorMsg = 'فشل إرسال رمز التحقق.';
-        if (response.status === 401) errorMsg = 'خطأ في مفتاح أمان بوابة الإرسال.';
         if (response.status === 400) errorMsg = 'بيانات الهاتف أو الرسالة غير صحيحة.';
         
         throw new Error(data.message || errorMsg);
