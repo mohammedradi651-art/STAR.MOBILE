@@ -220,11 +220,24 @@ export default function BaityNetworksPage() {
         setSelectedNetwork(null);
         audioRef.current?.play().catch(() => {});
 
-        // --- نظام إرسال الواتساب التلقائي (مع await لضمان التنفيذ) ---
+        // --- نظام إشعارات SMS التلقائي ---
+        if (userProfile?.phoneNumber) {
+            const smsMsg = `ستار موبايل: تم شراء كرت ${selectedCategory.name} لشبكة الخير بنجاح ✅. رقم الكرت: ${cardData.cardID}. شكراً لاستخدامك تطبيقنا 💙`;
+            fetch('/api/sms', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    phoneNumber: userProfile.phoneNumber.trim(),
+                    message: smsMsg
+                })
+            }).catch(e => console.error("SMS Notify Error", e));
+        }
+
+        // --- نظام إرسال الواتساب التلقائي ---
         if (userProfile?.phoneNumber) {
             const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${selectedNetwork?.name || 'الخير'}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardData.cardID}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
             
-            await fetch('/api/send-whatsapp', {
+            fetch('/api/send-whatsapp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -358,7 +371,7 @@ export default function BaityNetworksPage() {
                         <Wifi className="h-8 w-8 text-white" />
                     </div>
                     <DialogTitle className="text-2xl font-black text-white drop-shadow-md">فئات {selectedNetwork.name}</DialogTitle>
-                    <DialogDescription className="text-xs text-white/70 font-bold mt-1">اختر الفئة المناسبة وابدأ التصفح الآن</DialogDescription>
+                    <DialogDescription className="text-xs text-white/70 font-bold mt-1 uppercase tracking-widest">اختر الفئة المناسبة وابدأ التصفح الآن</DialogDescription>
                 </DialogHeader>
               </div>
 

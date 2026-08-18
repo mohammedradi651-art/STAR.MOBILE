@@ -184,6 +184,19 @@ function NetworkPurchasePageComponent() {
         
         await batch.commit();
 
+        // --- نظام إشعارات SMS التلقائي ---
+        if (userProfile?.phoneNumber) {
+            const smsMsg = `ستار موبايل: تم شراء كرت ${selectedCategory.name} لشبكة ${networkName} بنجاح ✅. رقم الكرت: ${cardToPurchaseData.cardNumber}. شكراً لاستخدامك تطبيقنا 💙`;
+            fetch('/api/sms', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    phoneNumber: userProfile.phoneNumber.trim(),
+                    message: smsMsg
+                })
+            }).catch(e => console.error("SMS Notify Error", e));
+        }
+
         setPurchasedCard(cardToPurchaseData);
         audioRef.current?.play().catch(() => {});
 
@@ -191,7 +204,7 @@ function NetworkPurchasePageComponent() {
         if (userProfile?.phoneNumber) {
             const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${networkName}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardToPurchaseData.cardNumber}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
             
-            await fetch('/api/send-whatsapp', {
+            fetch('/api/send-whatsapp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

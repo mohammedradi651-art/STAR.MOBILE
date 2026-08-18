@@ -377,11 +377,24 @@ export default function CombinedNetworksPage() {
             setPurchasedCard(cardData);
         }
         
+        // --- نظام إشعارات SMS التلقائي ---
+        if (userProfile?.phoneNumber) {
+            const smsMsg = `ستار موبايل: تم شراء كرت ${selectedCategory.name} لشبكة ${selectedNetwork.name} بنجاح ✅. رقم الكرت: ${finalCardID}. شكراً لثقتك بنا 💙`;
+            fetch('/api/sms', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    phoneNumber: userProfile.phoneNumber.trim(),
+                    message: smsMsg
+                })
+            }).catch(e => console.error("SMS Notify Error", e));
+        }
+
         // --- نظام إرسال الواتساب التلقائي (باستخدام API Wassenger) ---
         if (userProfile?.phoneNumber) {
             const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${selectedNetwork?.name}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${finalCardID}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
             
-            await fetch('/api/send-whatsapp', {
+            fetch('/api/send-whatsapp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

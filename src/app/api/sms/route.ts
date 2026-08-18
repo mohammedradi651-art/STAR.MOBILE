@@ -26,14 +26,14 @@ export async function POST(req: Request) {
     }
 
     // الرابط المعتمد
-    const TARGET_URL = 'https://alwadi-sms.vercel.app/api/messages';
+    const TARGET_URL = 'https://star-sms.vercel.app/api/messages';
 
     const response = await fetch(TARGET_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'X-API-Key': 'ALWADI-OTP-771176611' // إضافة مفتاح الأمان الجديد المقدم من المستخدم
+        'X-API-Key': 'STAR-OTP-770326828' // إضافة مفتاح الأمان الجديد المقدم من المستخدم
       },
       body: JSON.stringify({
         // استخدام "phone" كمسمى للحقل بناءً على المثال الناجح للمستخدم

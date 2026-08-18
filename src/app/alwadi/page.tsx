@@ -200,6 +200,20 @@ export default function AlwadiPage() {
         });
 
         await batch.commit();
+
+        // إرسال إشعار SMS تلقائي
+        if (userProfile?.phoneNumber) {
+            const smsMsg = `ستار موبايل: تم تجديد باقة ${selectedOption.title} بنجاح لمشترك منظومة الوادي: ${inquiryResult.data.name}. شكراً لثقتك بنا 💙`;
+            fetch('/api/sms', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    phoneNumber: userProfile.phoneNumber.trim(),
+                    message: smsMsg
+                })
+            }).catch(e => console.error("SMS Notify Error", e));
+        }
+
         setShowSuccess(true);
     } catch (error: any) {
         toast({ variant: 'destructive', title: 'فشل العملية', description: error.message });
