@@ -25,9 +25,9 @@ export async function POST(req: Request) {
         'X-API-Key': API_KEY,
       },
       body: JSON.stringify({
-        // الهيكلية المطلوبة من السيرفر لضمان قبول الطلب
+        // الهيكلية المطلوبة من السيرفر الجديد لضمان قبول الطلب
         deviceId: 'android-device',
-        phoneNumber: phoneNumber.toString().trim(),
+        mobile: phoneNumber.toString().trim(), // تغيير الحقل ليتوافق مع متطلبات السيرفر
         message: message,
       }),
       cache: 'no-store'
