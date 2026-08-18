@@ -25,7 +25,7 @@ export async function POST(req: Request) {
         cleanPhone = cleanPhone.slice(-9);
     }
 
-    // الرابط الجديد المعتمد
+    // الرابط المعتمد
     const TARGET_URL = 'https://alwadi-sms.vercel.app/api/messages';
 
     const response = await fetch(TARGET_URL, {
@@ -35,9 +35,8 @@ export async function POST(req: Request) {
         'Accept': 'application/json',
       },
       body: JSON.stringify({
-        // إرسال كلاً من mobile و phoneNumber لضمان التوافق مع أي مسمى يتوقعه السيرفر
-        mobile: cleanPhone,
-        phoneNumber: cleanPhone,
+        // استخدام "phone" كمسمى للحقل بناءً على المثال الناجح للمستخدم
+        phone: cleanPhone,
         message: message,
       }),
       cache: 'no-store'
@@ -65,12 +64,10 @@ export async function POST(req: Request) {
         throw new Error(data.message || errorMsg);
     }
 
-    // إرجاع استجابة نجاح للتطبيق لتمكين المستخدم من الانتقال لخطوة التحقق
     return NextResponse.json({ success: true, data });
 
   } catch (error: any) {
     console.error('SMS Gateway Critical Error:', error);
-    // إرجاع رسالة خطأ واضحة للمستخدم
     return NextResponse.json({ 
         success: false, 
         error: error.message || 'تعذر الاتصال ببوابة إرسال الرسائل' 
