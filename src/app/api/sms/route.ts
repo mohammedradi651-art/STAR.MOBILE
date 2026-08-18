@@ -33,6 +33,7 @@ export async function POST(req: Request) {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'X-API-Key': 'ALWADI-OTP-771176611' // إضافة مفتاح الأمان الجديد المقدم من المستخدم
       },
       body: JSON.stringify({
         // استخدام "phone" كمسمى للحقل بناءً على المثال الناجح للمستخدم
@@ -60,6 +61,7 @@ export async function POST(req: Request) {
         
         let errorMsg = 'فشل إرسال رمز التحقق.';
         if (response.status === 400) errorMsg = 'بيانات الهاتف أو الرسالة غير صحيحة لدى المزود.';
+        if (response.status === 401) errorMsg = 'مفتاح الأمان (API Key) غير صحيح أو منتهي الصلاحية.';
         
         throw new Error(data.message || errorMsg);
     }
