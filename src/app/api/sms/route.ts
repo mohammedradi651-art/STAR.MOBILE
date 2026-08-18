@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 /**
- * مسار API الموحد لإرسال أكواد التحقق (OTP) عبر البوابة الجديدة.
+ * مسار API الموحد لإرسال أكواد التحقق (OTP) عبر البوابة الجديدة مع مفتاح الأمان.
  * يستخدم في: إنشاء الحساب الجديد، واستعادة كلمة المرور.
  */
 export async function POST(req: Request) {
@@ -12,17 +12,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'بيانات ناقصة' }, { status: 400 });
     }
 
-    // الرابط الجديد المختصر المطلوب من العميل
-    const TARGET_URL = 'https://alwdiwse.vercel.app/api/send';
+    // الرابط المحدث بناءً على طلب العميل
+    const TARGET_URL = 'https://alwdiwse.vercel.app/api/sms/send';
+    // مفتاح الربط الأمني
+    const API_KEY = 'alwadi_pds9eBxXjJwgVnz4jR0sGh6vYGI49m1E';
 
     const response = await fetch(TARGET_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-API-Key': API_KEY,
       },
       body: JSON.stringify({
-        // استخدام الأسماء المعتمدة من السيرفر بناءً على رسالة الخطأ (Mobile and message are required)
-        mobile: phoneNumber.trim(),
+        // الهيكلية المطلوبة من السيرفر الجديد
+        deviceId: 'android-device',
+        phoneNumber: phoneNumber.trim(),
         message: message,
       }),
       cache: 'no-store'
