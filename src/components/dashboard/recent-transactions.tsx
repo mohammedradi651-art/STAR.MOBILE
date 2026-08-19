@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, orderBy, limit } from 'firebase/firestore';
 import { Card, CardContent } from '@/components/ui/card';
@@ -87,6 +86,12 @@ export function RecentTransactions() {
   const { toast } = useToast();
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [cachedTransactions, setCachedTransactions] = useState<Transaction[]>([]);
+
+  useEffect(() => {
+    const cached = localStorage.getItem('star_cached_recent_tx');
+    if (cached) setCachedTransactions(JSON.parse(cached));
+  }, []);
 
   const transactionsQuery = useMemoFirebase(
     () =>
@@ -100,16 +105,23 @@ export function RecentTransactions() {
     [user, firestore]
   );
 
-  const { data: transactions, isLoading } = useCollection<Transaction>(transactionsQuery);
+  const { data: transactions, isLoading: isLoadingLive } = useCollection<Transaction>(transactionsQuery);
+
+  useEffect(() => {
+    if (transactions && transactions.length > 0) {
+      localStorage.setItem('star_cached_recent_tx', JSON.stringify(transactions));
+      setCachedTransactions(transactions);
+    }
+  }, [transactions]);
 
   const handleCopy = (text: string, label: string) => {
     if (!text) return;
     navigator.clipboard.writeText(text);
-    toast({
-        title: "تم النسخ",
-        description: `تم نسخ ${label} بنجاح.`,
-    });
+    toast({ title: "تم النسخ", description: `تم نسخ ${label} بنجاح.` });
   };
+
+  const displayTransactions = transactions || cachedTransactions;
+  const isLoading = isLoadingLive && cachedTransactions.length === 0;
 
   return (
     <div className="px-4 pt-2 pb-10 animate-in fade-in-0 duration-500">
@@ -124,8 +136,8 @@ export function RecentTransactions() {
         <div className="space-y-3">
             {isLoading ? (
                 [1, 2].map(i => <Skeleton key={i} className="h-20 w-full rounded-3xl" />)
-            ) : transactions && transactions.length > 0 ? (
-                transactions.map((tx) => {
+            ) : displayTransactions && displayTransactions.length > 0 ? (
+                displayTransactions.map((tx) => {
                     const isCredit = tx.transactionType.includes('تغذية') || 
                                    tx.transactionType.includes('استلام') || 
                                    tx.transactionType.includes('أرباح') || 
@@ -168,7 +180,7 @@ export function RecentTransactions() {
                                 </Card>
                             </DialogTrigger>
                             {selectedTx && (
-                                <DialogContent className="rounded-[32px] max-w-[90vw] sm:max-w-md">
+                                <DialogContent className="rounded-[32px] max-w-[90vw] sm:max-w-md outline-none">
                                     <DialogHeader>
                                         <DialogTitle className="text-center font-black">تفاصيل العملية</DialogTitle>
                                         <DialogDescription className="text-center">
@@ -200,13 +212,6 @@ export function RecentTransactions() {
                                             <span className="text-muted-foreground flex items-center gap-2"><Calendar className="h-4 w-4 text-primary"/> التاريخ:</span>
                                             <span className="font-bold">
                                                 {selectedTx.transactionDate ? format(parseISO(selectedTx.transactionDate), 'eeee, d MMMM yyyy', { locale: ar }) : '...'}
-                                            </span>
-                                        </div>
-
-                                        <div className="flex justify-between items-center py-2 border-b border-dashed">
-                                            <span className="text-muted-foreground flex items-center gap-2"><Clock className="h-4 w-4 text-primary"/> الوقت:</span>
-                                            <span className="font-bold">
-                                                {selectedTx.transactionDate ? format(parseISO(selectedTx.transactionDate), 'h:mm:ss a', { locale: ar }) : '...'}
                                             </span>
                                         </div>
 

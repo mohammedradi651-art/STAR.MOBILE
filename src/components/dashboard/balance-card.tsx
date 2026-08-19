@@ -66,9 +66,12 @@ export function BalanceCard() {
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isPaymentHubOpen, setIsPaymentHubOpen] = useState(false);
   const [editingSide, setEditingSide] = useState<'left' | 'right' | null>(null);
+  const [cachedBalance, setCachedBalance] = useState<number | null>(null);
 
   useEffect(() => {
     setIsBalanceVisible(document.documentElement.classList.contains('dark'));
+    const savedBalance = localStorage.getItem('star_cached_user_balance');
+    if (savedBalance) setCachedBalance(parseFloat(savedBalance));
 
     const savedLeftId = localStorage.getItem('balance_card_left_id');
     const savedRightId = localStorage.getItem('balance_card_right_id');
@@ -89,8 +92,14 @@ export function BalanceCard() {
   );
   const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
 
-  const balance = userProfile?.balance ?? 0;
-  const isLoading = isUserLoading || isProfileLoading;
+  useEffect(() => {
+    if (userProfile?.balance !== undefined) {
+      localStorage.setItem('star_cached_user_balance', String(userProfile.balance));
+    }
+  }, [userProfile]);
+
+  const balance = userProfile?.balance ?? cachedBalance ?? 0;
+  const isLoading = isUserLoading && !cachedBalance;
 
   const handleLongPress = (side: 'left' | 'right') => {
     setEditingSide(side);
@@ -204,7 +213,6 @@ export function BalanceCard() {
         </div>
       </div>
 
-      {/* نافذة اختيار الاختصارات المفضل */}
       <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
         <DialogContent className="rounded-[32px] max-sm p-6 [&>button]:hidden">
           <DialogHeader>
@@ -237,7 +245,6 @@ export function BalanceCard() {
         </DialogContent>
       </Dialog>
 
-      {/* نافذة مركز المدفوعات (Pop-up) مع خلفيات بيضاء للشعارات */}
       <Dialog open={isPaymentHubOpen} onOpenChange={setIsPaymentHubOpen}>
         <DialogContent className="rounded-[40px] max-sm p-0 overflow-hidden border-none shadow-2xl bg-[#F8FAFC] dark:bg-slate-950 outline-none [&>button]:hidden">
             <div className="bg-mesh-gradient p-8 text-center text-white relative">

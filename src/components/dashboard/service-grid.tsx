@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -15,10 +14,11 @@ import {
   Zap,
   Globe,
   ChevronLeft as LucideChevronLeft,
-  Droplets
+  Droplets,
+  WifiOff
 } from 'lucide-react';
 import Link from 'next/link';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import {
   Dialog,
@@ -31,6 +31,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { useToast } from '@/hooks/use-toast';
 
 type Service = {
   name: string;
@@ -38,6 +39,7 @@ type Service = {
   href?: string;
   isTrigger?: boolean;
   id?: string;
+  offlineSupport?: boolean;
 };
 
 const ServiceItem = ({
@@ -47,34 +49,53 @@ const ServiceItem = ({
   href,
   isTrigger,
   onClick,
-}: Service & { index: number, onClick?: () => void }) => {
+  offlineSupport,
+  isOnline
+}: Service & { index: number, onClick?: () => void, isOnline: boolean }) => {
+  const { toast } = useToast();
+  
+  const handleClick = (e: React.MouseEvent) => {
+    if (!isOnline && !offlineSupport) {
+        e.preventDefault();
+        toast({
+            variant: "destructive",
+            title: "عذراً، تحتاج إنترنت",
+            description: "هذا القسم يحتاج إلى اتصال نشط بالإنترنت للعمل.",
+        });
+        return;
+    }
+    if (isTrigger && onClick) onClick();
+  };
+
   const content = (
     <div 
-      className="group flex flex-col items-center justify-center aspect-[1.6/1] rounded-[22px] border border-border/15 bg-white text-foreground shadow-[0_4px_16px_rgba(0,0,0,0.05)] dark:bg-[#1b1b1f] dark:text-white dark:shadow-[0_10px_25px_rgba(0,0,0,0.28)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] transition-all duration-300 active:scale-95 animate-in fade-in-0 zoom-in-95"
+      className={cn(
+        "group flex flex-col items-center justify-center aspect-[1.6/1] rounded-[22px] border border-border/15 bg-white text-foreground shadow-[0_4px_16px_rgba(0,0,0,0.05)] dark:bg-[#1b1b1f] dark:text-white transition-all duration-300 active:scale-95 animate-in fade-in-0 zoom-in-95",
+        !isOnline && !offlineSupport && "opacity-60 grayscale-[50%]"
+      )}
       style={{
         animationDelay: `${100 + index * 50}ms`,
         animationFillMode: 'backwards',
       }}
-      onClick={isTrigger ? onClick : undefined}
+      onClick={handleClick}
     >
-      <div className="mb-1.5 flex h-8 w-8 items-center justify-center rounded-2xl bg-muted/20 dark:bg-white/5 overflow-hidden">
+      <div className="mb-1.5 flex h-8 w-8 items-center justify-center rounded-2xl bg-muted/20 dark:bg-white/5 overflow-hidden relative">
         {typeof Icon === 'function' ? (
-             <Icon 
-             className="h-5 w-5 transition-transform group-hover:scale-110" 
-               style={{ 
-                   strokeWidth: 2,
-                   stroke: 'currentColor'
-               }}
-             />
+             <Icon className="h-5 w-5 transition-transform group-hover:scale-110" style={{ strokeWidth: 2 }} />
         ) : (
             <Icon size={20} className="transition-transform group-hover:scale-110" />
+        )}
+        {!isOnline && !offlineSupport && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/40">
+                <WifiOff className="h-3 w-3 text-destructive" />
+            </div>
         )}
       </div>
       <span className="text-[11px] font-bold text-center px-1 leading-tight">{name}</span>
     </div>
   );
 
-  if (isTrigger) {
+  if (isTrigger || (!isOnline && !offlineSupport)) {
     return <div className="w-full cursor-pointer">{content}</div>;
   }
 
@@ -87,17 +108,29 @@ const ServiceItem = ({
 
 export function ServiceGrid() {
   const [isPaymentHubOpen, setIsPaymentHubOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+    const handleStatus = () => setIsOnline(navigator.onLine);
+    window.addEventListener('online', handleStatus);
+    window.addEventListener('offline', handleStatus);
+    return () => {
+      window.removeEventListener('online', handleStatus);
+      window.removeEventListener('offline', handleStatus);
+    };
+  }, []);
 
   const services: Service[] = [
-    { name: 'تسديد رصيد', icon: Smartphone, href: '/telecom-services' },
-    { name: 'الشبكات', icon: Wifi, href: '/services' },
-    { id: 'payments', name: 'المدفوعات', icon: CreditCard, isTrigger: true, onClick: () => setIsPaymentHubOpen(true) },
-    { name: 'تحويل لمشترك', icon: ArrowLeftRight, href: '/transfer' },
-    { name: 'غذي حسابك', icon: Wallet, href: '/top-up' },
-    { name: 'معرض الألعاب', icon: Gamepad2, href: '/games' },
-    { name: 'المفضلة', icon: Heart, href: '/favorites' },
-    { name: 'سجل العمليات', icon: History, href: '/transactions' },
-    { name: 'متجر ستار ميديا', icon: ShoppingBag, href: '/store' },
+    { name: 'تسديد رصيد', icon: Smartphone, href: '/telecom-services', offlineSupport: false },
+    { name: 'الشبكات', icon: Wifi, href: '/services', offlineSupport: true },
+    { id: 'payments', name: 'المدفوعات', icon: CreditCard, isTrigger: true, onClick: () => setIsPaymentHubOpen(true), offlineSupport: true },
+    { name: 'تحويل لمشترك', icon: ArrowLeftRight, href: '/transfer', offlineSupport: false },
+    { name: 'غذي حسابك', icon: Wallet, href: '/top-up', offlineSupport: true },
+    { name: 'معرض الألعاب', icon: Gamepad2, href: '/games', offlineSupport: false },
+    { name: 'المفضلة', icon: Heart, href: '/favorites', offlineSupport: true },
+    { name: 'سجل العمليات', icon: History, href: '/transactions', offlineSupport: true },
+    { name: 'متجر ستار ميديا', icon: ShoppingBag, href: '/store', offlineSupport: false },
   ];
 
   return (
@@ -108,6 +141,7 @@ export function ServiceGrid() {
             key={service.name} 
             {...service} 
             index={index} 
+            isOnline={isOnline}
           />
         ))}
       </div>

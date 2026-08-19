@@ -12,14 +12,41 @@ import { SplashScreen } from '@/components/layout/splash-screen';
 import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
+import { WifiOff, Globe } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
-// إصدار التطبيق المحدث لتطهير الكاش وتفعيل الواجهة الملكية
-const APP_VERSION = '1.7.5';
+const APP_VERSION = '1.8.0';
 
 type UserProfile = {
   isPinEnabled?: boolean;
   pinCode?: string;
 };
+
+// المسارات المدعومة للعمل بدون إنترنت
+const OFFLINE_SUPPORTED_ROUTES = ['/login', '/services', '/favorites', '/account'];
+
+function OfflinePlaceholder() {
+  const router = useRouter();
+  return (
+    <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-background space-y-6 animate-in fade-in duration-700">
+      <div className="bg-primary/10 p-8 rounded-[40px] shadow-inner">
+        <WifiOff className="h-16 w-16 text-primary animate-pulse" />
+      </div>
+      <div className="space-y-2">
+        <h2 className="text-xl font-black text-foreground">عذراً، لا يوجد اتصال</h2>
+        <p className="text-sm font-bold text-muted-foreground leading-relaxed px-4">
+          هذا القسم يحتاج إلى اتصال نشط بالإنترنت للوصول إلى البيانات المباشرة.
+        </p>
+      </div>
+      <Button 
+        onClick={() => router.push('/services')}
+        className="rounded-2xl h-12 px-10 font-black bg-mesh-gradient shadow-lg active:scale-95 transition-transform"
+      >
+        اذهب للشبكات (يعمل أوفلاين)
+      </Button>
+    </div>
+  );
+}
 
 function AppContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -28,55 +55,30 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const { user, isUserLoading } = useUser();
   const [showSplash, setShowSplash] = useState(true);
   const [isPinVerified, setIsPinVerified] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
 
-  // نظام تطهير الكاش القوي والآلي وملفات الارتباط عند تغيير النسخة
+  // مراقبة حالة الاتصال بالإنترنت
   useEffect(() => {
-    const savedVersion = localStorage.getItem('star_app_version');
-    
-    if (savedVersion !== APP_VERSION) {
-      console.log('Force clearing all data for version: ' + APP_VERSION);
-      
-      // 1. مسح الذاكرة المحلية والجلسات
-      localStorage.clear();
-      sessionStorage.clear();
-      
-      // 2. مسح كافة ملفات الارتباط (Cookies) برمجياً
-      if (typeof document !== 'undefined') {
-        const cookies = document.cookie.split(";");
-        for (let i = 0; i < cookies.length; i++) {
-          const cookie = cookies[i];
-          const eqPos = cookie.indexOf("=");
-          const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
-          document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
-        }
-      }
+    setIsOnline(navigator.onLine);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
 
-      // 3. مسح الـ Service Worker إن وجد لضمان عدم تحميل HTML قديم
-      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then((registrations) => {
-          for (const registration of registrations) {
-            registration.unregister();
-          }
-        });
-      }
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
 
-      // 4. حفظ النسخة الجديدة وإعادة تحميل إجبارية وشاملة
-      localStorage.setItem('star_app_version', APP_VERSION);
-      
-      // إضافة باراميتر عشوائي للرابط لإجبار السيرفر على تقديم نسخة جديدة
-      const url = new URL(window.location.href);
-      url.searchParams.set('v', APP_VERSION);
-      url.searchParams.set('t', Date.now().toString());
-      window.location.replace(url.toString());
-    }
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
-  // تسجيل Service Worker بباراميتر نسخة لضمان التحديث
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js?v=' + APP_VERSION, {
-        updateViaCache: 'none'
-      }).catch(() => {});
+    const savedVersion = localStorage.getItem('star_app_version');
+    if (savedVersion !== APP_VERSION) {
+      localStorage.clear();
+      sessionStorage.clear();
+      localStorage.setItem('star_app_version', APP_VERSION);
+      window.location.reload();
     }
   }, []);
 
@@ -103,46 +105,23 @@ function AppContent({ children }: { children: React.ReactNode }) {
     if (sessionStorage.getItem('is_pin_verified')) setIsPinVerified(true);
   }, []);
 
-  useEffect(() => {
-    if (!isUserLoading && user && pathname === '/') {
-        router.replace('/login');
-    }
-  }, [user, isUserLoading, pathname, router]);
-
-  const handleSplashComplete = () => {
-    setShowSplash(false);
-    sessionStorage.setItem(`has_seen_splash_${APP_VERSION}`, 'true');
-  };
-
-  const handlePinVerified = () => {
-    setIsPinVerified(true);
-    sessionStorage.setItem('is_pin_verified', 'true');
-  };
-
   const shouldShowPinLock = user && userProfile?.isPinEnabled && userProfile?.pinCode && !isPinVerified && !showSplash;
+  
+  // منطق حجب الصفحات التي لا تعمل بدون إنترنت
+  const isCurrentRouteRestricted = !isOnline && !OFFLINE_SUPPORTED_ROUTES.some(route => pathname.startsWith(route)) && pathname !== '/';
 
   return (
     <div className="mx-auto max-w-[450px] bg-white h-[100dvh] flex flex-col shadow-2xl relative overflow-hidden">
-      {showSplash && (
-        <SplashScreen 
-          onComplete={handleSplashComplete} 
-          isAppReady={!isUserLoading} 
-        />
-      )}
+      {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} isAppReady={!isUserLoading} />}
 
-      {shouldShowPinLock && (
-        <PinOverlay 
-            userPin={userProfile.pinCode!} 
-            onVerified={handlePinVerified} 
-        />
-      )}
+      {shouldShowPinLock && <PinOverlay userPin={userProfile.pinCode!} onVerified={() => { setIsPinVerified(true); sessionStorage.setItem('is_pin_verified', 'true'); }} />}
       
       {!showSplash && (
         <div className="flex-1 flex flex-col relative overflow-hidden animate-in fade-in duration-500">
           <WelcomeModal />
           <AppErrorDialog />
           <main className="flex-1 flex flex-col min-h-0 relative">
-            {children}
+            {isCurrentRouteRestricted ? <OfflinePlaceholder /> : children}
           </main>
           {isNavVisiblePage && <BottomNav />}
         </div>
