@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
@@ -19,9 +20,6 @@ import {
   X,
   Globe,
   Clock,
-  Star,
-  Trophy,
-  Megaphone,
   WifiOff
 } from 'lucide-react';
 import { 
@@ -58,12 +56,9 @@ import { Button } from '@/components/ui/button';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 import { Label } from '@/components/ui/label';
 import Image from 'next/image';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 
 export const dynamic = 'force-dynamic';
 
-// Types
 type CombinedNetwork = {
     id: string;
     name: string;
@@ -110,6 +105,7 @@ export default function CombinedNetworksPage() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [isOnline, setIsOnline] = useState(true);
+  const [mounted, setMounted] = useState(false);
   
   const [apiNetworks, setApiNetworks] = useState<CombinedNetwork[]>([]);
   const [isLoadingApi, setIsLoadingApi] = useState(true);
@@ -120,7 +116,6 @@ export default function CombinedNetworksPage() {
   const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   const [categoryError, setCategoryError] = useState<string | null>(null);
   
-  // Purchase States
   const [isProcessing, setIsProcessing] = useState(false);
   const [purchasedCard, setPurchasedCard] = useState<any>(null);
   const [showConfirmPurchase, setShowConfirmPurchase] = useState<any | null>(null);
@@ -128,40 +123,40 @@ export default function CombinedNetworksPage() {
   const [smsRecipient, setSmsRecipient] = useState('');
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // تتبع حالة الإنترنت
   useEffect(() => {
+    setMounted(true);
     setIsOnline(navigator.onLine);
+    
     const handleStatus = () => setIsOnline(navigator.onLine);
     window.addEventListener('online', handleStatus);
     window.addEventListener('offline', handleStatus);
+
+    // تحميل الكاش الأولي
+    const cached = localStorage.getItem('star_mobile_networks_combined_cache');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          setApiNetworks(parsed.filter(n => !n.isLocal));
+        }
+      } catch (e) {}
+    }
+
     return () => {
       window.removeEventListener('online', handleStatus);
       window.removeEventListener('offline', handleStatus);
     };
   }, []);
 
-  // Fetch local networks
   const localNetworksQuery = useMemoFirebase(
     () => (firestore ? collection(firestore, 'networks') : null),
     [firestore]
   );
   const { data: localNetworks, isLoading: isLoadingLocal } = useCollection<any>(localNetworksQuery);
 
-  // Fetch API networks with Hybrid Logic (Online/Offline)
   useEffect(() => {
-    const fetchApiNetworks = async () => {
-      const cached = localStorage.getItem('star_mobile_networks_combined_cache');
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setApiNetworks(parsed.filter(n => !n.isLocal));
-            if (!navigator.onLine) setIsLoadingApi(false);
-          }
-        } catch (e) {}
-      }
-
-      if (navigator.onLine) {
+    if (mounted && isOnline) {
+      const fetchApiNetworks = async () => {
         try {
           const response = await fetch('/services/networks-api');
           if (response.ok) {
@@ -174,30 +169,29 @@ export default function CombinedNetworksPage() {
               logo: n.logo,
             }));
             setApiNetworks(mapped);
-            // سيتم تحديث الكاش المدمج في useEffect آخر
           }
         } catch (err) {
           console.error(err);
         } finally {
           setIsLoadingApi(false);
         }
-      } else {
-          setIsLoadingApi(false);
-      }
-    };
-    fetchApiNetworks();
-  }, [isOnline]);
+      };
+      fetchApiNetworks();
+    } else if (mounted) {
+      setIsLoadingApi(false);
+    }
+  }, [isOnline, mounted]);
 
-  // تحديث التخزين المحلي المدمج للشبكات
   useEffect(() => {
-    if (isOnline && (localNetworks || apiNetworks.length > 0)) {
+    if (mounted && isOnline && (localNetworks || apiNetworks.length > 0)) {
         const local = localNetworks ? localNetworks.map(n => ({ ...n, isLocal: true })) : [];
         const combined = [...local, ...apiNetworks];
         localStorage.setItem('star_mobile_networks_combined_cache', JSON.stringify(combined));
     }
-  }, [localNetworks, apiNetworks, isOnline]);
+  }, [localNetworks, apiNetworks, isOnline, mounted]);
 
   const allNetworksCombined = useMemo(() => {
+    if (!mounted) return [];
     let combined: CombinedNetwork[] = [];
     
     if (!isOnline) {
@@ -214,7 +208,7 @@ export default function CombinedNetworksPage() {
         net.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         net.location.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [localNetworks, apiNetworks, searchTerm, isOnline]);
+  }, [localNetworks, apiNetworks, searchTerm, isOnline, mounted]);
 
   const userDocRef = useMemoFirebase(
     () => (user && firestore ? doc(firestore, 'users', user.uid) : null),
@@ -243,17 +237,13 @@ export default function CombinedNetworksPage() {
     if (cachedCats) {
       try {
         setCategories(JSON.parse(cachedCats));
-        setIsLoadingCategories(false);
-      } catch (e) {
-        setCategories([]);
-        setIsLoadingCategories(true);
-      }
+      } catch (e) { setCategories([]); }
     } else {
       setCategories([]);
-      setIsLoadingCategories(true);
     }
 
     if (isOnline) {
+        setIsLoadingCategories(true);
         try {
           if (network.isLocal && firestore) {
             const catsRef = collection(firestore, `networks/${network.id}/cardCategories`);
@@ -276,11 +266,8 @@ export default function CombinedNetworksPage() {
         } finally {
           setIsLoadingCategories(false);
         }
-    } else {
-        setIsLoadingCategories(false);
-        if (!cachedCats) {
-            setCategoryError("لا توجد بيانات محفوظة لهذه الشبكة. يرجى الاتصال بالإنترنت لتحميل الفئات.");
-        }
+    } else if (!cachedCats) {
+        setCategoryError("لا توجد بيانات محفوظة لهذه الشبكة أوفلاين.");
     }
   };
 
@@ -317,65 +304,27 @@ export default function CombinedNetworksPage() {
     if (!selectedCategory || !selectedNetwork || !user || !userProfile || !firestore || !userDocRef) return;
     
     setIsProcessing(true);
-    const categoryPrice = selectedCategory.price;
-    const userBalance = userProfile?.balance ?? 0;
-
-    if (userBalance < categoryPrice) {
-        toast({ variant: "destructive", title: "رصيد غير كافٍ", description: "رصيدك الحالي لا يكفي لإتمام عملية الشراء." });
-        setIsProcessing(false);
-        return;
-    }
-
     try {
         const now = new Date().toISOString();
         const batch = writeBatch(firestore);
-        let finalCardID = '';
 
         if (selectedNetwork.isLocal) {
             const cardsRef = collection(firestore, `networks/${selectedNetwork.id}/cards`);
             const q = query(cardsRef, where('categoryId', '==', selectedCategory.id), where('status', '==', 'available'), firestoreLimit(1));
             const availableCardsSnapshot = await getDocs(q);
 
-            if (availableCardsSnapshot.empty) throw new Error('لا توجد كروت متاحة حالياً في هذه الفئة.');
+            if (availableCardsSnapshot.empty) throw new Error('لا توجد كروت متاحة حالياً.');
             
             const cardToPurchaseDoc = availableCardsSnapshot.docs[0];
             const cardData = cardToPurchaseDoc.data();
-            finalCardID = cardData.cardNumber;
             
-            const commission = Math.ceil(selectedCategory.price * 0.10);
-            const payoutAmount = selectedCategory.price - commission;
-            const ownerId = selectedNetwork.ownerId || 'admin';
-
             batch.update(cardToPurchaseDoc.ref, { status: 'sold', soldTo: user.uid, soldTimestamp: now });
             batch.update(userDocRef, { balance: increment(-selectedCategory.price) });
             batch.set(doc(collection(firestore, `users/${user.uid}/transactions`)), {
-                userId: user.uid, 
-                transactionDate: now, 
-                amount: selectedCategory.price,
-                transactionType: `شراء كرت ${selectedCategory.name}`, 
-                notes: `شبكة: ${selectedNetwork.name}`,
+                userId: user.uid, transactionDate: now, amount: selectedCategory.price,
+                transactionType: `شراء كرت ${selectedCategory.name}`, notes: `شبكة: ${selectedNetwork.name}`,
                 cardNumber: cardData.cardNumber,
             });
-
-            const soldCardRef = doc(collection(firestore, 'soldCards'));
-            batch.set(soldCardRef, {
-                networkId: selectedNetwork.id,
-                ownerId: ownerId,
-                networkName: selectedNetwork.name,
-                categoryId: selectedCategory.id,
-                categoryName: selectedCategory.name,
-                cardId: cardToPurchaseDoc.id,
-                cardNumber: cardData.cardNumber,
-                price: selectedCategory.price,
-                commissionAmount: commission,
-                payoutAmount: payoutAmount,
-                buyerId: user.uid,
-                buyerName: userProfile.displayName || 'مشترك',
-                buyerPhoneNumber: userProfile.phoneNumber || '',
-                soldTimestamp: now,
-                payoutStatus: 'pending'
-            });
-
             await batch.commit();
             setPurchasedCard({ cardID: cardData.cardNumber });
         } else {
@@ -383,29 +332,16 @@ export default function CombinedNetworksPage() {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ classId: selectedCategory.id })
             });
-            
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'فشل الشراء\nيرجى التواصل مع الادارة 770326828');
-            }
-            
+            if (!response.ok) throw new Error('فشل الشراء من المزود.');
             const result = await response.json();
             const cardData = result.data.order.card;
-            finalCardID = cardData.cardID;
             
-            batch.update(userDocRef, { balance: increment(-categoryPrice) });
-            
-            const transactionPayload: any = {
-                userId: user.uid, transactionDate: now, amount: categoryPrice,
+            batch.update(userDocRef, { balance: increment(-selectedCategory.price) });
+            batch.set(doc(collection(firestore, `users/${user.uid}/transactions`)), {
+                userId: user.uid, transactionDate: now, amount: selectedCategory.price,
                 transactionType: `شراء كرت ${selectedCategory.name}`, notes: `شبكة: ${selectedNetwork.name}`,
                 cardNumber: cardData.cardID,
-            };
-            
-            if (cardData.cardPass && cardData.cardPass !== cardData.cardID) {
-                transactionPayload.cardPassword = cardData.cardPass;
-            }
-
-            batch.set(doc(collection(firestore, `users/${user.uid}/transactions`)), transactionPayload);
+            });
             await batch.commit();
             setPurchasedCard(cardData);
         }
@@ -414,7 +350,7 @@ export default function CombinedNetworksPage() {
         setSelectedNetwork(null);
         audioRef.current?.play().catch(() => {});
     } catch (error: any) {
-        toast({ variant: "destructive", title: "فشل العملية", description: error.message || 'فشل الشراء' });
+        toast({ variant: "destructive", title: "فشل العملية", description: error.message });
     } finally { 
         setIsProcessing(false); 
     }
@@ -427,13 +363,7 @@ export default function CombinedNetworksPage() {
     setShowConfirmPurchase(null);
   };
 
-  const sortedCategories = useMemo(() => {
-    if (!categories) return [];
-    if (selectedNetwork?.isLocal) {
-        return [...categories].sort((a, b) => a.price - b.price);
-    }
-    return categories;
-  }, [categories, selectedNetwork]);
+  if (!mounted) return null;
 
   return (
     <>
@@ -462,12 +392,10 @@ export default function CombinedNetworksPage() {
         </div>
         
         <div className="flex-1 overflow-y-auto px-4 pb-20 space-y-4">
-            {(isLoadingLocal || (isLoadingApi && apiNetworks.length === 0)) && isOnline ? (
-                <div className="flex justify-center py-20"><ProcessingOverlay /></div>
-            ) : allNetworksCombined.length === 0 ? (
+            {allNetworksCombined.length === 0 ? (
                 <div className="text-center py-20 opacity-40">
                     <Wifi className="h-16 w-16 mx-auto mb-4" />
-                    <p className="font-bold">{isOnline ? "لا توجد شبكات متاحة حالياً" : "لا توجد شبكات محفوظة حالياً. يرجى الاتصال بالإنترنت لأول مرة لتحميل الشبكات."}</p>
+                    <p className="font-bold">{isOnline ? "جاري التحميل..." : "لا توجد شبكات محفوظة حالياً."}</p>
                 </div>
             ) : (
                 allNetworksCombined.map((net, index) => (
@@ -501,69 +429,52 @@ export default function CombinedNetworksPage() {
         <DialogContent className="max-w-[95%] sm:max-w-md rounded-[32px] p-0 overflow-hidden border-none shadow-2xl [&>button]:hidden bg-white dark:bg-slate-950">
           {selectedNetwork && (
             <div className="flex flex-col max-h-[85vh]">
-              <div className="bg-mesh-gradient p-0 relative overflow-hidden">
-                <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl animate-pulse" />
-                <DialogHeader className="pt-12 pb-8 px-8 text-white text-center relative z-10">
-                    <div className="bg-white/20 p-3 rounded-2xl w-14 h-14 mx-auto mb-3 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl overflow-hidden">
+              <div className="bg-mesh-gradient pt-12 pb-8 px-8 text-white text-center relative overflow-hidden">
+                    <div className="bg-white/20 p-3 rounded-2xl w-14 h-14 mx-auto mb-3 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl">
                         <Wifi className="h-7 w-7 text-white" />
                     </div>
                     <h2 className="text-xl font-black text-white drop-shadow-md">{selectedNetwork.name}</h2>
                     <p className="text-[10px] text-white/70 font-bold mt-1 bg-white/10 py-1 px-3 rounded-full border border-white/5 inline-block">{selectedNetwork.location}</p>
-                </DialogHeader>
               </div>
               <div className="flex-1 overflow-y-auto p-4 bg-white dark:bg-slate-900">
-                {isLoadingCategories ? ( <div className="flex justify-center py-10"><ProcessingOverlay /></div> ) : categoryError ? ( 
+                {isLoadingCategories ? ( <div className="flex justify-center py-10"><Loader2 className="animate-spin text-primary" /></div> ) : categoryError ? ( 
                     <div className="text-center py-10 opacity-40 space-y-4">
                         <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
                         <p className="font-bold text-sm px-10 leading-relaxed text-destructive">{categoryError}</p>
                     </div> 
                 ) : (
                   <div className="space-y-3">
-                    {sortedCategories.map((cat, idx) => {
+                    {categories.map((cat, idx) => {
                         const gradient = CARD_GRADIENTS[idx % CARD_GRADIENTS.length];
                         return (
-                            <div key={cat.id} className="animate-in slide-in-from-bottom-4 duration-500 fill-mode-both" style={{ animationDelay: `${idx * 100}ms` }}>
-                                <Card 
-                                    className={cn(
-                                        "relative overflow-hidden rounded-[28px] border-none shadow-xl transition-all duration-300 group cursor-pointer active:scale-[0.97]",
-                                        "bg-gradient-to-br p-[2px]",
-                                        gradient
-                                    )}
-                                    onClick={() => setShowConfirmPurchase(cat)}
-                                >
-                                    <div className="relative rounded-[26px] p-3.5 flex items-center justify-between gap-4 h-full transition-colors bg-white/95 dark:bg-slate-900/95 hover:bg-primary/[0.02]">
-                                        <div className="flex items-center gap-3">
-                                            <div className={cn(
-                                                "h-11 w-11 rounded-[18px] flex items-center justify-center shrink-0 shadow-lg bg-gradient-to-br text-white overflow-hidden",
-                                                gradient
-                                            )}>
-                                                <Wifi className="h-5 w-5" />
-                                            </div>
-                                            <div className="text-right space-y-0.5">
-                                                <h4 className="text-xs font-black text-foreground group-hover:text-primary transition-colors">{cat.name}</h4>
-                                                <div className="flex gap-2.5 mt-1">
-                                                    <div className="flex items-center gap-1 text-[9px] font-bold text-primary">
-                                                        <Database className="h-2.5 w-2.5" />
-                                                        <span>{cat.capacity || '-'}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-1 text-[9px] font-bold text-muted-foreground">
-                                                        <Clock className="h-2.5 w-2.5" />
-                                                        <span>{cat.validity || cat.expirationDate || '-'}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
+                            <Card 
+                                key={cat.id} 
+                                className={cn(
+                                    "relative overflow-hidden rounded-[28px] border-none shadow-xl transition-all duration-300 group cursor-pointer active:scale-[0.97]",
+                                    "bg-gradient-to-br p-[2px]",
+                                    gradient
+                                )}
+                                onClick={() => setShowConfirmPurchase(cat)}
+                            >
+                                <div className="relative rounded-[26px] p-3.5 flex items-center justify-between gap-4 h-full transition-colors bg-white/95 dark:bg-slate-900/95 hover:bg-primary/[0.02]">
+                                    <div className="flex items-center gap-3">
+                                        <div className={cn("h-11 w-11 rounded-[18px] flex items-center justify-center shrink-0 shadow-lg bg-gradient-to-br text-white overflow-hidden", gradient)}>
+                                            <Wifi className="h-5 w-5" />
                                         </div>
-
-                                        <div className="flex flex-col items-end gap-1.5">
-                                            <div className="flex flex-col items-end leading-tight">
-                                                <span className="text-xl font-black tracking-tighter text-primary">{cat.price.toLocaleString('en-US')}</span>
-                                                <span className="text-[7px] font-black text-muted-foreground uppercase opacity-60">ريال</span>
+                                        <div className="text-right space-y-0.5">
+                                            <h4 className="text-xs font-black text-foreground group-hover:text-primary transition-colors">{cat.name}</h4>
+                                            <div className="flex gap-2.5 mt-1 text-[9px] font-bold text-muted-foreground">
+                                                <span className="flex items-center gap-1"><Database className="h-2.5 w-2.5" />{cat.capacity || '-'}</span>
+                                                <span className="flex items-center gap-1"><Clock className="h-2.5 w-2.5" />{cat.validity || cat.expirationDate || '-'}</span>
                                             </div>
-                                            <Button size="sm" className="h-7 rounded-lg text-[9px] font-black px-4 bg-primary shadow-md shadow-primary/20">شراء</Button>
                                         </div>
                                     </div>
-                                </Card>
-                            </div>
+                                    <div className="flex flex-col items-end gap-1.5">
+                                        <span className="text-xl font-black tracking-tighter text-primary">{cat.price.toLocaleString('en-US')}</span>
+                                        <Button size="sm" className="h-7 rounded-lg text-[9px] font-black px-4 bg-primary shadow-md">شراء</Button>
+                                    </div>
+                                </div>
+                            </Card>
                         );
                     })}
                   </div>
@@ -582,16 +493,13 @@ export default function CombinedNetworksPage() {
                 <CheckCircle className="h-10 w-10 text-primary" />
             </div>
             <DialogTitle className="text-center font-black text-xl">تأكيد عملية الشراء</DialogTitle>
-            <DialogDescription className="text-center font-bold">
-              هل أنت متأكد من شراء كرت <span className="text-primary">"{showConfirmPurchase?.name}"</span>؟
-            </DialogDescription>
           </DialogHeader>
           <div className="py-6 bg-muted/30 rounded-[28px] border-2 border-dashed border-primary/10 space-y-2 mt-4">
             <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">سيتم خصم المبلغ من رصيدك</p>
             <p className="text-3xl font-black text-primary">{showConfirmPurchase?.price.toLocaleString('en-US')} <span className="text-sm">ريال</span></p>
           </div>
           <DialogFooter className="grid grid-cols-1 gap-3 mt-6">
-            <Button className="w-full h-12 rounded-2xl font-black text-base shadow-lg shadow-primary/20" onClick={handlePurchase} disabled={isProcessing}>
+            <Button className="w-full h-12 rounded-2xl font-black text-base shadow-lg" onClick={handlePurchase} disabled={isProcessing}>
                 {isProcessing ? <Loader2 className="animate-spin h-5 w-5" /> : 'شراء مباشر (رصيد)'}
             </Button>
             <Button className="w-full h-12 rounded-2xl font-black text-base bg-[#00c853] hover:bg-[#00a846] text-white" onClick={handleBuySms}>

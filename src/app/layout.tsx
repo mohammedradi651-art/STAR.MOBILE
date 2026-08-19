@@ -1,3 +1,4 @@
+
 'use client';
 
 import './globals.css';
@@ -23,7 +24,7 @@ type UserProfile = {
 // المسارات المدعومة للعمل بدون إنترنت
 const OFFLINE_SUPPORTED_ROUTES = ['/login', '/services', '/favorites', '/account'];
 
-// أيقونة WifiOff كـ SVG مباشر لتجنب أخطاء الاستيراد في layout.tsx
+// أيقونة WifiOff كـ SVG مباشر لتجنب أخطاء الاستيراد
 const WifiOffIcon = () => (
   <svg 
     xmlns="http://www.w3.org/2000/svg" 
@@ -78,30 +79,32 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const [showSplash, setShowSplash] = useState(true);
   const [isPinVerified, setIsPinVerified] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
-  // مراقبة حالة الاتصال بالإنترنت
   useEffect(() => {
+    setMounted(true);
     setIsOnline(navigator.onLine);
+    
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
+    const savedVersion = localStorage.getItem('star_app_version');
+    if (savedVersion !== APP_VERSION) {
+      localStorage.clear();
+      localStorage.setItem('star_app_version', APP_VERSION);
+    }
+
+    const hasSeenSplash = sessionStorage.getItem(`has_seen_splash_${APP_VERSION}`);
+    if (hasSeenSplash) setShowSplash(false);
+    if (sessionStorage.getItem('is_pin_verified')) setIsPinVerified(true);
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []);
-
-  useEffect(() => {
-    const savedVersion = localStorage.getItem('star_app_version');
-    if (savedVersion !== APP_VERSION) {
-      localStorage.clear();
-      sessionStorage.clear();
-      localStorage.setItem('star_app_version', APP_VERSION);
-      window.location.reload();
-    }
   }, []);
 
   const userDocRef = useMemoFirebase(
@@ -121,16 +124,10 @@ function AppContent({ children }: { children: React.ReactNode }) {
     '/favorites'
   ].includes(pathname);
 
-  useEffect(() => {
-    const hasSeenSplash = sessionStorage.getItem(`has_seen_splash_${APP_VERSION}`);
-    if (hasSeenSplash) setShowSplash(false);
-    if (sessionStorage.getItem('is_pin_verified')) setIsPinVerified(true);
-  }, []);
-
-  const shouldShowPinLock = user && userProfile?.isPinEnabled && userProfile?.pinCode && !isPinVerified && !showSplash;
+  const shouldShowPinLock = mounted && user && userProfile?.isPinEnabled && userProfile?.pinCode && !isPinVerified && !showSplash;
   
-  // منطق حجب الصفحات التي لا تعمل بدون إنترنت
-  const isCurrentRouteRestricted = !isOnline && !OFFLINE_SUPPORTED_ROUTES.some(route => pathname.startsWith(route)) && pathname !== '/';
+  // منطق حجب الصفحات التي لا تعمل بدون إنترنت (فقط بعد التركيب)
+  const isCurrentRouteRestricted = mounted && !isOnline && !OFFLINE_SUPPORTED_ROUTES.some(route => pathname.startsWith(route)) && pathname !== '/';
 
   return (
     <div className="mx-auto max-w-[450px] bg-white h-[100dvh] flex flex-col shadow-2xl relative overflow-hidden">

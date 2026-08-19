@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { BalanceCard } from '@/components/dashboard/balance-card';
 import { ServiceGrid } from '@/components/dashboard/service-grid';
 import { RecentTransactions } from '@/components/dashboard/recent-transactions';
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/carousel";
 import Link from 'next/link';
 import { PWAInstallPrompt } from '@/components/pwa-install-prompt';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,7 +36,7 @@ const DashboardHero = () => {
   const banners = ["/kh.png"];
 
   return (
-    <div className="px-4 mt-[-10px] pb-0"> 
+    <div className="px-4 mt-2 pb-0"> 
       <Carousel
         plugins={[plugin.current]}
         className="w-full"
@@ -98,6 +99,11 @@ export default function DashboardPage() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const userDocRef = useMemoFirebase(
     () => (user && firestore ? doc(firestore, 'users', user.uid) : null),
@@ -106,13 +112,23 @@ export default function DashboardPage() {
   const { data: userProfile, isLoading } = useDoc<UserProfile>(userDocRef);
 
   useEffect(() => {
-    if (!isUserLoading && !user) {
+    if (mounted && !isUserLoading && !user) {
       router.push('/');
     }
-  }, [user, isUserLoading, router]);
+  }, [user, isUserLoading, router, mounted]);
 
-  if (isLoading || isUserLoading) {
-    return null;
+  if (!mounted || isUserLoading) {
+    return (
+      <div className="flex flex-col h-full bg-background animate-pulse p-4 space-y-6">
+        <div className="h-16 w-full bg-muted rounded-2xl" />
+        <div className="h-48 w-full bg-muted rounded-[28px]" />
+        <div className="grid grid-cols-3 gap-4">
+          <div className="h-20 bg-muted rounded-2xl" />
+          <div className="h-20 bg-muted rounded-2xl" />
+          <div className="h-20 bg-muted rounded-2xl" />
+        </div>
+      </div>
+    );
   }
 
   return (

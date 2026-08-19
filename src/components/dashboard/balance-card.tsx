@@ -1,8 +1,9 @@
+
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Eye, EyeOff, Smartphone, ArrowLeftRight, SatelliteDish, Wifi, History, Wallet, MessageCircleQuestion, Heart, Gamepad2, Globe, PhoneCall, Zap, CreditCard, Droplets, ChevronLeft as LucideChevronLeft } from "lucide-react";
+import { Eye, EyeOff, Smartphone, Wifi, SatelliteDish, History, Wallet, MessageCircleQuestion, Heart, Gamepad2, PhoneCall, CreditCard, ChevronLeft as LucideChevronLeft } from "lucide-react";
 import React, { useState, useEffect } from 'react';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
@@ -61,15 +62,18 @@ export function BalanceCard() {
   const firestore = useFirestore();
   const router = useRouter();
 
-  const [leftAction, setLeftAction] = useState(availableServices.find(s => s.id === 'payments') || availableServices[4]);
-  const [rightAction, setRightAction] = useState(availableServices.find(s => s.id === 'pay-bills') || availableServices[2]);
+  const [leftAction, setLeftAction] = useState(availableServices[4]); // Payments
+  const [rightAction, setRightAction] = useState(availableServices[2]); // Pay bills
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isPaymentHubOpen, setIsPaymentHubOpen] = useState(false);
   const [editingSide, setEditingSide] = useState<'left' | 'right' | null>(null);
   const [cachedBalance, setCachedBalance] = useState<number | null>(null);
 
   useEffect(() => {
-    setIsBalanceVisible(document.documentElement.classList.contains('dark'));
+    // تحميل الحالة المبدئية فقط بعد التركيب (Hydration)
+    const isDark = document.documentElement.classList.contains('dark');
+    setIsBalanceVisible(isDark);
+
     const savedBalance = localStorage.getItem('star_cached_user_balance');
     if (savedBalance) setCachedBalance(parseFloat(savedBalance));
 
@@ -90,7 +94,7 @@ export function BalanceCard() {
     () => (user && firestore ? doc(firestore, "users", user.uid) : null),
     [firestore, user]
   );
-  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
+  const { data: userProfile } = useDoc<UserProfile>(userDocRef);
 
   useEffect(() => {
     if (userProfile?.balance !== undefined) {
@@ -99,7 +103,7 @@ export function BalanceCard() {
   }, [userProfile]);
 
   const balance = userProfile?.balance ?? cachedBalance ?? 0;
-  const isLoading = isUserLoading && !cachedBalance;
+  const isLoading = isUserLoading && cachedBalance === null;
 
   const handleLongPress = (side: 'left' | 'right') => {
     setEditingSide(side);
@@ -151,7 +155,7 @@ export function BalanceCard() {
 
   const previewCardClass = "w-[28vw] min-w-[112px] max-w-[136px] h-[186px] rounded-[26px] border border-white/10 bg-[#18181d] shadow-[0_18px_45px_rgba(0,0,0,0.38)] opacity-55 scale-[0.92] blur-[0.1px]";
 
-  const renderPreview = (side: 'left' | 'right') => (
+  const renderPreview = () => (
     <Card className={previewCardClass}>
       <CardContent className="h-full p-4 flex flex-col justify-between">
         <div className="flex justify-between items-start">
@@ -174,7 +178,7 @@ export function BalanceCard() {
     <div className="animate-in fade-in-0 zoom-in-95 duration-500 px-4">
       <div className="relative flex items-center justify-center">
         <div className="absolute left-[-10px] top-1/2 -translate-y-1/2 -rotate-[10deg] z-0">
-          {renderPreview('left')}
+          {renderPreview()}
         </div>
 
         <Card className="w-full max-w-[330px] h-[225px] overflow-hidden border-none shadow-[0_18px_50px_rgba(0,72,173,0.35)] rounded-[28px] bg-[#0048ad] text-white">
@@ -209,7 +213,7 @@ export function BalanceCard() {
         </Card>
 
         <div className="absolute right-[-10px] top-1/2 -translate-y-1/2 rotate-[10deg] z-0">
-          {renderPreview('right')}
+          {renderPreview()}
         </div>
       </div>
 
@@ -218,7 +222,7 @@ export function BalanceCard() {
           <DialogHeader>
             <DialogTitle className="text-center font-black">اختيار اختصار مفضل</DialogTitle>
             <DialogDescription className="text-center">
-              اختر الخدمة التي تريد وضعها في {editingSide === 'left' ? 'الجهة اليمنى' : 'الجهة اليسرى'}
+              اختر الخدمة التي تريد وضعها في الاختصار
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3 py-4 overflow-y-auto max-h-[60vh] no-scrollbar">
@@ -259,70 +263,26 @@ export function BalanceCard() {
             </div>
             
             <div className="p-6 space-y-3 max-h-[60vh] overflow-y-auto no-scrollbar">
-                <Link href="/alwadi" prefetch={true} onClick={() => setIsPaymentHubOpen(false)} className="block w-full group">
-                    <div className="w-full h-16 rounded-2xl bg-white dark:bg-slate-900 border-2 border-primary/5 shadow-sm group-hover:border-primary/20 group-hover:bg-primary/5 transition-all flex items-center justify-between px-6 text-right" dir="rtl">
-                        <div className="flex items-center gap-4">
-                            <div className="p-0.5 bg-white rounded-xl transition-colors overflow-hidden border border-muted w-10 h-10 shrink-0">
-                                <div className="relative w-full h-full rounded-[10px] overflow-hidden">
-                                  <Image src="https://i.postimg.cc/wjKrdNX2/images-(5).jpg" alt="الوادي" fill className="object-cover" />
+                {[
+                    { id: 'alwadi', name: 'منظومة الوادي', href: '/alwadi', img: 'https://i.postimg.cc/wjKrdNX2/images-(5).jpg' },
+                    { id: 'alsafaa', name: 'شبكة الصفاء الرقمية', href: '/alsafaa', img: 'https://i.postimg.cc/nL2S7w6S/20260728-152016.jpg' },
+                    { id: 'electricity', name: 'سداد الكهرباء', href: '/electricity', img: 'https://i.postimg.cc/3RbLf0J5/images-(6).jpg' },
+                    { id: 'water', name: 'سداد المياه', href: '/water', img: 'https://i.postimg.cc/FzMTNtL3/images-(7).jpg' }
+                ].map((item) => (
+                    <Link key={item.id} href={item.href} prefetch={true} onClick={() => setIsPaymentHubOpen(false)} className="block w-full group">
+                        <div className="w-full h-16 rounded-2xl bg-white dark:bg-slate-900 border-2 border-primary/5 shadow-sm group-hover:border-primary/20 group-hover:bg-primary/5 transition-all flex items-center justify-between px-6 text-right" dir="rtl">
+                            <div className="flex items-center gap-4">
+                                <div className="p-0.5 bg-white rounded-xl overflow-hidden border border-muted w-10 h-10 shrink-0">
+                                    <div className="relative w-full h-full rounded-[10px] overflow-hidden">
+                                        <Image src={item.img} alt={item.name} fill className="object-cover" />
+                                    </div>
                                 </div>
+                                <span className="font-black text-foreground">{item.name}</span>
                             </div>
-                            <span className="font-black text-foreground">منظومة الوادي</span>
+                            <LucideChevronLeft className="w-4 h-4 text-muted-foreground group-hover:-translate-x-1 transition-transform" />
                         </div>
-                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center group-hover:-translate-x-1 transition-transform">
-                            <LucideChevronLeft className="w-4 h-4 text-muted-foreground" />
-                        </div>
-                    </div>
-                </Link>
-
-                <Link href="/alsafaa" prefetch={true} onClick={() => setIsPaymentHubOpen(false)} className="block w-full group">
-                    <div className="w-full h-16 rounded-2xl bg-white dark:bg-slate-900 border-2 border-orange-500/5 shadow-sm group-hover:border-orange-500/20 group-hover:bg-orange-500/5 transition-all flex items-center justify-between px-6 text-right" dir="rtl">
-                        <div className="flex items-center gap-4">
-                            <div className="p-0.5 bg-white rounded-xl transition-colors overflow-hidden border border-muted w-10 h-10 shrink-0">
-                                <div className="relative w-full h-full rounded-[10px] overflow-hidden">
-                                  <Image src="https://i.postimg.cc/nL2S7w6S/20260728-152016.jpg" alt="الصفاء" fill className="object-cover" />
-                                </div>
-                            </div>
-                            <span className="font-black text-foreground">شبكة الصفاء الرقمية</span>
-                        </div>
-                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center group-hover:-translate-x-1 transition-transform">
-                            <LucideChevronLeft className="w-4 h-4 text-muted-foreground" />
-                        </div>
-                    </div>
-                </Link>
-
-                <Link href="/electricity" prefetch={true} onClick={() => setIsPaymentHubOpen(false)} className="block w-full group">
-                    <div className="w-full h-16 rounded-2xl bg-white dark:bg-slate-900 border-2 border-yellow-500/5 shadow-sm group-hover:border-yellow-500/20 group-hover:bg-yellow-500/5 transition-all flex items-center justify-between px-6 text-right" dir="rtl">
-                        <div className="flex items-center gap-4">
-                            <div className="p-0.5 bg-white rounded-xl transition-colors overflow-hidden border border-muted w-10 h-10 shrink-0">
-                                <div className="relative w-full h-full rounded-[10px] overflow-hidden">
-                                  <Image src="https://i.postimg.cc/3RbLf0J5/images-(6).jpg" alt="الكهرباء" fill className="object-cover" />
-                                </div>
-                            </div>
-                            <span className="font-black text-foreground">سداد الكهرباء</span>
-                        </div>
-                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center group-hover:-translate-x-1 transition-transform">
-                            <LucideChevronLeft className="w-4 h-4 text-muted-foreground" />
-                        </div>
-                    </div>
-                </Link>
-
-                <Link href="/water" prefetch={true} onClick={() => setIsPaymentHubOpen(false)} className="block w-full group">
-                    <div className="w-full h-16 rounded-2xl bg-white dark:bg-slate-900 border-2 border-blue-500/5 shadow-sm group-hover:border-blue-500/20 group-hover:bg-blue-500/5 transition-all flex items-center justify-between px-6 text-right" dir="rtl">
-                        <div className="flex items-center gap-4">
-                            <div className="p-0.5 bg-white rounded-xl transition-colors overflow-hidden border border-muted w-10 h-10 shrink-0">
-                                <div className="relative w-full h-full rounded-[10px] overflow-hidden">
-                                  <Image src="https://i.postimg.cc/FzMTNtL3/images-(7).jpg" alt="المياه" fill className="object-cover" />
-                                </div>
-                            </div>
-                            <span className="font-black text-foreground">سداد المياه</span>
-                        </div>
-                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center group-hover:-translate-x-1 transition-transform">
-                            <LucideChevronLeft className="w-4 h-4 text-muted-foreground" />
-                        </div>
-                    </div>
-                </Link>
-
+                    </Link>
+                ))}
                 <div className="pt-4">
                     <DialogClose asChild>
                         <Button variant="ghost" className="w-full rounded-2xl font-black text-muted-foreground">إغلاق</Button>
