@@ -12,7 +12,6 @@ import { SplashScreen } from '@/components/layout/splash-screen';
 import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
-import { WifiOff } from 'lucide-react';
 
 const APP_VERSION = '1.8.0';
 
@@ -24,12 +23,36 @@ type UserProfile = {
 // المسارات المدعومة للعمل بدون إنترنت
 const OFFLINE_SUPPORTED_ROUTES = ['/login', '/services', '/favorites', '/account'];
 
+// أيقونة WifiOff كـ SVG مباشر لتجنب أخطاء الاستيراد في layout.tsx
+const WifiOffIcon = () => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    width="64" 
+    height="64" 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className="text-primary animate-pulse"
+  >
+    <line x1="2" y1="2" x2="22" y2="22" />
+    <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
+    <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
+    <path d="M10.71 5.05A16 16 0 0 1 22.58 9" />
+    <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" />
+    <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+    <line x1="12" y1="20" x2="12.01" y2="20" />
+  </svg>
+);
+
 function OfflinePlaceholder() {
   const router = useRouter();
   return (
     <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-background space-y-6 animate-in fade-in duration-700">
       <div className="bg-primary/10 p-8 rounded-[40px] shadow-inner">
-        <WifiOff className="h-16 w-16 text-primary animate-pulse" />
+        <WifiOffIcon />
       </div>
       <div className="space-y-2">
         <h2 className="text-xl font-black text-foreground">عذراً، لا يوجد اتصال</h2>
