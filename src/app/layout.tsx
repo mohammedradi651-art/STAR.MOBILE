@@ -11,8 +11,7 @@ import { AppErrorDialog } from '@/components/layout/app-error-dialog';
 import { SplashScreen } from '@/components/layout/splash-screen';
 import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
-import { cn } from '@/lib/utils';
-import { WifiOff, Globe } from 'lucide-react';
+import { WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const APP_VERSION = '1.8.0';
