@@ -44,7 +44,7 @@ export default function SignupPage() {
 
   const sendSmsOtp = async (targetPhone: string, otpCode: string, userFullNm: string) => {
     const displayName = getFirstLast(userFullNm);
-    const smsMessage = `مرحباً ${displayName} 👋\nرمز التحقق لإنشاء حسابك في ستار موبايل هو:\n${otpCode}\n لا تشارك الرمز مع أي شخص`;
+    const smsMessage = `مرحباً ${displayName} 👋\nرمز التحقق لإنشاء حسابك في ستار موبايل هو : ${otpCode}\n لا تشارك الرمز مع أي شخص`;
     
     const response = await fetch('/api/sms', {
         method: 'POST',

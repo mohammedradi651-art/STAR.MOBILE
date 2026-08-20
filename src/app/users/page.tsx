@@ -190,6 +190,13 @@ export default function UsersPage() {
     }, 0);
   }, [users]);
 
+  const getFirstLast = (name?: string) => {
+    if (!name) return 'عميلنا';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length <= 1) return name;
+    return `${parts[0]} ${parts[parts.length - 1]}`;
+  };
+
   const fetchAllBalances = useCallback(async () => {
     if (!isUserAdmin) return;
     setIsFetchingBalances(true);
@@ -311,7 +318,8 @@ export default function UsersPage() {
     });
 
     const newBalance = (selectedUser.balance ?? 0) + amount;
-    const smsMessage = `ستار موبايل: تم إيداع (${amount.toLocaleString('en-US')}) ريال لحسابك. رصيدك الآن: (${newBalance.toLocaleString('en-US')}) ريال.`;
+    const shortName = getFirstLast(selectedUser.displayName);
+    const smsMessage = `ستار موبايل\nمرحباً ${shortName}،\nتم ايداع مبلغ ${amount.toLocaleString('en-US')} ريال إلى حسابك\n\nالرصيد الحالي: ${newBalance.toLocaleString('en-US')} ريال`;
     
     // إرسال SMS
     fetch('/api/sms', {

@@ -75,7 +75,7 @@ export default function ForgotPasswordPage() {
       const shortName = getFirstLast(displayName);
 
       const generatedOtp = Math.floor(1000 + Math.random() * 9000).toString();
-      const smsMessage = `مرحباً ${shortName} 👋\nرمز التحقق لإعادة تعيين كلمة المرور في ستار موبايل هو:\n${generatedOtp}\nإذا لم تطلب إعادة التعيين، يمكنك تجاهل الرسالة`;
+      const smsMessage = `مرحباً ${shortName} 👋\nرمز التحقق لإعادة تعيين كلمة المرور في ستار موبايل هو : ${generatedOtp}\n\nإذا لم تطلب إعادة التعيين، يمكنك تجاهل الرسالة`;
       
       const response = await fetch('/api/sms', {
           method: 'POST',
