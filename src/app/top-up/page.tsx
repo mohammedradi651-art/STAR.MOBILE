@@ -47,9 +47,6 @@ type UserProfile = {
     balance?: number;
 };
 
-/**
- * مكون التحميل بالشعار المتحرك المعتمد مع ضباب أسود خفيف جداً لرؤية الصفحة خلفه
- */
 const TopUpMovingLoader = () => {
   const [animationData, setAnimationData] = useState<any>(null);
 
@@ -109,6 +106,13 @@ export default function TopUpPage() {
     );
     const { data: paymentMethods, isLoading: isLoadingMethods } = useCollection<PaymentMethod>(methodsCollection);
 
+    const getFirstLast = (name?: string) => {
+        if (!name) return 'عميلنا';
+        const parts = name.trim().split(/\s+/);
+        if (parts.length <= 1) return name;
+        return `${parts[0]} ${parts[parts.length - 1]}`;
+    };
+
     useEffect(() => {
         if (!selectedMethod && paymentMethods && paymentMethods.length > 0) {
             setSelectedMethod(paymentMethods[0]);
@@ -117,7 +121,7 @@ export default function TopUpPage() {
 
     const handleCopy = (accountNumber: string) => {
         navigator.clipboard.writeText(accountNumber);
-        toast({ title: "تم النسخ", description: "تم نسخ رقم الحساب بنجاح." });
+        toast({ title: "تم النسخ" });
     };
 
     const handleConfirmBankDeposit = async (bankType: 'alomqy' | 'kuraimi' | 'amjad') => {
@@ -165,7 +169,7 @@ export default function TopUpPage() {
                     variant: 'destructive', 
                     title: 'لم يتم العثور على الإيداع', 
                     description: bankType === 'amjad' 
-                        ? 'عذراً، لم نجد حوالة مطابقة لاسمك ومبلغك في النظام. تأكد من كتابة اسمك الرباعي الصحيح في ملفك الشخصي.'
+                        ? 'عذراً، لم نجد حوالة مطابقة لاسمك ومبلغك في النظام.'
                         : 'نعتذر، لم يتم العثور على إيصال مطابق للعملية في النظام.' 
                 });
             } else {
@@ -190,9 +194,12 @@ export default function TopUpPage() {
 
                 await batch.commit();
 
+                // إرسال رسالة التبليغ بصيغة المستخدم الجديدة
                 if (userProfile.phoneNumber) {
                     const currentBalance = (userProfile.balance || 0) + notifData.amount;
-                    const smsMessage = `ستار موبايل: تم إيداع (${notifData.amount.toLocaleString('en-US')}) ريال لحسابك بنجاح. رصيدك الآن: (${currentBalance.toLocaleString('en-US')}) ريال.`;
+                    const shortName = getFirstLast(userProfile.displayName);
+                    
+                    const smsMessage = `ستار موبايل\nمرحباً ${shortName}،\nتم ايداع مبلغ ${notifData.amount.toLocaleString('en-US')} ريال إلى حسابك\n\nالرصيد الحالي: ${currentBalance.toLocaleString('en-US')} ريال`;
                     
                     fetch('/api/sms', { 
                         method: 'POST', 
@@ -202,13 +209,6 @@ export default function TopUpPage() {
                             message: smsMessage 
                         }) 
                     }).catch(e => console.error("SMS Confirmation Error:", e));
-
-                    const waMsg = `⭐ ستار موبايل\n\nتم شحن رصيدك آلياً بنجاح ✅\n\nالمبلغ: ${notifData.amount.toLocaleString()} ر.ي\nالرصيد الجديد: ${currentBalance.toLocaleString()} ر.ي\nالوسيلة: ${selectedMethod?.name}\n\nشكراً لاستخدام ستار موبايل 💙`;
-                    fetch('/api/send-whatsapp', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ phone: userProfile.phoneNumber, message: waMsg })
-                    }).catch(() => {});
                 }
 
                 setLastTxDetails({
@@ -223,7 +223,7 @@ export default function TopUpPage() {
             }
         } catch (error: any) {
             console.error("Bank Deposit Processing Error:", error);
-            toast({ variant: 'destructive', title: 'خطأ', description: 'حدث خطأ تقني أثناء معالجة الطلب.' });
+            toast({ variant: 'destructive', title: 'خطأ', description: 'حدث خطأ تقني.' });
         } finally {
             setIsVerifyingBank(false);
         }
@@ -285,7 +285,7 @@ export default function TopUpPage() {
                                 />
                             </div>
                         </div>
-                        <h2 className="text-2xl font-black text-white tracking-tight">غذي حسابك بنفسك</h2>
+                        <h2 className="text-2xl font-black text-white tracking-tight">تغذية حسابي</h2>
                         <div className="bg-white/10 backdrop-blur-md px-10 py-2.5 rounded-full border border-white/10 shadow-inner">
                             <p className="text-[16px] text-white font-black uppercase tracking-[0.1em]">عبر البنوك وشبكات الصرافة</p>
                         </div>
@@ -374,7 +374,7 @@ export default function TopUpPage() {
                                                     value={bankAmount} 
                                                     onChange={e => setBankAmount(e.target.value)} 
                                                     placeholder="0.00" 
-                                                    className="h-14 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-xl focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10 w-full shadow-inner" 
+                                                    className="h-14 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-xl text-[#0048ad] placeholder:text-[#0048ad]/10 w-full shadow-inner" 
                                                 />
                                             </div>
                                         </div>

@@ -29,25 +29,25 @@ export default function ForgotPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [userFullName, setUserFullName] = useState('');
 
   const router = useRouter();
   const { toast } = useToast();
   const firestore = useFirestore();
 
-  // منطق زر الرجوع الذكي
-  const handleBack = () => {
-    if (step === 'verify') {
-      setStep('phone');
-    } else if (step === 'reset') {
-      setStep('verify');
-    } else if (step === 'success') {
-      router.push('/');
-    } else {
-      router.push('/');
-    }
+  const getFirstLast = (name: string) => {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length <= 1) return name;
+    return `${parts[0]} ${parts[parts.length - 1]}`;
   };
 
-  // 1. طلب استعادة الحساب وإرسال OTP
+  const handleBack = () => {
+    if (step === 'verify') setStep('phone');
+    else if (step === 'reset') setStep('verify');
+    else if (step === 'success') router.push('/');
+    else router.push('/');
+  };
+
   const handleRequestReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (phoneNumber.length !== 9) {
@@ -69,9 +69,13 @@ export default function ForgotPasswordPage() {
         return;
       }
 
-      // توليد وإرسال الـ OTP فعلياً عبر الجوال
+      const userData = querySnapshot.docs[0].data();
+      const displayName = userData.displayName || 'عميلنا';
+      setUserFullName(displayName);
+      const shortName = getFirstLast(displayName);
+
       const generatedOtp = Math.floor(1000 + Math.random() * 9000).toString();
-      const smsMessage = `ستار موبايل: رمز التحقق الخاص بك لاستعادة كلمة المرور هو (${generatedOtp}).`;
+      const smsMessage = `مرحباً ${shortName} 👋\nرمز التحقق لإعادة تعيين كلمة المرور في ستار موبايل هو:\n${generatedOtp}\nإذا لم تطلب إعادة التعيين، يمكنك تجاهل الرسالة`;
       
       const response = await fetch('/api/sms', {
           method: 'POST',
@@ -86,10 +90,7 @@ export default function ForgotPasswordPage() {
       if (data.success) {
           setOtp(generatedOtp);
           setStep('verify');
-          toast({ 
-            title: 'تم إرسال الرمز', 
-            description: 'يرجى إدخال رمز التحقق المرسل إلى هاتفك.' 
-          });
+          toast({ title: 'تم إرسال الرمز' });
       } else {
           throw new Error(data.error || "فشل إرسال رمز التحقق.");
       }
@@ -101,18 +102,15 @@ export default function ForgotPasswordPage() {
     }
   };
 
-  // 2. التحقق من الرمز المدخل
   const handleVerifyOtp = (e: React.FormEvent) => {
     e.preventDefault();
     if (userOtpInput === otp) {
         setStep('reset');
-        toast({ title: "تم التحقق", description: "الآن قم بتعيين كلمة المرور الجديدة." });
     } else {
-        toast({ variant: 'destructive', title: 'خطأ', description: 'رمز التحقق غير صحيح، يرجى التأكد والمحاولة مجدداً.' });
+        toast({ variant: 'destructive', title: 'خطأ', description: 'رمز التحقق غير صحيح.' });
     }
   };
 
-  // 3. تحديث كلمة المرور فعلياً
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword.length < 6) {
@@ -146,14 +144,10 @@ export default function ForgotPasswordPage() {
         {isLoading && <ProcessingOverlay message="جاري المعالجة..." />}
 
         <header className="p-4 flex items-center justify-between animate-in fade-in duration-500 shrink-0">
-            <button 
-              onClick={handleBack}
-              className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors"
-            >
+            <button onClick={handleBack} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors">
                 <ChevronRight className="h-5 w-5" />
             </button>
             <div className="flex-1" />
-            <div className="w-9" />
         </header>
 
         <div className="px-6 flex flex-col items-center flex-1 justify-center -mt-10">
@@ -292,10 +286,6 @@ export default function ForgotPasswordPage() {
 
           </div>
         </div>
-
-        <footer className="text-center text-[9px] font-black text-white/30 pb-6 mt-auto">
-          <p>مطور التطبيق " محمد راضي باشادي</p>
-        </footer>
       </div>
       <Toaster />
     </>

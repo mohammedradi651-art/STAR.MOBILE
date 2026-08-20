@@ -52,9 +52,6 @@ const PROVIDER_OPTIONS: RenewalOption[] = [
   { id: '9', title: 'تجديد سنة كاملة', price: 15000 },
 ];
 
-/**
- * مكون التحميل بالشعار المتحرك الموحد
- */
 const AlwadiMovingLoader = () => {
   const [animationData, setAnimationData] = useState<any>(null);
 
@@ -201,9 +198,10 @@ export default function AlwadiPage() {
 
         await batch.commit();
 
-        // إرسال إشعار SMS تلقائي
+        // إرسال إشعار SMS تلقائي بصيغة المستخدم الجديدة
         if (userProfile?.phoneNumber) {
-            const smsMsg = `ستار موبايل: تم تجديد باقة ${selectedOption.title} بنجاح لمشترك منظومة الوادي: ${inquiryResult.data.name}. شكراً لثقتك بنا 💙`;
+            const smsMsg = `ستار موبايل\nتم تجديد اشتراكك بنجاح\n\nالمشترك: ${inquiryResult.data.name}\nرقم الكرت: ${cardNumber}\nفئة التجديد: ${selectedOption.title}\nالمبلغ: ${finalPrice.toLocaleString()} ريال\n\nشكراً لاستخدامك تطبيق ستار موبايل 💙`;
+            
             fetch('/api/sms', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

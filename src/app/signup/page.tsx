@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -37,8 +36,16 @@ export default function SignupPage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const sendSmsOtp = async (targetPhone: string, otpCode: string) => {
-    const smsMessage = `ستار موبايل: رمز التحقق الخاص بك هو (${otpCode}). يرجى إدخاله لإكمال إنشاء حسابك.`;
+  const getFirstLast = (name: string) => {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length <= 1) return name;
+    return `${parts[0]} ${parts[parts.length - 1]}`;
+  };
+
+  const sendSmsOtp = async (targetPhone: string, otpCode: string, userFullNm: string) => {
+    const displayName = getFirstLast(userFullNm);
+    const smsMessage = `مرحباً ${displayName} 👋\nرمز التحقق لإنشاء حسابك في ستار موبايل هو:\n${otpCode}\n لا تشارك الرمز مع أي شخص`;
+    
     const response = await fetch('/api/sms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -79,10 +86,9 @@ export default function SignupPage() {
     try {
         const otp = Math.floor(1000 + Math.random() * 9000).toString();
         
-        const data = await sendSmsOtp(phoneNumber, otp);
+        const data = await sendSmsOtp(phoneNumber, otp, fullName);
 
         if (data.success) {
-            // تخزين البيانات مؤقتاً للانتقال لصفحة التحقق
             const signupData = {
                 fullName,
                 phoneNumber,
@@ -95,7 +101,6 @@ export default function SignupPage() {
             };
             sessionStorage.setItem('temp_signup_data', JSON.stringify(signupData));
             
-            // تأخير خفيف لزيادة الفخامة قبل الانتقال
             setTimeout(() => {
                 router.push('/verify-otp');
             }, 800);
