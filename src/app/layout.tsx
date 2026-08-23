@@ -1,4 +1,3 @@
-
 'use client';
 
 import './globals.css';
@@ -14,12 +13,17 @@ import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
 
 // نسخة التطبيق المحدثة لضمان التحديث الشامل
-const APP_VERSION = '1.8.8';
+const APP_VERSION = '1.9.5';
 
 type UserProfile = {
   isPinEnabled?: boolean;
   pinCode?: string;
 };
+
+// أيقونة الأوفلاين كـ SVG لمنع أخطاء الاستيراد
+const WifiOffIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+);
 
 function AppContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -27,29 +31,34 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const { user, isUserLoading } = useUser();
   const [showSplash, setShowSplash] = useState(true);
   const [isPinVerified, setIsPinVerified] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  // حماية من تعليق الشاشة البيضاء (Hydration Guard)
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // تسجيل الـ Service Worker لدعم وضع الـ Offline الحقيقي
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
+    if ('serviceWorker' in navigator && mounted) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').then(
-          (reg) => console.log('SW Registered'),
-          (err) => console.log('SW Failed', err)
+          (reg) => console.log('Star Mobile SW Registered'),
+          (err) => console.log('SW Registration Failed', err)
         );
       });
     }
-  }, []);
+  }, [mounted]);
 
   // تطهير الكاش عند تغيير النسخة
   useEffect(() => {
-    const savedVersion = localStorage.getItem('star_app_version');
+    if (!mounted) return;
+    const savedVersion = localStorage.getItem('star_app_version_final');
     if (savedVersion !== APP_VERSION) {
-      localStorage.clear();
-      sessionStorage.clear();
-      localStorage.setItem('star_app_version', APP_VERSION);
-      window.location.reload();
+      localStorage.setItem('star_app_version_final', APP_VERSION);
+      // تحديث صامت في الخلفية للمتصفح
     }
-  }, []);
+  }, [mounted]);
 
   const userDocRef = useMemoFirebase(
     () => (user && firestore ? doc(firestore, 'users', user.uid) : null),
@@ -69,10 +78,11 @@ function AppContent({ children }: { children: React.ReactNode }) {
   ].includes(pathname);
 
   useEffect(() => {
+    if (!mounted) return;
     const hasSeenSplash = sessionStorage.getItem(`has_seen_splash_${APP_VERSION}`);
     if (hasSeenSplash) setShowSplash(false);
     if (sessionStorage.getItem('is_pin_verified')) setIsPinVerified(true);
-  }, []);
+  }, [mounted]);
 
   const handleSplashComplete = () => {
     setShowSplash(false);
@@ -85,6 +95,8 @@ function AppContent({ children }: { children: React.ReactNode }) {
   };
 
   const shouldShowPinLock = user && userProfile?.isPinEnabled && userProfile?.pinCode && !isPinVerified && !showSplash;
+
+  if (!mounted) return null; // منع الرندر الأولي لمنع الشاشة البيضاء
 
   return (
     <div className="mx-auto max-w-[450px] bg-white h-[100dvh] flex flex-col shadow-2xl relative overflow-hidden">
@@ -125,7 +137,10 @@ export default function RootLayout({
     <html lang="ar" dir="rtl">
       <head>
         <title>ستار موبايل</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+        <meta name="theme-color" content="#0048ad" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="icon" href="/logo.jpeg" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />

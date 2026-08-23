@@ -1,57 +1,60 @@
+/**
+ * Star Mobile Service Worker (Final v1.9.5)
+ * يوفر دعم كامل للعمل بدون إنترنت وحفظ هيكل التطبيق.
+ */
 
-const CACHE_NAME = 'star-mobile-v2';
+const CACHE_NAME = 'star-mobile-v1.9.5';
 const ASSETS_TO_CACHE = [
   '/',
   '/login',
   '/services',
   '/favorites',
+  '/manifest.json',
   '/logo.jpeg',
-  '/manifest.json'
+  '/TH.json',
+  '/ashar.mp3',
+  '/sdad.mp3'
 ];
 
-// تثبيت عامل الخدمة وتخزين الملفات الأساسية
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
-  self.skipWaiting();
 });
 
-// تفعيل عامل الخدمة وتنظيف الكاش القديم
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
+    caches.keys().then((keys) => {
       return Promise.all(
-        cacheNames.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name))
+        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
       );
     })
   );
   self.clients.claim();
 });
 
-// استراتيجية جلب البيانات: الشبكة أولاً ثم الكاش
 self.addEventListener('fetch', (event) => {
-  if (event.request.mode === 'navigate') {
+  // استراتيجية Stale-while-revalidate للصور والملفات الثابتة
+  if (event.request.destination === 'image' || event.request.destination === 'font') {
     event.respondWith(
-      fetch(event.request).catch(() => {
-        return caches.match('/');
+      caches.match(event.request).then((cached) => {
+        return cached || fetch(event.request).then((response) => {
+          const cloned = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
+          return response;
+        });
       })
     );
     return;
   }
 
+  // التعامل مع طلبات الصفحات الأساسية لدعم الـ Offline
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request).catch(() => {
-        // إذا فشل كل شيء (أوفلاين)، نرجع نجاح فارغ لطلبات الـ API لمنع الانهيار
-        if (event.request.url.includes('/api/')) {
-            return new Response(JSON.stringify({ success: false, offline: true }), {
-                headers: { 'Content-Type': 'application/json' }
-            });
-        }
-      });
+    fetch(event.request).catch(() => {
+      return caches.match(event.request) || caches.match('/');
     })
   );
 });

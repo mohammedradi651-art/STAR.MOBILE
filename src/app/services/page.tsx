@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
@@ -25,9 +24,7 @@ import {
   useFirestore, 
   useMemoFirebase, 
   useUser, 
-  deleteDocumentNonBlocking,
-  useDoc,
-  addDocumentNonBlocking
+  useDoc
 } from '@/firebase';
 import { 
   collection, 
@@ -117,11 +114,11 @@ export default function CombinedNetworksPage() {
   const [categories, setCategories] = useState<CardCategory[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   
-  // حوار الشراء النهائي
   const [purchaseCategory, setPurchaseCategory] = useState<CardCategory | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [purchasedCardNum, setPurchasedCardNum] = useState<string | null>(null);
 
+  // فحص الإنترنت صامتاً
   useEffect(() => {
     setIsOffline(!navigator.onLine);
     const handleStatus = () => setIsOffline(!navigator.onLine);
@@ -139,39 +136,49 @@ export default function CombinedNetworksPage() {
   );
   const { data: localNetworks, isLoading: isLoadingLocal } = useCollection<any>(localNetworksQuery);
 
+  // جلب وتخزين الشبكات في الخلفية
   useEffect(() => {
-    const fetchApiNetworks = async () => {
+    const fetchAndCache = async () => {
       try {
-        const response = await fetch('/services/networks-api');
-        let mappedApi: CombinedNetwork[] = [];
-        if (response.ok) {
-          const data = await response.json();
-          mappedApi = data.map((n: any) => ({
-            id: String(n.id), name: n.name, location: n.desc || 'شبكة API', isLocal: false, logo: n.logo,
-          }));
-          setApiNetworks(mappedApi);
+        let combined: CombinedNetwork[] = [];
+        
+        // 1. معالجة الشبكات المحلية
+        if (localNetworks) {
+            combined = localNetworks.map(n => ({ ...n, isLocal: true }));
         }
 
-        const local = localNetworks ? localNetworks.map(n => ({ ...n, isLocal: true })) : [];
-        if (local.length > 0 || mappedApi.length > 0) {
-            localStorage.setItem('cached_networks_final', JSON.stringify([...local, ...mappedApi]));
+        // 2. جلب شبكات API إذا توفر الإنترنت
+        if (!isOffline) {
+            const response = await fetch('/services/networks-api');
+            if (response.ok) {
+                const data = await response.json();
+                const mappedApi = data.map((n: any) => ({
+                    id: String(n.id), name: n.name, location: n.desc || 'شبكة API', isLocal: false, logo: n.logo,
+                }));
+                setApiNetworks(mappedApi);
+                combined = [...combined, ...mappedApi];
+            }
+            // تخزين صامت في الخلفية
+            if (combined.length > 0) {
+                localStorage.setItem('star_cached_nets', JSON.stringify(combined));
+            }
+            setIsLoadingApi(false);
+        } else {
+            // تحميل من الكاش في وضع الأوفلاين
+            const cached = localStorage.getItem('star_cached_nets');
+            if (cached) {
+                const data = JSON.parse(cached);
+                setApiNetworks(data.filter((n: any) => !n.isLocal));
+            }
+            setIsLoadingApi(false);
         }
       } catch (err) {
-        console.error(err);
-      } finally {
+        console.error("Cache background error:", err);
         setIsLoadingApi(false);
       }
     };
 
-    if (!isOffline) fetchApiNetworks();
-    else {
-        const cached = localStorage.getItem('cached_networks_final');
-        if (cached) {
-            const data = JSON.parse(cached);
-            setApiNetworks(data.filter((n: any) => !n.isLocal));
-            setIsLoadingApi(false);
-        }
-    }
+    fetchAndCache();
   }, [localNetworks, isOffline]);
 
   const allNetworksCombined = useMemo(() => {
@@ -180,7 +187,7 @@ export default function CombinedNetworksPage() {
         const local = localNetworks ? localNetworks.map(n => ({ ...n, isLocal: true })) : [];
         list = [...local, ...apiNetworks];
     } else {
-        const cached = localStorage.getItem('cached_networks_final');
+        const cached = localStorage.getItem('star_cached_nets');
         list = cached ? JSON.parse(cached) : [];
     }
     if (!searchTerm) return list;
@@ -192,13 +199,19 @@ export default function CombinedNetworksPage() {
     setCategories([]);
     setIsLoadingCategories(true);
 
-    const cachedCats = localStorage.getItem(`cats_final_${network.id}`);
-    if (isOffline) {
-        if (cachedCats) {
-            setCategories(JSON.parse(cachedCats));
+    const cachedCatsKey = `star_cats_${network.id}`;
+    
+    // جلب من الكاش فوراً إذا توفر
+    const cachedCats = localStorage.getItem(cachedCatsKey);
+    if (cachedCats) {
+        setCategories(JSON.parse(cachedCats));
+        if (isOffline) {
             setIsLoadingCategories(false);
             return;
         }
+    }
+
+    if (isOffline && !cachedCats) {
         setIsLoadingCategories(false);
         toast({ variant: 'destructive', title: 'غير متوفر', description: 'بيانات هذه الشبكة غير محفوظة للأوفلاين.' });
         setSelectedNetwork(null);
@@ -221,9 +234,13 @@ export default function CombinedNetworksPage() {
       
       if (catsData.length > 0) {
           setCategories(catsData);
-          localStorage.setItem(`cats_final_${network.id}`, JSON.stringify(catsData));
+          localStorage.setItem(cachedCatsKey, JSON.stringify(catsData));
       }
-    } catch (err: any) { console.error(err); } finally { setIsLoadingCategories(false); }
+    } catch (err: any) { 
+        console.error(err); 
+    } finally { 
+        setIsLoadingCategories(false); 
+    }
   };
 
   const handleConfirmPurchase = async () => {
@@ -312,7 +329,7 @@ export default function CombinedNetworksPage() {
             ) : allNetworksCombined.length === 0 ? (
                 <div className="text-center py-20 opacity-40">
                     <Wifi className="h-16 w-16 mx-auto mb-4" />
-                    <p className="font-bold">لا توجد شبكات متاحة</p>
+                    <p className="font-bold">لا توجد شبكات متاحة حالياً</p>
                 </div>
             ) : (
                 allNetworksCombined.map((net, index) => (
@@ -340,7 +357,7 @@ export default function CombinedNetworksPage() {
                 <DialogHeader className="pt-12 pb-8 px-8 text-white text-center">
                     <div className="bg-white/20 p-3 rounded-2xl w-14 h-14 mx-auto mb-3"><Wifi className="h-7 w-7 text-white" /></div>
                     <DialogTitle className="text-xl font-black text-white">{selectedNetwork.name}</DialogTitle>
-                    <DialogDescription className="text-[10px] text-white/70 font-bold mt-1">{selectedNetwork.location}</DialogDescription>
+                    <DialogDescription className="text-[10px] text-white/70 font-bold mt-1 uppercase tracking-widest">{selectedNetwork.location}</DialogDescription>
                 </DialogHeader>
               </div>
               <div className="flex-1 overflow-y-auto p-4 bg-white dark:bg-slate-900 no-scrollbar">
@@ -384,12 +401,12 @@ export default function CombinedNetworksPage() {
               <div className="bg-mesh-gradient p-8 text-center text-white">
                   <DialogHeader>
                     <DialogTitle className="text-center font-black text-xl text-white">تأكيد عملية الشراء</DialogTitle>
-                    <DialogDescription className="text-white/70 font-bold text-xs">هل أنت متأكد من شراء كرت {purchaseCategory?.name}؟</DialogDescription>
+                    <DialogDescription className="text-white/70 font-bold text-xs mt-1">هل أنت متأكد من شراء كرت {purchaseCategory?.name}؟</DialogDescription>
                   </DialogHeader>
               </div>
               <div className="p-6 space-y-4">
                   <div className="bg-muted/50 p-5 rounded-3xl text-center space-y-1">
-                      <p className="text-[10px] font-black text-muted-foreground uppercase">المبلغ المطلوب</p>
+                      <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">المبلغ المطلوب</p>
                       <p className="text-2xl font-black text-primary">{purchaseCategory?.price.toLocaleString()} ر.ي</p>
                   </div>
 
