@@ -308,14 +308,14 @@ export default function CombinedNetworksPage() {
               <div className="bg-mesh-gradient p-0 relative overflow-hidden">
                 <DialogHeader className="pt-12 pb-8 px-8 text-white text-center relative z-10">
                     <div className="bg-white/20 p-3 rounded-2xl w-14 h-14 mx-auto mb-3 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl overflow-hidden"><Wifi className="h-7 w-7 text-white" /></div>
-                    <h2 className="text-xl font-black text-white drop-shadow-md">{selectedNetwork.name}</h2>
-                    <p className="text-[10px] text-white/70 font-bold mt-1 bg-white/10 py-1 px-3 rounded-full border border-white/5 inline-block">{selectedNetwork.location}</p>
+                    <DialogTitle className="text-xl font-black text-white drop-shadow-md">{selectedNetwork.name}</DialogTitle>
+                    <DialogDescription className="text-[10px] text-white/70 font-bold mt-1 bg-white/10 py-1 px-3 rounded-full border border-white/5 inline-block">{selectedNetwork.location}</DialogDescription>
                 </DialogHeader>
               </div>
               <div className="flex-1 overflow-y-auto p-4 bg-white dark:bg-slate-900 no-scrollbar">
                 {isLoadingCategories ? ( <AnimatedLogoLoader /> ) : (
                   <div className="space-y-3">
-                    {sortedCategories.map((cat, idx) => {
+                    {categories.map((cat, idx) => {
                         const gradient = CARD_GRADIENTS[idx % CARD_GRADIENTS.length];
                         return (
                             <Card key={cat.id} className={cn("relative overflow-hidden rounded-[28px] border-none shadow-xl transition-all duration-300 group cursor-pointer active:scale-[0.97]", "bg-gradient-to-br p-[2px]", gradient)}>
@@ -336,7 +336,6 @@ export default function CombinedNetworksPage() {
                                             <Button size="sm" className="h-7 rounded-lg text-[8px] font-black px-3 bg-amber-500 hover:bg-amber-600 border-none shadow-sm" onClick={() => handleSmsPurchase(cat)}>شراء عبر SMS</Button>
                                         ) : (
                                             <Button size="sm" className="h-7 rounded-lg text-[9px] font-black px-4 bg-primary" onClick={() => {
-                                                // التوجيه لصفحة الشراء المباشر (NetworkPurchasePage)
                                                 window.location.href = `/network-cards/${selectedNetwork.id}?name=${encodeURIComponent(selectedNetwork.name)}`;
                                             }}>شراء</Button>
                                         )}
