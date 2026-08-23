@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 
 /**
  * شاشة الترحيب الملكية (Luxury Splash Screen)
- * تم تحديث الألوان لتكون بيضاء نقية مع شريط انتظار نحيف لضمان السرعة.
+ * تم تحديث الألوان لتكون بيضاء نقية مع شريط انتظار نحيف.
  */
 export function SplashScreen({ 
   onComplete, 
@@ -35,14 +35,15 @@ export function SplashScreen({
 
     loadAssets();
 
-    // التوجيه للخروج بحد أقصى 2.5 ثانية لضمان عدم تعليق المستخدم أبداً
-    const timer = setTimeout(() => {
+    // التوجيه للخروج بمجرد جاهزية التطبيق
+    if (isAppReady) {
+      const timer = setTimeout(() => {
         setIsExiting(true);
-        setTimeout(onComplete, 500);
-    }, 2500);
-
-    return () => clearTimeout(timer);
-  }, [onComplete]);
+        setTimeout(onComplete, 500); 
+      }, 1800); 
+      return () => clearTimeout(timer);
+    }
+  }, [isAppReady, onComplete]);
 
   const Lottie = LottieComponent;
 

@@ -1,3 +1,4 @@
+
 'use client';
 
 import './globals.css';
@@ -11,53 +12,100 @@ import { AppErrorDialog } from '@/components/layout/app-error-dialog';
 import { SplashScreen } from '@/components/layout/splash-screen';
 import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
+import { Button } from '@/components/ui/button';
 
-// نسخة التطبيق المحدثة لضمان التحديث الشامل
-const APP_VERSION = '1.9.6';
+const APP_VERSION = '1.8.0';
 
 type UserProfile = {
   isPinEnabled?: boolean;
   pinCode?: string;
 };
 
-// أيقونة الأوفلاين كـ SVG لمنع أخطاء الاستيراد
+// المسارات المدعومة للعمل بدون إنترنت
+const OFFLINE_SUPPORTED_ROUTES = ['/login', '/services', '/favorites', '/account'];
+
+// أيقونة WifiOff كـ SVG مباشر لتجنب أخطاء الاستيراد
 const WifiOffIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    width="64" 
+    height="64" 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className="text-primary animate-pulse"
+  >
+    <line x1="2" y1="2" x2="22" y2="22" />
+    <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
+    <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
+    <path d="M10.71 5.05A16 16 0 0 1 22.58 9" />
+    <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" />
+    <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+    <line x1="12" y1="20" x2="12.01" y2="20" />
+  </svg>
 );
+
+function OfflinePlaceholder() {
+  const router = useRouter();
+  return (
+    <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-background space-y-6 animate-in fade-in duration-700">
+      <div className="bg-primary/10 p-8 rounded-[40px] shadow-inner">
+        <WifiOffIcon />
+      </div>
+      <div className="space-y-2">
+        <h2 className="text-xl font-black text-foreground">عذراً، لا يوجد اتصال</h2>
+        <p className="text-sm font-bold text-muted-foreground leading-relaxed px-4">
+          هذا القسم يحتاج إلى اتصال نشط بالإنترنت للوصول إلى البيانات المباشرة.
+        </p>
+      </div>
+      <Button 
+        onClick={() => router.push('/services')}
+        className="rounded-2xl h-12 px-10 font-black bg-mesh-gradient shadow-lg active:scale-95 transition-transform"
+      >
+        اذهب للشبكات (يعمل أوفلاين)
+      </Button>
+    </div>
+  );
+}
 
 function AppContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
   const [showSplash, setShowSplash] = useState(true);
   const [isPinVerified, setIsPinVerified] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
   const [mounted, setMounted] = useState(false);
 
-  // حماية من تعليق الشاشة البيضاء (Hydration Guard)
   useEffect(() => {
     setMounted(true);
-  }, []);
+    setIsOnline(navigator.onLine);
+    
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
 
-  // تسجيل الـ Service Worker لدعم وضع الـ Offline الحقيقي
-  useEffect(() => {
-    if ('serviceWorker' in navigator && mounted) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').then(
-          (reg) => console.log('Star Mobile SW Registered'),
-          (err) => console.log('SW Registration Failed', err)
-        );
-      });
-    }
-  }, [mounted]);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
 
-  // تطهير الكاش عند تغيير النسخة
-  useEffect(() => {
-    if (!mounted) return;
-    const savedVersion = localStorage.getItem('star_app_version_final');
+    const savedVersion = localStorage.getItem('star_app_version');
     if (savedVersion !== APP_VERSION) {
-      localStorage.setItem('star_app_version_final', APP_VERSION);
+      localStorage.clear();
+      localStorage.setItem('star_app_version', APP_VERSION);
     }
-  }, [mounted]);
+
+    const hasSeenSplash = sessionStorage.getItem(`has_seen_splash_${APP_VERSION}`);
+    if (hasSeenSplash) setShowSplash(false);
+    if (sessionStorage.getItem('is_pin_verified')) setIsPinVerified(true);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const userDocRef = useMemoFirebase(
     () => (user && firestore ? doc(firestore, 'users', user.uid) : null),
@@ -76,50 +124,23 @@ function AppContent({ children }: { children: React.ReactNode }) {
     '/favorites'
   ].includes(pathname);
 
-  useEffect(() => {
-    if (!mounted) return;
-    const hasSeenSplash = sessionStorage.getItem(`has_seen_splash_${APP_VERSION}`);
-    if (hasSeenSplash) setShowSplash(false);
-    if (sessionStorage.getItem('is_pin_verified')) setIsPinVerified(true);
-  }, [mounted]);
-
-  const handleSplashComplete = () => {
-    setShowSplash(false);
-    sessionStorage.setItem(`has_seen_splash_${APP_VERSION}`, 'true');
-  };
-
-  const handlePinVerified = () => {
-    setIsPinVerified(true);
-    sessionStorage.setItem('is_pin_verified', 'true');
-  };
-
-  const shouldShowPinLock = user && userProfile?.isPinEnabled && userProfile?.pinCode && !isPinVerified && !showSplash;
-
-  // إذا لم يتم التركيب (Mounted) نُظهر الخلفية البيضاء فقط للحظة قصيرة جداً
-  if (!mounted) return <div className="fixed inset-0 bg-white" />;
+  const shouldShowPinLock = mounted && user && userProfile?.isPinEnabled && userProfile?.pinCode && !isPinVerified && !showSplash;
+  
+  // منطق حجب الصفحات التي لا تعمل بدون إنترنت (فقط بعد التركيب)
+  const isCurrentRouteRestricted = mounted && !isOnline && !OFFLINE_SUPPORTED_ROUTES.some(route => pathname.startsWith(route)) && pathname !== '/';
 
   return (
     <div className="mx-auto max-w-[450px] bg-white h-[100dvh] flex flex-col shadow-2xl relative overflow-hidden">
-      {showSplash && (
-        <SplashScreen 
-          onComplete={handleSplashComplete} 
-          isAppReady={!isUserLoading} 
-        />
-      )}
+      {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} isAppReady={!isUserLoading} />}
 
-      {shouldShowPinLock && (
-        <PinOverlay 
-            userPin={userProfile.pinCode!} 
-            onVerified={handlePinVerified} 
-        />
-      )}
+      {shouldShowPinLock && <PinOverlay userPin={userProfile.pinCode!} onVerified={() => { setIsPinVerified(true); sessionStorage.setItem('is_pin_verified', 'true'); }} />}
       
       {!showSplash && (
         <div className="flex-1 flex flex-col relative overflow-hidden animate-in fade-in duration-500">
           <WelcomeModal />
           <AppErrorDialog />
           <main className="flex-1 flex flex-col min-h-0 relative">
-            {children}
+            {isCurrentRouteRestricted ? <OfflinePlaceholder /> : children}
           </main>
           {isNavVisiblePage && <BottomNav />}
         </div>
@@ -137,12 +158,9 @@ export default function RootLayout({
     <html lang="ar" dir="rtl">
       <head>
         <title>ستار موبايل</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-        <meta name="theme-color" content="#0048ad" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <link rel="icon" href="/logo.jpeg" />
-        <link rel="manifest" href="/manifest.json" />
+        <link rel="manifest" href={`/manifest.json?v=${APP_VERSION}`} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@400;700;800&display=swap" rel="stylesheet" />
