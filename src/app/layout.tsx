@@ -1,3 +1,4 @@
+
 'use client';
 
 import './globals.css';
@@ -11,10 +12,9 @@ import { AppErrorDialog } from '@/components/layout/app-error-dialog';
 import { SplashScreen } from '@/components/layout/splash-screen';
 import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
-import { cn } from '@/lib/utils';
 
 // نسخة التطبيق المحدثة لضمان التحديث الشامل
-const APP_VERSION = '1.8.5';
+const APP_VERSION = '1.8.8';
 
 type UserProfile = {
   isPinEnabled?: boolean;
@@ -23,23 +23,18 @@ type UserProfile = {
 
 function AppContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
   const [showSplash, setShowSplash] = useState(true);
   const [isPinVerified, setIsPinVerified] = useState(false);
 
-  // نظام تسجيل الـ Service Worker لدعم وضع الـ Offline الحقيقي
+  // تسجيل الـ Service Worker لدعم وضع الـ Offline الحقيقي
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').then(
-          (registration) => {
-            console.log('ServiceWorker registration successful');
-          },
-          (err) => {
-            console.log('ServiceWorker registration failed: ', err);
-          }
+          (reg) => console.log('SW Registered'),
+          (err) => console.log('SW Failed', err)
         );
       });
     }
