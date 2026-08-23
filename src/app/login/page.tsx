@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -76,12 +75,16 @@ export default function DashboardPage() {
   const { data: userProfile } = useDoc<UserProfile>(userDocRef);
 
   useEffect(() => {
+    // في وضع الأوفلاين نسمح للمستخدم بالبقاء في الصفحة دون توجيه
     if (mounted && !isUserLoading && !user && !isOffline) {
       router.push('/');
     }
   }, [user, isUserLoading, router, mounted, isOffline]);
 
-  if (!mounted || isUserLoading) {
+  if (!mounted) return null;
+
+  // إذا كنا متصلين ومازال يحمل نُظهر الهيكل المؤقت
+  if (isUserLoading && !isOffline) {
     return (
       <div className="flex flex-col h-full bg-background animate-pulse p-4 space-y-6">
         <div className="h-16 w-full bg-muted rounded-2xl" />

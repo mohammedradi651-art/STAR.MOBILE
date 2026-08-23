@@ -13,7 +13,7 @@ import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
 
 // نسخة التطبيق المحدثة لضمان التحديث الشامل
-const APP_VERSION = '1.9.5';
+const APP_VERSION = '1.9.6';
 
 type UserProfile = {
   isPinEnabled?: boolean;
@@ -56,7 +56,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
     const savedVersion = localStorage.getItem('star_app_version_final');
     if (savedVersion !== APP_VERSION) {
       localStorage.setItem('star_app_version_final', APP_VERSION);
-      // تحديث صامت في الخلفية للمتصفح
     }
   }, [mounted]);
 
@@ -96,7 +95,8 @@ function AppContent({ children }: { children: React.ReactNode }) {
 
   const shouldShowPinLock = user && userProfile?.isPinEnabled && userProfile?.pinCode && !isPinVerified && !showSplash;
 
-  if (!mounted) return null; // منع الرندر الأولي لمنع الشاشة البيضاء
+  // إذا لم يتم التركيب (Mounted) نُظهر الخلفية البيضاء فقط للحظة قصيرة جداً
+  if (!mounted) return <div className="fixed inset-0 bg-white" />;
 
   return (
     <div className="mx-auto max-w-[450px] bg-white h-[100dvh] flex flex-col shadow-2xl relative overflow-hidden">

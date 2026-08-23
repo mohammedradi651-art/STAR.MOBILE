@@ -118,7 +118,6 @@ export default function CombinedNetworksPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [purchasedCardNum, setPurchasedCardNum] = useState<string | null>(null);
 
-  // فحص الإنترنت صامتاً
   useEffect(() => {
     setIsOffline(!navigator.onLine);
     const handleStatus = () => setIsOffline(!navigator.onLine);
@@ -136,18 +135,14 @@ export default function CombinedNetworksPage() {
   );
   const { data: localNetworks, isLoading: isLoadingLocal } = useCollection<any>(localNetworksQuery);
 
-  // جلب وتخزين الشبكات في الخلفية
   useEffect(() => {
     const fetchAndCache = async () => {
       try {
         let combined: CombinedNetwork[] = [];
-        
-        // 1. معالجة الشبكات المحلية
         if (localNetworks) {
             combined = localNetworks.map(n => ({ ...n, isLocal: true }));
         }
 
-        // 2. جلب شبكات API إذا توفر الإنترنت
         if (!isOffline) {
             const response = await fetch('/services/networks-api');
             if (response.ok) {
@@ -158,13 +153,11 @@ export default function CombinedNetworksPage() {
                 setApiNetworks(mappedApi);
                 combined = [...combined, ...mappedApi];
             }
-            // تخزين صامت في الخلفية
             if (combined.length > 0) {
                 localStorage.setItem('star_cached_nets', JSON.stringify(combined));
             }
             setIsLoadingApi(false);
         } else {
-            // تحميل من الكاش في وضع الأوفلاين
             const cached = localStorage.getItem('star_cached_nets');
             if (cached) {
                 const data = JSON.parse(cached);
@@ -173,11 +166,9 @@ export default function CombinedNetworksPage() {
             setIsLoadingApi(false);
         }
       } catch (err) {
-        console.error("Cache background error:", err);
         setIsLoadingApi(false);
       }
     };
-
     fetchAndCache();
   }, [localNetworks, isOffline]);
 
@@ -200,16 +191,8 @@ export default function CombinedNetworksPage() {
     setIsLoadingCategories(true);
 
     const cachedCatsKey = `star_cats_${network.id}`;
-    
-    // جلب من الكاش فوراً إذا توفر
     const cachedCats = localStorage.getItem(cachedCatsKey);
-    if (cachedCats) {
-        setCategories(JSON.parse(cachedCats));
-        if (isOffline) {
-            setIsLoadingCategories(false);
-            return;
-        }
-    }
+    if (cachedCats) setCategories(JSON.parse(cachedCats));
 
     if (isOffline && !cachedCats) {
         setIsLoadingCategories(false);
@@ -236,11 +219,7 @@ export default function CombinedNetworksPage() {
           setCategories(catsData);
           localStorage.setItem(cachedCatsKey, JSON.stringify(catsData));
       }
-    } catch (err: any) { 
-        console.error(err); 
-    } finally { 
-        setIsLoadingCategories(false); 
-    }
+    } catch (err: any) { } finally { setIsLoadingCategories(false); }
   };
 
   const handleConfirmPurchase = async () => {
@@ -265,7 +244,6 @@ export default function CombinedNetworksPage() {
             const q = query(cardsRef, where('categoryId', '==', purchaseCategory.id), where('status', '==', 'available'), firestoreLimit(1));
             const availSnap = await getDocs(q);
             if (availSnap.empty) throw new Error('نفذت الكمية من هذه الفئة حالياً.');
-            
             const cardDoc = availSnap.docs[0];
             finalCardNum = cardDoc.data().cardNumber;
             batch.update(cardDoc.ref, { status: 'sold', soldTo: user.uid, soldTimestamp: now });
@@ -332,7 +310,7 @@ export default function CombinedNetworksPage() {
                     <p className="font-bold">لا توجد شبكات متاحة حالياً</p>
                 </div>
             ) : (
-                allNetworksCombined.map((net, index) => (
+                allNetworksCombined.map((net) => (
                     <Card key={net.id} className="bg-mesh-gradient cursor-pointer text-white rounded-2xl border-none shadow-md overflow-hidden animate-in fade-in-0 slide-in-from-bottom-2" onClick={() => handleNetworkClick(net)}>
                         <CardContent className="p-4 flex items-center justify-between gap-2">
                             <div className="p-3 bg-white/20 rounded-xl shrink-0"><Wifi className="h-6 w-6 text-white" /></div>

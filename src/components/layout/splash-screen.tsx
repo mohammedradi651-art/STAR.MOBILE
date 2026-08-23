@@ -35,25 +35,14 @@ export function SplashScreen({
 
     loadAssets();
 
-    // التوجيه للخروج بمجرد جاهزية التطبيق أو بحد أقصى 3 ثواني لمنع الشاشة البيضاء
-    const forceComplete = setTimeout(() => {
+    // التوجيه للخروج بحد أقصى 2.5 ثانية لضمان عدم تعليق المستخدم أبداً
+    const timer = setTimeout(() => {
         setIsExiting(true);
         setTimeout(onComplete, 500);
-    }, 3000);
+    }, 2500);
 
-    if (isAppReady) {
-      const timer = setTimeout(() => {
-        setIsExiting(true);
-        setTimeout(onComplete, 500); 
-      }, 1500); 
-      return () => {
-          clearTimeout(timer);
-          clearTimeout(forceComplete);
-      }
-    }
-
-    return () => clearTimeout(forceComplete);
-  }, [isAppReady, onComplete]);
+    return () => clearTimeout(timer);
+  }, [onComplete]);
 
   const Lottie = LottieComponent;
 
