@@ -13,7 +13,10 @@ import {
   Loader2,
   X,
   Clock,
-  WifiOff
+  WifiOff,
+  Copy,
+  Smartphone,
+  MessageSquare
 } from 'lucide-react';
 import { 
   useCollection, 
@@ -40,11 +43,13 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import Image from 'next/image';
 import Lottie from 'lottie-react';
+import { useRouter } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,11 +72,6 @@ type CardCategory = {
     expirationDate?: string;
 };
 
-type Favorite = {
-    id: string;
-    targetId: string;
-};
-
 const CARD_GRADIENTS = [
     "from-blue-400 via-blue-500 to-blue-600",
     "from-emerald-400 via-emerald-500 to-emerald-600",
@@ -82,9 +82,6 @@ const CARD_GRADIENTS = [
     "from-teal-400 via-teal-500 to-cyan-600",
 ];
 
-/**
- * مكون التحميل المتحرك الرسمي
- */
 const AnimatedLogoLoader = () => {
   const [animationData, setAnimationData] = useState<any>(null);
 
@@ -114,6 +111,7 @@ export default function CombinedNetworksPage() {
   const firestore = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
   const [isOffline, setIsOffline] = useState(false);
   
@@ -124,26 +122,13 @@ export default function CombinedNetworksPage() {
   const [categories, setCategories] = useState<CardCategory[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   
-  const [isProcessing, setIsProcessing] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // فحص حالة الإنترنت والتخزين المحلي
   useEffect(() => {
     setIsOffline(!navigator.onLine);
-    
     const handleStatus = () => setIsOffline(!navigator.onLine);
     window.addEventListener('online', handleStatus);
     window.addEventListener('offline', handleStatus);
-    
-    // محاولة جلب الشبكات من التخزين المحلي فوراً في حال عدم وجود نت
-    if (!navigator.onLine) {
-        const cached = localStorage.getItem('cached_networks_all');
-        if (cached) {
-            setApiNetworks(JSON.parse(cached));
-            setIsLoadingApi(false);
-        }
-    }
-
     return () => {
         window.removeEventListener('online', handleStatus);
         window.removeEventListener('offline', handleStatus);
@@ -151,29 +136,33 @@ export default function CombinedNetworksPage() {
   }, []);
 
   const localNetworksQuery = useMemoFirebase(
-    () => (firestore && !isOffline ? collection(firestore, 'networks') : null),
-    [firestore, isOffline]
+    () => (firestore ? collection(firestore, 'networks') : null),
+    [firestore]
   );
   const { data: localNetworks, isLoading: isLoadingLocal } = useCollection<any>(localNetworksQuery);
 
+  // تحديث التخزين المحلي للشبكات (بيتي + محلية)
   useEffect(() => {
     const fetchApiNetworks = async () => {
-      if (isOffline) return;
-      
       try {
         const response = await fetch('/services/networks-api');
+        let mappedApi: CombinedNetwork[] = [];
         if (response.ok) {
           const data = await response.json();
-          const mapped = data.map((n: any) => ({
+          mappedApi = data.map((n: any) => ({
             id: String(n.id),
             name: n.name,
             location: n.desc || 'شبكة API',
             isLocal: false,
             logo: n.logo,
           }));
-          setApiNetworks(mapped);
-          // تحديث الكاش
-          localStorage.setItem('cached_networks_all', JSON.stringify(mapped));
+          setApiNetworks(mappedApi);
+        }
+
+        // دمج المحلية مع الـ API للحفظ في الكاش
+        const local = localNetworks ? localNetworks.map(n => ({ ...n, isLocal: true })) : [];
+        if (local.length > 0 || mappedApi.length > 0) {
+            localStorage.setItem('cached_networks_v2', JSON.stringify([...local, ...mappedApi]));
         }
       } catch (err) {
         console.error(err);
@@ -181,38 +170,37 @@ export default function CombinedNetworksPage() {
         setIsLoadingApi(false);
       }
     };
-    fetchApiNetworks();
-  }, [isOffline]);
+
+    if (!isOffline) fetchApiNetworks();
+    else {
+        const cached = localStorage.getItem('cached_networks_v2');
+        if (cached) {
+            const data = JSON.parse(cached);
+            setApiNetworks(data.filter((n: any) => !n.isLocal));
+            setIsLoadingApi(false);
+        }
+    }
+  }, [localNetworks, isOffline]);
 
   const allNetworksCombined = useMemo(() => {
-    const local = localNetworks ? localNetworks.map(n => ({ ...n, isLocal: true })) : [];
-    const api = apiNetworks;
-    const combined = [...local, ...api];
-    
-    // حفظ النسخة المدمجة للطوارئ
-    if (combined.length > 0 && !isOffline) {
-        localStorage.setItem('cached_combined_list', JSON.stringify(combined));
+    let list: CombinedNetwork[] = [];
+    if (!isOffline) {
+        const local = localNetworks ? localNetworks.map(n => ({ ...n, isLocal: true })) : [];
+        list = [...local, ...apiNetworks];
+    } else {
+        const cached = localStorage.getItem('cached_networks_v2');
+        list = cached ? JSON.parse(cached) : [];
     }
 
-    const listToFilter = combined.length > 0 ? combined : (isOffline ? JSON.parse(localStorage.getItem('cached_combined_list') || '[]') : []);
-
-    if (!searchTerm) return listToFilter;
-    return listToFilter.filter((net: any) => net.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    if (!searchTerm) return list;
+    return list.filter((net: any) => net.name.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [localNetworks, apiNetworks, searchTerm, isOffline]);
-
-  const favoritesQuery = useMemoFirebase(
-    () => user && firestore && !isOffline ? query(collection(firestore, 'users', user.uid, 'favorites'), where('favoriteType', '==', 'Network')) : null,
-    [firestore, user, isOffline]
-  );
-  const { data: favorites } = useCollection<Favorite>(favoritesQuery);
-  const favoriteNetworkIds = useMemo(() => new Set(favorites?.map(f => f.targetId)), [favorites]);
 
   const handleNetworkClick = async (network: CombinedNetwork) => {
     setSelectedNetwork(network);
     setCategories([]);
     setIsLoadingCategories(true);
 
-    // محاولة جلب الفئات من الكاش أولاً في وضع الـ Offline
     if (isOffline) {
         const cachedCats = localStorage.getItem(`cats_${network.id}`);
         if (cachedCats) {
@@ -221,25 +209,28 @@ export default function CombinedNetworksPage() {
             return;
         }
         setIsLoadingCategories(false);
-        toast({ variant: 'destructive', title: 'غير متوفر', description: 'هذه الشبكة غير محفوظة محلياً. يرجى الاتصال بالإنترنت أولاً.' });
+        toast({ variant: 'destructive', title: 'غير متوفر', description: 'بيانات هذه الشبكة غير محفوظة للأوفلاين.' });
         setSelectedNetwork(null);
         return;
     }
 
     try {
+      let catsData: CardCategory[] = [];
       if (network.isLocal && firestore) {
         const catsRef = collection(firestore, `networks/${network.id}/cardCategories`);
         const snapshot = await getDocs(catsRef);
-        const catsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as CardCategory));
-        setCategories(catsData);
-        localStorage.setItem(`cats_${network.id}`, JSON.stringify(catsData));
+        catsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as CardCategory));
       } else {
         const response = await fetch(`/services/networks-api/${network.id}/classes`);
-        if (!response.ok) throw new Error('فشل تحميل الفئات');
-        const data = await response.json();
-        const mapped = data.map((c: any) => ({ id: c.id, name: c.name, price: c.price, capacity: c.dataLimit, validity: c.expirationDate }));
-        setCategories(mapped);
-        localStorage.setItem(`cats_${network.id}`, JSON.stringify(mapped));
+        if (response.ok) {
+            const data = await response.json();
+            catsData = data.map((c: any) => ({ id: c.id, name: c.name, price: c.price, capacity: c.dataLimit, validity: c.expirationDate }));
+        }
+      }
+      
+      if (catsData.length > 0) {
+          setCategories(catsData);
+          localStorage.setItem(`cats_${network.id}`, JSON.stringify(catsData));
       }
     } catch (err: any) {
         console.error(err);
@@ -248,10 +239,20 @@ export default function CombinedNetworksPage() {
     }
   };
 
-  const handleSmsPurchase = (cat: CardCategory) => {
+  const handleAction = (cat: CardCategory) => {
     if (!selectedNetwork) return;
-    const msg = `STAR MOBILE - ${selectedNetwork.name} - ${cat.name} - ${cat.price} YER`;
-    window.location.href = `sms:770326828?body=${encodeURIComponent(msg)}`;
+    
+    if (isOffline) {
+        const msg = `STAR MOBILE - ${selectedNetwork.name} - ${cat.name} - ${cat.price} YER`;
+        window.location.href = `sms:770326828?body=${encodeURIComponent(msg)}`;
+    } else {
+        // توجيه لصفحة الشراء المباشر (المحلية أو بيتي)
+        if (selectedNetwork.isLocal) {
+            router.push(`/network-cards/${selectedNetwork.id}?name=${encodeURIComponent(selectedNetwork.name)}`);
+        } else {
+            router.push(`/services/${selectedNetwork.id}?name=${encodeURIComponent(selectedNetwork.name)}`);
+        }
+    }
   };
 
   return (
@@ -261,18 +262,19 @@ export default function CombinedNetworksPage() {
         <SimpleHeader title="الشبكات" />
         
         {isOffline && (
-            <div className="mx-4 bg-orange-500/10 border border-orange-500/20 p-2 rounded-xl flex items-center justify-center gap-2 mb-2 animate-in fade-in-0 duration-500">
+            <div className="mx-4 bg-orange-500/10 border border-orange-500/20 p-2 rounded-xl flex items-center justify-center gap-2 mb-2 animate-in fade-in-0">
                 <WifiOff className="w-4 h-4 text-orange-600" />
-                <span className="text-[10px] font-black text-orange-700">أنت الآن في وضع الأوفلاين (الشبكات المحفوظة فقط)</span>
+                <span className="text-[10px] font-black text-orange-700">أنت في وضع الأوفلاين - الشبكات المحفوظة فقط</span>
             </div>
         )}
 
         <div className="p-4">
             <div className="relative">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Input type="text" placeholder="البحث في الشبكات..." className="w-full pr-10 rounded-xl h-12 bg-muted/20 border-2 border-black/10 focus-visible:ring-primary shadow-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                <Input type="text" placeholder="البحث في الشبكات..." className="w-full pr-10 rounded-xl h-12 bg-muted/20 border-2 border-black/5 focus-visible:ring-primary shadow-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
         </div>
+
         <div className="flex-1 overflow-y-auto px-4 pb-20 space-y-4 no-scrollbar">
             {(isLoadingLocal || isLoadingApi) && !isOffline ? (
                 <AnimatedLogoLoader />
@@ -280,11 +282,10 @@ export default function CombinedNetworksPage() {
                 <div className="text-center py-20 opacity-40">
                     <Wifi className="h-16 w-16 mx-auto mb-4" />
                     <p className="font-bold">لا توجد شبكات متاحة حالياً</p>
-                    {isOffline && <p className="text-[10px] mt-2">يرجى الاتصال بالإنترنت مرة واحدة لتحميل البيانات.</p>}
                 </div>
             ) : (
                 allNetworksCombined.map((net, index) => (
-                    <Card key={net.id} className="bg-mesh-gradient cursor-pointer text-white rounded-2xl border-none shadow-md overflow-hidden animate-in fade-in-0 slide-in-from-bottom-2" style={{ animationDelay: `${index * 50}ms` }} onClick={() => handleNetworkClick(net)}>
+                    <Card key={`${net.id}-${index}`} className="bg-mesh-gradient cursor-pointer text-white rounded-2xl border-none shadow-md overflow-hidden animate-in fade-in-0 slide-in-from-bottom-2" style={{ animationDelay: `${index * 30}ms` }} onClick={() => handleNetworkClick(net)}>
                         <CardContent className="p-4 flex items-center justify-between gap-2">
                             <div className="p-3 bg-white/20 rounded-xl shrink-0 backdrop-blur-sm border border-white/10 w-12 h-12 flex items-center justify-center overflow-hidden"><Wifi className="h-6 w-6 text-white" /></div>
                             <div className="flex-1 text-right mx-2 space-y-0.5 overflow-hidden">
@@ -292,7 +293,7 @@ export default function CombinedNetworksPage() {
                                 <p className="text-[10px] text-white/70 font-bold truncate opacity-80">{net.location}</p>
                             </div>
                             <button className="p-2.5 hover:scale-110 transition-transform bg-white/10 rounded-full shrink-0">
-                                <Heart className={cn("h-5 w-5 text-white", favoriteNetworkIds.has(net.id) && 'fill-white')} />
+                                <Heart className="h-5 w-5 text-white" />
                             </button>
                         </CardContent>
                     </Card>
@@ -301,8 +302,8 @@ export default function CombinedNetworksPage() {
         </div>
       </div>
 
-      <Dialog open={!!selectedNetwork} onOpenChange={(open) => !open && !isProcessing && setSelectedNetwork(null)}>
-        <DialogContent className="max-w-[95%] sm:max-w-md rounded-[32px] p-0 overflow-hidden border-none shadow-2xl [&>button]:hidden bg-white dark:bg-slate-950">
+      <Dialog open={!!selectedNetwork} onOpenChange={(open) => !open && setSelectedNetwork(null)}>
+        <DialogContent className="max-w-[95%] sm:max-w-md rounded-[32px] p-0 overflow-hidden border-none shadow-2xl [&>button]:hidden bg-white dark:bg-slate-950 outline-none">
           {selectedNetwork && (
             <div className="flex flex-col max-h-[85vh]">
               <div className="bg-mesh-gradient p-0 relative overflow-hidden">
@@ -318,7 +319,7 @@ export default function CombinedNetworksPage() {
                     {categories.map((cat, idx) => {
                         const gradient = CARD_GRADIENTS[idx % CARD_GRADIENTS.length];
                         return (
-                            <Card key={cat.id} className={cn("relative overflow-hidden rounded-[28px] border-none shadow-xl transition-all duration-300 group cursor-pointer active:scale-[0.97]", "bg-gradient-to-br p-[2px]", gradient)}>
+                            <Card key={cat.id} className={cn("relative overflow-hidden rounded-[28px] border-none shadow-xl transition-all duration-300 group cursor-pointer active:scale-[0.97]", "bg-gradient-to-br p-[2px]", gradient)} onClick={() => handleAction(cat)}>
                                 <div className="relative rounded-[26px] p-3.5 flex items-center justify-between gap-4 h-full transition-colors bg-white/95 dark:bg-slate-900/95 hover:bg-primary/[0.02]">
                                     <div className="flex items-center gap-3">
                                         <div className={cn("h-11 w-11 rounded-[18px] flex items-center justify-center shrink-0 shadow-lg bg-gradient-to-br text-white overflow-hidden", gradient)}><Wifi className="h-5 w-5" /></div>
@@ -332,13 +333,9 @@ export default function CombinedNetworksPage() {
                                     </div>
                                     <div className="flex flex-col items-end gap-1.5">
                                         <span className="text-xl font-black text-primary">{cat.price.toLocaleString('en-US')} <span className="text-[7px]">ر.ي</span></span>
-                                        {isOffline ? (
-                                            <Button size="sm" className="h-7 rounded-lg text-[8px] font-black px-3 bg-amber-500 hover:bg-amber-600 border-none shadow-sm" onClick={() => handleSmsPurchase(cat)}>شراء عبر SMS</Button>
-                                        ) : (
-                                            <Button size="sm" className="h-7 rounded-lg text-[9px] font-black px-4 bg-primary" onClick={() => {
-                                                window.location.href = `/network-cards/${selectedNetwork.id}?name=${encodeURIComponent(selectedNetwork.name)}`;
-                                            }}>شراء</Button>
-                                        )}
+                                        <Button size="sm" className={cn("h-7 rounded-lg text-[9px] font-black px-4 border-none shadow-sm", isOffline ? "bg-amber-500 hover:bg-amber-600" : "bg-primary")}>
+                                            {isOffline ? 'شراء SMS' : 'شراء'}
+                                        </Button>
                                     </div>
                                 </div>
                             </Card>

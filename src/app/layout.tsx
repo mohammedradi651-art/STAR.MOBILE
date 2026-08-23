@@ -13,8 +13,8 @@ import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
-// إصدار التطبيق المحدث لتطهير الكاش وتفعيل الواجهة الملكية
-const APP_VERSION = '1.7.5';
+// نسخة التطبيق المحدثة لضمان التحديث الشامل
+const APP_VERSION = '1.8.5';
 
 type UserProfile = {
   isPinEnabled?: boolean;
@@ -29,54 +29,30 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const [showSplash, setShowSplash] = useState(true);
   const [isPinVerified, setIsPinVerified] = useState(false);
 
-  // نظام تطهير الكاش القوي والآلي وملفات الارتباط عند تغيير النسخة
+  // نظام تسجيل الـ Service Worker لدعم وضع الـ Offline الحقيقي
   useEffect(() => {
-    const savedVersion = localStorage.getItem('star_app_version');
-    
-    if (savedVersion !== APP_VERSION) {
-      console.log('Force clearing all data for version: ' + APP_VERSION);
-      
-      // 1. مسح الذاكرة المحلية والجلسات
-      localStorage.clear();
-      sessionStorage.clear();
-      
-      // 2. مسح كافة ملفات الارتباط (Cookies) برمجياً
-      if (typeof document !== 'undefined') {
-        const cookies = document.cookie.split(";");
-        for (let i = 0; i < cookies.length; i++) {
-          const cookie = cookies[i];
-          const eqPos = cookie.indexOf("=");
-          const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
-          document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
-        }
-      }
-
-      // 3. مسح الـ Service Worker إن وجد لضمان عدم تحميل HTML قديم
-      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then((registrations) => {
-          for (const registration of registrations) {
-            registration.unregister();
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then(
+          (registration) => {
+            console.log('ServiceWorker registration successful');
+          },
+          (err) => {
+            console.log('ServiceWorker registration failed: ', err);
           }
-        });
-      }
-
-      // 4. حفظ النسخة الجديدة وإعادة تحميل إجبارية وشاملة
-      localStorage.setItem('star_app_version', APP_VERSION);
-      
-      // إضافة باراميتر عشوائي للرابط لإجبار السيرفر على تقديم نسخة جديدة
-      const url = new URL(window.location.href);
-      url.searchParams.set('v', APP_VERSION);
-      url.searchParams.set('t', Date.now().toString());
-      window.location.replace(url.toString());
+        );
+      });
     }
   }, []);
 
-  // تسجيل Service Worker بباراميتر نسخة لضمان التحديث
+  // تطهير الكاش عند تغيير النسخة
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js?v=' + APP_VERSION, {
-        updateViaCache: 'none'
-      }).catch(() => {});
+    const savedVersion = localStorage.getItem('star_app_version');
+    if (savedVersion !== APP_VERSION) {
+      localStorage.clear();
+      sessionStorage.clear();
+      localStorage.setItem('star_app_version', APP_VERSION);
+      window.location.reload();
     }
   }, []);
 
@@ -102,12 +78,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
     if (hasSeenSplash) setShowSplash(false);
     if (sessionStorage.getItem('is_pin_verified')) setIsPinVerified(true);
   }, []);
-
-  useEffect(() => {
-    if (!isUserLoading && user && pathname === '/') {
-        router.replace('/login');
-    }
-  }, [user, isUserLoading, pathname, router]);
 
   const handleSplashComplete = () => {
     setShowSplash(false);
@@ -162,7 +132,7 @@ export default function RootLayout({
         <title>ستار موبايل</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <link rel="icon" href="/logo.jpeg" />
-        <link rel="manifest" href={`/manifest.json?v=${APP_VERSION}`} />
+        <link rel="manifest" href="/manifest.json" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@400;700;800&display=swap" rel="stylesheet" />
