@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -20,7 +19,7 @@ import {
 } from "@/components/ui/carousel";
 import Link from 'next/link';
 import { PWAInstallPrompt } from '@/components/pwa-install-prompt';
-import { Skeleton } from '@/components/ui/skeleton';
+import { WifiOff, AlertTriangle } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -100,9 +99,20 @@ export default function DashboardPage() {
   const firestore = useFirestore();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    setIsOffline(!navigator.onLine);
+    
+    const handleStatus = () => setIsOffline(!navigator.onLine);
+    window.addEventListener('online', handleStatus);
+    window.addEventListener('offline', handleStatus);
+    
+    return () => {
+        window.removeEventListener('online', handleStatus);
+        window.removeEventListener('offline', handleStatus);
+    };
   }, []);
 
   const userDocRef = useMemoFirebase(
@@ -132,10 +142,22 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background overflow-hidden">
+    <div className="flex flex-col h-full bg-background overflow-hidden relative">
+      {isOffline && (
+          <div className="absolute top-[80px] left-0 right-0 z-[1000] px-4 pointer-events-none animate-in slide-in-from-top-4 duration-700">
+              <div className="bg-red-600 text-white p-3 rounded-2xl shadow-xl flex items-center justify-between border-2 border-white/20">
+                  <div className="flex items-center gap-3">
+                      <div className="bg-white/20 p-1.5 rounded-lg"><WifiOff className="w-4 h-4" /></div>
+                      <p className="text-[11px] font-black">وضع الأوفلاين نشط (تعمل الشبكات فقط)</p>
+                  </div>
+                  <AlertTriangle className="w-4 h-4 text-white/50 animate-pulse" />
+              </div>
+          </div>
+      )}
+
       <Header />
       <div className="flex-1 overflow-y-auto overflow-x-hidden pb-36 no-scrollbar">
-        <div className={cn("space-y-4")}>
+        <div className={cn("space-y-4", isOffline && "grayscale-[0.4]")}>
           <BalanceCard />
           {userProfile?.accountType === 'network-owner' ? <OwnerDashboard /> : <UserDashboard />}
         </div>
