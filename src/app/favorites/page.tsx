@@ -2,10 +2,10 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { SimpleHeader } from '@/components/layout/simple-header';
-import { useCollection, useFirestore, useMemoFirebase, useUser, deleteDocumentNonBlocking, useDoc, addDocumentNonBlocking } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, useUser, deleteDocumentNonBlocking, useDoc } from '@/firebase';
 import { collection, query, where, doc, getDocs, writeBatch, increment, limit as firestoreLimit } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Wifi, Heart, Search, CheckCircle, Copy, MessageSquare, Wallet, Smartphone, Loader2, Clock, Database, AlertCircle, Trash2 } from 'lucide-react';
+import { Wifi, Heart, Search, CheckCircle, Copy, MessageSquare, Wallet, Smartphone, Loader2, Clock, Database, AlertCircle, Globe } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -23,7 +23,6 @@ import { Button } from '@/components/ui/button';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 import { Label } from '@/components/ui/label';
 import Image from 'next/image';
-import Lottie from 'lottie-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,6 +51,7 @@ type CombinedNetwork = {
     name: string;
     location: string;
     isLocal: boolean;
+    ownerId?: string;
 };
 
 type UserProfile = {
@@ -69,34 +69,6 @@ const CARD_GRADIENTS = [
     "from-fuchsia-400 via-fuchsia-500 to-pink-600",
     "from-teal-400 via-teal-500 to-cyan-600",
 ];
-
-/**
- * مكون التحميل بالشعار المتحرك الموحد
- */
-const FavoritesMovingLoader = () => {
-  const [animationData, setAnimationData] = useState<any>(null);
-
-  useEffect(() => {
-    fetch('/TH.json')
-      .then(res => res.json())
-      .then(data => setAnimationData(data))
-      .catch(err => console.error("Lottie load error:", err));
-  }, []);
-
-  return (
-    <div className="flex flex-col items-center justify-center py-10 animate-in fade-in duration-500">
-      <div className="relative w-24 h-24 flex items-center justify-center overflow-hidden">
-          {animationData && (
-            <Lottie 
-                animationData={animationData} 
-                loop={true} 
-                style={{ width: '100%', height: '100%' }} 
-            />
-          )}
-      </div>
-    </div>
-  );
-};
 
 export default function FavoritesPage() {
   const firestore = useFirestore();
@@ -149,23 +121,39 @@ export default function FavoritesPage() {
     setCategories([]);
     setCategoryError(null);
 
+    const catCacheKey = `star_cache_cats_${fav.targetId}`;
+    const cachedCats = localStorage.getItem(catCacheKey);
+    if (cachedCats) {
+        try {
+            setCategories(JSON.parse(cachedCats));
+            setIsLoadingCategories(false);
+        } catch (e) {
+            setCategories([]);
+        }
+    }
+
     try {
       if (fav.isLocal && firestore) {
         const catsRef = collection(firestore, `networks/${fav.targetId}/cardCategories`);
         const snapshot = await getDocs(catsRef);
         const catsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as CardCategory));
         setCategories(catsData);
+        localStorage.setItem(catCacheKey, JSON.stringify(catsData));
       } else {
         const response = await fetch(`/services/networks-api/${fav.targetId}/classes`);
-        if (!response.ok) throw new Error('فشل تحميل الفئات');
+        if (!response.ok) throw new Error('فشل تحميل الفئات من المصدر');
         const data = await response.json();
-        setCategories(data.map((c: any) => ({ 
+        const mapped = data.map((c: any) => ({ 
           id: c.id, name: c.name, price: c.price, capacity: c.dataLimit, validity: c.expirationDate 
-        })));
+        }));
+        setCategories(mapped);
+        localStorage.setItem(catCacheKey, JSON.stringify(mapped));
       }
     } catch (err: any) {
       console.error(err);
-      setCategoryError(err.message || 'لا يمكن تحميل الفئات حالياً.');
+      if (categories.length === 0) {
+          setCategoryError(err.message || 'لا يمكن تحميل الفئات حالياً.');
+      }
     } finally {
       setIsLoadingCategories(false);
     }
@@ -185,7 +173,7 @@ export default function FavoritesPage() {
             const cardsRef = collection(firestore, `networks/${selectedNetwork.id}/cards`);
             const q = query(cardsRef, where('categoryId', '==', selectedCategory.id), where('status', '==', 'available'), firestoreLimit(1));
             const availableCardsSnapshot = await getDocs(q);
-            if (availableCardsSnapshot.empty) throw new Error('لا توجد كروت متاحة حالياً.');
+            if (availableCardsSnapshot.empty) throw new Error('نعتذر، لا توجد كروت متاحة حالياً في هذه الفئة.');
             
             const cardDoc = availableCardsSnapshot.docs[0];
             finalCardID = cardDoc.data().cardNumber;
@@ -204,7 +192,7 @@ export default function FavoritesPage() {
                 body: JSON.stringify({ classId: selectedCategory.id })
             });
             const result = await response.json();
-            if (!response.ok) throw new Error(result.message || 'فشل الشراء');
+            if (!response.ok) throw new Error(result.message || 'فشل الشراء من المصدر.');
             
             finalCardID = result.data.order.card.cardID;
             batch.update(userDocRef, { balance: increment(-selectedCategory.price) });
@@ -227,7 +215,7 @@ export default function FavoritesPage() {
         setSelectedNetwork(null);
         audioRef.current?.play().catch(() => {});
     } catch (error: any) {
-        toast({ variant: "destructive", title: "فشل", description: error.message });
+        toast({ variant: "destructive", title: "فشل العملية", description: error.message });
     } finally { setIsProcessing(false); }
   };
 
@@ -265,11 +253,8 @@ export default function FavoritesPage() {
 
   const sortedCategories = useMemo(() => {
     if (!categories) return [];
-    if (selectedNetwork?.isLocal) {
-        return [...categories].sort((a, b) => a.price - b.price);
-    }
-    return categories;
-  }, [categories, selectedNetwork]);
+    return [...categories].sort((a, b) => a.price - b.price);
+  }, [categories]);
 
   return (
     <div className="flex flex-col h-full bg-[#F8FAFC] dark:bg-slate-950">
@@ -296,7 +281,7 @@ export default function FavoritesPage() {
                 </div>
             ) : filteredFavorites.length === 0 ? (
                 <div className="text-center py-20 opacity-30">
-                    <Wifi className="h-16 w-16 mx-auto mb-4" />
+                    <Heart className="h-16 w-16 mx-auto mb-4" />
                     <p className="font-black text-sm uppercase">لا توجد شبكات مفضلة</p>
                 </div>
             ) : (
@@ -340,26 +325,26 @@ export default function FavoritesPage() {
                             </div>
                             <DialogTitle className="text-xl font-black text-white drop-shadow-md">{selectedNetwork.name}</DialogTitle>
                             <DialogDescription className="text-[10px] text-white/70 font-bold mt-1 bg-white/10 py-1 px-3 rounded-full border border-white/5 inline-block">
-                                استعرض فئات الكروت المتوفرة
+                                استعراض الفئات المتاحة
                             </DialogDescription>
                         </div>
                         
                         <div className="flex-1 overflow-y-auto p-4 bg-white dark:bg-slate-900 no-scrollbar">
                             {isLoadingCategories ? (
-                                <FavoritesMovingLoader />
+                                <div className="flex justify-center py-10"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>
                             ) : categoryError ? (
                                 <div className="text-center py-10 space-y-3">
                                     <AlertCircle className="h-10 w-10 text-destructive mx-auto" />
                                     <p className="text-xs font-bold text-destructive">{categoryError}</p>
                                 </div>
                             ) : sortedCategories.length === 0 ? (
-                                <p className="text-center py-10 text-muted-foreground font-bold text-sm">لا توجد فئات متاحة حالياً</p>
+                                <p className="text-center py-10 text-muted-foreground font-bold text-sm">لا توجد فئات حالياً</p>
                             ) : (
                                 <div className="space-y-3">
                                     {sortedCategories.map((cat, idx) => {
                                         const gradient = CARD_GRADIENTS[idx % CARD_GRADIENTS.length];
                                         return (
-                                            <div key={cat.id} className="animate-in slide-in-from-bottom-4 duration-500 fill-mode-both" style={{ animationDelay: `${idx * 100}ms` }}>
+                                            <div key={cat.id} className="animate-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${idx * 100}ms` }}>
                                                 <Card 
                                                     className={cn(
                                                         "relative overflow-hidden rounded-[26px] border-none shadow-lg transition-all active:scale-[0.97]",
@@ -394,7 +379,7 @@ export default function FavoritesPage() {
                             )}
                         </div>
                         <div className="p-4 bg-white dark:bg-slate-900 border-t">
-                            <Button variant="ghost" className="w-full h-11 rounded-2xl font-black text-sm text-muted-foreground" onClick={() => setSelectedNetwork(null)}>إغلاق القائمة</Button>
+                            <Button variant="ghost" className="w-full h-11 rounded-2xl font-black text-sm text-muted-foreground" onClick={() => setSelectedNetwork(null)}>إغلاق</Button>
                         </div>
                     </div>
                 )}
@@ -415,7 +400,7 @@ export default function FavoritesPage() {
                 </div>
                 
                 <div className="p-6 space-y-3">
-                    <div className="py-5 bg-muted/30 rounded-[28px] border-2 border-dashed border-primary/10 mb-4">
+                    <div className="py-5 bg-muted/30 rounded-[28px] border-2 border-dashed border-primary/10 mb-4 text-center">
                         <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">المبلغ المطلوب</p>
                         <p className="text-3xl font-black text-primary">{showConfirmPurchase?.price.toLocaleString('en-US')} <span className="text-sm">ريال</span></p>
                     </div>
