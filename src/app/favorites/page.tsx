@@ -5,7 +5,7 @@ import { SimpleHeader } from '@/components/layout/simple-header';
 import { useCollection, useFirestore, useMemoFirebase, useUser, deleteDocumentNonBlocking, useDoc, addDocumentNonBlocking } from '@/firebase';
 import { collection, query, where, doc, getDocs, writeBatch, increment, limit as firestoreLimit } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Wifi, MapPin, Heart, Search, X, AlertCircle, Database, Calendar, CheckCircle, Copy, MessageSquare, Wallet, Smartphone, Loader2, Clock } from 'lucide-react';
+import { Wifi, Heart, Search, CheckCircle, Copy, MessageSquare, Wallet, Smartphone, Loader2, Clock, Database, AlertCircle, Trash2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -23,7 +23,11 @@ import { Button } from '@/components/ui/button';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 import { Label } from '@/components/ui/label';
 import Image from 'next/image';
+import Lottie from 'lottie-react';
 
+export const dynamic = 'force-dynamic';
+
+// --- TYPES ---
 type Favorite = {
   id: string;
   userId: string;
@@ -40,6 +44,7 @@ type CardCategory = {
     price: number;
     capacity?: string;
     validity?: string;
+    expirationDate?: string;
 };
 
 type CombinedNetwork = {
@@ -55,6 +60,44 @@ type UserProfile = {
   phoneNumber?: string;
 };
 
+const CARD_GRADIENTS = [
+    "from-blue-400 via-blue-500 to-blue-600",
+    "from-emerald-400 via-emerald-500 to-emerald-600",
+    "from-rose-400 via-rose-500 to-rose-600",
+    "from-amber-400 via-amber-500 to-orange-600",
+    "from-violet-400 via-violet-500 to-indigo-600",
+    "from-fuchsia-400 via-fuchsia-500 to-pink-600",
+    "from-teal-400 via-teal-500 to-cyan-600",
+];
+
+/**
+ * مكون التحميل بالشعار المتحرك الموحد
+ */
+const FavoritesMovingLoader = () => {
+  const [animationData, setAnimationData] = useState<any>(null);
+
+  useEffect(() => {
+    fetch('/TH.json')
+      .then(res => res.json())
+      .then(data => setAnimationData(data))
+      .catch(err => console.error("Lottie load error:", err));
+  }, []);
+
+  return (
+    <div className="flex flex-col items-center justify-center py-10 animate-in fade-in duration-500">
+      <div className="relative w-24 h-24 flex items-center justify-center overflow-hidden">
+          {animationData && (
+            <Lottie 
+                animationData={animationData} 
+                loop={true} 
+                style={{ width: '100%', height: '100%' }} 
+            />
+          )}
+      </div>
+    </div>
+  );
+};
+
 export default function FavoritesPage() {
   const firestore = useFirestore();
   const { user } = useUser();
@@ -64,10 +107,13 @@ export default function FavoritesPage() {
   const [selectedNetwork, setSelectedNetwork] = useState<CombinedNetwork | null>(null);
   const [categories, setCategories] = useState<CardCategory[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(false);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [purchasedCard, setPurchasedCard] = useState<any>(null);
   const [showConfirmPurchase, setShowConfirmPurchase] = useState<any | null>(null);
+  const [isSmsDialogOpen, setIsSmsDialogOpen] = useState(false);
+  const [smsRecipient, setSmsRecipient] = useState('');
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const getFirstLast = (name?: string) => {
@@ -91,13 +137,17 @@ export default function FavoritesPage() {
 
   const filteredFavorites = useMemo(() => {
     if (!favorites) return [];
-    return favorites.filter(fav => fav.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    return favorites.filter(fav => 
+      fav.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      fav.location.toLowerCase().includes(searchTerm.toLowerCase())
+    );
   }, [favorites, searchTerm]);
 
   const handleNetworkClick = async (fav: Favorite) => {
     setSelectedNetwork({ id: fav.targetId, name: fav.name, location: fav.location, isLocal: !!fav.isLocal });
     setIsLoadingCategories(true);
     setCategories([]);
+    setCategoryError(null);
 
     try {
       if (fav.isLocal && firestore) {
@@ -107,12 +157,15 @@ export default function FavoritesPage() {
         setCategories(catsData);
       } else {
         const response = await fetch(`/services/networks-api/${fav.targetId}/classes`);
-        if (!response.ok) throw new Error('فشل التحميل');
+        if (!response.ok) throw new Error('فشل تحميل الفئات');
         const data = await response.json();
-        setCategories(data.map((c: any) => ({ id: c.id, name: c.name, price: c.price, capacity: c.dataLimit, validity: c.expirationDate })));
+        setCategories(data.map((c: any) => ({ 
+          id: c.id, name: c.name, price: c.price, capacity: c.dataLimit, validity: c.expirationDate 
+        })));
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setCategoryError(err.message || 'لا يمكن تحميل الفئات حالياً.');
     } finally {
       setIsLoadingCategories(false);
     }
@@ -132,7 +185,8 @@ export default function FavoritesPage() {
             const cardsRef = collection(firestore, `networks/${selectedNetwork.id}/cards`);
             const q = query(cardsRef, where('categoryId', '==', selectedCategory.id), where('status', '==', 'available'), firestoreLimit(1));
             const availableCardsSnapshot = await getDocs(q);
-            if (availableCardsSnapshot.empty) throw new Error('لا توجد كروت متاحة.');
+            if (availableCardsSnapshot.empty) throw new Error('لا توجد كروت متاحة حالياً.');
+            
             const cardDoc = availableCardsSnapshot.docs[0];
             finalCardID = cardDoc.data().cardNumber;
 
@@ -151,6 +205,7 @@ export default function FavoritesPage() {
             });
             const result = await response.json();
             if (!response.ok) throw new Error(result.message || 'فشل الشراء');
+            
             finalCardID = result.data.order.card.cardID;
             batch.update(userDocRef, { balance: increment(-selectedCategory.price) });
             batch.set(doc(collection(firestore, `users/${user.uid}/transactions`)), {
@@ -161,7 +216,7 @@ export default function FavoritesPage() {
             setPurchasedCard(result.data.order.card);
         }
 
-        // إرسال SMS بصيغة المستخدم الجديدة
+        // إرسال SMS بالصيغة الملكية
         if (userProfile?.phoneNumber) {
             const shortName = getFirstLast(userProfile.displayName);
             const smsMsg = `ستار موبايل\nمرحباً ${shortName}،\n\nتم شراء كرت الإنترنت الخاص بك بنجاح.\n\nالشبكة: ${selectedNetwork.name}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${finalCardID}`;
@@ -176,53 +231,290 @@ export default function FavoritesPage() {
     } finally { setIsProcessing(false); }
   };
 
+  const handlePurchaseViaSms = () => {
+    const selectedCategory = showConfirmPurchase;
+    if (!selectedCategory || !selectedNetwork) return;
+
+    const name = userProfile?.displayName || 'عميلنا';
+    const message = `ستار موبايل\nطلب شراء كرت (Offline)\n\nالمشترك: ${name}\nالشبكة: ${selectedNetwork.name}\nالفئة: ${selectedCategory.name}\nالسعر: ${selectedCategory.price} ريال\n\nيرجى تزويدي برقم الكرت 💙`;
+    
+    window.location.href = `sms:770326828?body=${encodeURIComponent(message)}`;
+    setShowConfirmPurchase(null);
+    setSelectedNetwork(null);
+  };
+
+  const handleCopy = () => {
+    if (purchasedCard) {
+        const textToCopy = purchasedCard.cardID || purchasedCard.cardNumber;
+        navigator.clipboard.writeText(textToCopy);
+        toast({ title: "تم النسخ" });
+    }
+  };
+
+  const handleSendSmsToCustomer = () => {
+    if (!purchasedCard || !selectedNetwork || !smsRecipient) return;
+    const name = userProfile?.displayName || 'عميلنا';
+    const balance = (userProfile?.balance ?? 0).toLocaleString('en-US');
+    const cardInfo = purchasedCard.cardID || purchasedCard.cardNumber;
+
+    const msg = `${name} 🖐️\nنشكرك على طلبك من ستار موبايل 💙\n\n*معلومات الكرت:*\nالشبكة : ${selectedNetwork.name}\nالفئة: ${selectedNetwork.name}\nرقم الكرت: ${cardInfo}\n\n*رصيدك:* ${balance} ريال\n\nتطبيق ستار موبايل :\nhttps://star26.vercel.app\n\nجهّزنا لك هالكرت، تقدر تشحن فيه وتستانس 🔥`;
+    
+    window.location.href = `sms:${smsRecipient}?body=${encodeURIComponent(msg)}`;
+    setIsSmsDialogOpen(false);
+  };
+
+  const sortedCategories = useMemo(() => {
+    if (!categories) return [];
+    if (selectedNetwork?.isLocal) {
+        return [...categories].sort((a, b) => a.price - b.price);
+    }
+    return categories;
+  }, [categories, selectedNetwork]);
+
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full bg-[#F8FAFC] dark:bg-slate-950">
         <audio ref={audioRef} src="/ashar.mp3" preload="auto" />
         <SimpleHeader title="المفضلة" />
-        <div className="p-4"><Input placeholder="البحث في المفضلة..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="rounded-xl h-12 bg-muted/20" /></div>
-        <div className="flex-1 overflow-y-auto px-4 pb-4">
-            {isLoading ? <Skeleton className="h-48 w-full" /> : filteredFavorites.length === 0 ? <p className="text-center py-20 opacity-30">لا توجد شبكات مفضلة</p> : (
+        
+        <div className="p-4">
+            <div className="relative">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input 
+                    type="text" 
+                    placeholder="البحث في المفضلة..." 
+                    className="w-full pr-10 rounded-xl h-12 bg-white dark:bg-slate-900 border-none shadow-sm font-bold" 
+                    value={searchTerm} 
+                    onChange={(e) => setSearchTerm(e.target.value)} 
+                />
+            </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 pb-24 space-y-4 no-scrollbar">
+            {isLoading ? (
                 <div className="space-y-4">
-                    {filteredFavorites.map(fav => (
-                        <Card key={fav.id} className="bg-mesh-gradient cursor-pointer text-white rounded-2xl p-4 flex items-center justify-between" onClick={() => handleNetworkClick(fav)}>
-                            <div className="flex items-center gap-3"><Wifi className="h-6 w-6" /><div><h4 className="font-bold">{fav.name}</h4><p className="text-xs opacity-80">{fav.location}</p></div></div>
-                            <Heart className="fill-white h-5 w-5" />
+                    {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}
+                </div>
+            ) : filteredFavorites.length === 0 ? (
+                <div className="text-center py-20 opacity-30">
+                    <Wifi className="h-16 w-16 mx-auto mb-4" />
+                    <p className="font-black text-sm uppercase">لا توجد شبكات مفضلة</p>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {filteredFavorites.map((fav, index) => (
+                        <Card 
+                            key={fav.id} 
+                            className="bg-mesh-gradient cursor-pointer text-white rounded-[24px] border-none shadow-md overflow-hidden animate-in fade-in-0 slide-in-from-bottom-2 duration-500 active:scale-[0.98] transition-all"
+                            style={{ animationDelay: `${index * 50}ms` }}
+                            onClick={() => handleNetworkClick(fav)}
+                        >
+                            <CardContent className="p-4 flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2.5 bg-white/20 rounded-xl backdrop-blur-md border border-white/10 shrink-0">
+                                        <Wifi className="h-5 w-5 text-white" />
+                                    </div>
+                                    <div className="text-right overflow-hidden">
+                                        <h4 className="font-black text-sm text-white truncate">{fav.name}</h4>
+                                        <p className="text-[10px] text-white/70 font-bold truncate opacity-80">{fav.location}</p>
+                                    </div>
+                                </div>
+                                <div className="p-2 bg-white/10 rounded-full">
+                                    <Heart className="h-5 w-5 text-white fill-white animate-pulse" />
+                                </div>
+                            </CardContent>
                         </Card>
                     ))}
                 </div>
             )}
         </div>
-        <Toaster />
-        <Dialog open={!!selectedNetwork} onOpenChange={(open) => !open && setSelectedNetwork(null)}>
-            <DialogContent className="rounded-3xl p-6">
-                <DialogHeader><DialogTitle className="text-center">{selectedNetwork?.name}</DialogTitle></DialogHeader>
-                <div className="space-y-3 py-4">
-                    {isLoadingCategories ? <Loader2 className="animate-spin mx-auto" /> : categories.map(cat => (
-                        <Card key={cat.id} className="p-4 flex justify-between items-center cursor-pointer hover:bg-muted/50" onClick={() => setShowConfirmPurchase(cat)}>
-                            <div><p className="font-bold">{cat.name}</p><p className="text-xs text-primary">{cat.price} ريال</p></div>
-                            <Button size="sm">شراء</Button>
-                        </Card>
-                    ))}
+
+        {/* Dialog for Categories */}
+        <Dialog open={!!selectedNetwork} onOpenChange={(open) => !open && !isProcessing && setSelectedNetwork(null)}>
+            <DialogContent className="max-w-[95%] sm:max-w-md rounded-[32px] p-0 overflow-hidden border-none shadow-2xl [&>button]:hidden bg-white dark:bg-slate-950">
+                {selectedNetwork && (
+                    <div className="flex flex-col max-h-[85vh]">
+                        <div className="bg-mesh-gradient pt-12 pb-8 px-8 text-center relative overflow-hidden">
+                            <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl animate-pulse" />
+                            <div className="bg-white/20 p-3 rounded-2xl w-14 h-14 mx-auto mb-3 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl">
+                                <Wifi className="h-7 w-7 text-white" />
+                            </div>
+                            <DialogTitle className="text-xl font-black text-white drop-shadow-md">{selectedNetwork.name}</DialogTitle>
+                            <DialogDescription className="text-[10px] text-white/70 font-bold mt-1 bg-white/10 py-1 px-3 rounded-full border border-white/5 inline-block">
+                                استعرض فئات الكروت المتوفرة
+                            </DialogDescription>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-4 bg-white dark:bg-slate-900 no-scrollbar">
+                            {isLoadingCategories ? (
+                                <FavoritesMovingLoader />
+                            ) : categoryError ? (
+                                <div className="text-center py-10 space-y-3">
+                                    <AlertCircle className="h-10 w-10 text-destructive mx-auto" />
+                                    <p className="text-xs font-bold text-destructive">{categoryError}</p>
+                                </div>
+                            ) : sortedCategories.length === 0 ? (
+                                <p className="text-center py-10 text-muted-foreground font-bold text-sm">لا توجد فئات متاحة حالياً</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    {sortedCategories.map((cat, idx) => {
+                                        const gradient = CARD_GRADIENTS[idx % CARD_GRADIENTS.length];
+                                        return (
+                                            <div key={cat.id} className="animate-in slide-in-from-bottom-4 duration-500 fill-mode-both" style={{ animationDelay: `${idx * 100}ms` }}>
+                                                <Card 
+                                                    className={cn(
+                                                        "relative overflow-hidden rounded-[26px] border-none shadow-lg transition-all active:scale-[0.97]",
+                                                        "bg-gradient-to-br p-[1.5px]",
+                                                        gradient
+                                                    )}
+                                                    onClick={() => setShowConfirmPurchase(cat)}
+                                                >
+                                                    <div className="relative rounded-[25px] p-3.5 flex items-center justify-between gap-4 h-full bg-white/95 dark:bg-slate-900/95">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={cn("h-10 w-10 rounded-2xl flex items-center justify-center shrink-0 shadow-md text-white", gradient)}>
+                                                                <Database className="h-5 w-5" />
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <h4 className="text-xs font-black text-foreground">{cat.name}</h4>
+                                                                <div className="flex gap-2 mt-1">
+                                                                    {cat.capacity && <span className="text-[9px] font-bold text-primary flex items-center gap-1"><Globe className="h-2.5 w-2.5" /> {cat.capacity}</span>}
+                                                                    {(cat.validity || cat.expirationDate) && <span className="text-[9px] font-bold text-muted-foreground flex items-center gap-1"><Clock className="h-2.5 w-2.5" /> {cat.validity || cat.expirationDate}</span>}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="text-lg font-black text-primary leading-none">{cat.price.toLocaleString('en-US')}</span>
+                                                            <span className="text-[7px] font-black text-muted-foreground uppercase mt-0.5">ريال</span>
+                                                        </div>
+                                                    </div>
+                                                </Card>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-4 bg-white dark:bg-slate-900 border-t">
+                            <Button variant="ghost" className="w-full h-11 rounded-2xl font-black text-sm text-muted-foreground" onClick={() => setSelectedNetwork(null)}>إغلاق القائمة</Button>
+                        </div>
+                    </div>
+                )}
+            </DialogContent>
+        </Dialog>
+
+        {/* 3-Button Purchase Dialog */}
+        <Dialog open={!!showConfirmPurchase} onOpenChange={(open) => !open && setShowConfirmPurchase(null)}>
+            <DialogContent className="rounded-[36px] max-sm text-center bg-white dark:bg-slate-900 z-[10000] border-none shadow-2xl outline-none p-0 overflow-hidden">
+                <div className="bg-primary/5 p-8 flex flex-col items-center border-b border-primary/5">
+                    <div className="bg-primary/10 w-16 h-16 rounded-full flex items-center justify-center mb-4">
+                        <CheckCircle className="h-10 w-10 text-primary" />
+                    </div>
+                    <DialogTitle className="font-black text-xl text-primary">تأكيد طلب الشراء</DialogTitle>
+                    <DialogDescription className="font-bold text-muted-foreground mt-1">
+                        كرت: <span className="text-foreground">{showConfirmPurchase?.name}</span>
+                    </DialogDescription>
+                </div>
+                
+                <div className="p-6 space-y-3">
+                    <div className="py-5 bg-muted/30 rounded-[28px] border-2 border-dashed border-primary/10 mb-4">
+                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">المبلغ المطلوب</p>
+                        <p className="text-3xl font-black text-primary">{showConfirmPurchase?.price.toLocaleString('en-US')} <span className="text-sm">ريال</span></p>
+                    </div>
+
+                    <Button 
+                        className="w-full h-12 rounded-2xl font-black text-base shadow-lg shadow-primary/20" 
+                        onClick={handlePurchase} 
+                        disabled={isProcessing}
+                    >
+                        {isProcessing ? <Loader2 className="animate-spin h-5 w-5" /> : <><Wallet className="ml-2 h-5 w-5" /> شراء من الرصيد</>}
+                    </Button>
+                    
+                    <Button 
+                        variant="outline" 
+                        className="w-full h-12 rounded-2xl font-black text-base border-2 border-primary/20 text-primary hover:bg-primary/5"
+                        onClick={handlePurchaseViaSms}
+                    >
+                        <MessageSquare className="ml-2 h-5 w-5" /> شراء عبر الرسائل SMS
+                    </Button>
+
+                    <Button 
+                        variant="ghost" 
+                        className="w-full h-12 rounded-2xl font-bold text-muted-foreground"
+                        onClick={() => setShowConfirmPurchase(null)}
+                    >
+                        إلغاء
+                    </Button>
                 </div>
             </DialogContent>
         </Dialog>
-        <Dialog open={!!showConfirmPurchase} onOpenChange={() => setShowConfirmPurchase(null)}>
-            <DialogContent className="rounded-3xl text-center p-6">
-                <DialogTitle>تأكيد الشراء</DialogTitle>
-                <p className="py-4">هل أنت متأكد من شراء كرت {showConfirmPurchase?.name}؟</p>
-                <Button className="w-full h-12 rounded-2xl" onClick={handlePurchase} disabled={isProcessing}>تأكيد</Button>
-            </DialogContent>
-        </Dialog>
+
+        {/* Success Card Dialog */}
         {purchasedCard && (
-            <div className="fixed inset-0 bg-black/60 z-[1000] flex items-center justify-center p-4">
-                <Card className="w-full max-w-sm text-center p-8 rounded-[40px]">
-                    <h2 className="text-2xl font-black text-green-600">تم الشراء!</h2>
-                    <p className="text-3xl font-mono my-6 bg-muted p-4 rounded-2xl border-2 border-dashed">{purchasedCard.cardID || purchasedCard.cardNumber}</p>
-                    <Button className="w-full h-12 rounded-2xl" onClick={() => { setPurchasedCard(null); router.push('/login'); }}>إغلاق</Button>
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10001] flex items-center justify-center p-4 animate-in fade-in-0">
+                <Card className="w-full max-sm text-center shadow-2xl rounded-[40px] overflow-hidden border-none bg-background">
+                    <CardContent className="p-8 space-y-6">
+                        <div className="bg-green-500 p-8 flex justify-center mb-4 rounded-t-[40px] -m-8">
+                            <CheckCircle className="h-16 w-16 text-white animate-bounce" />
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-black text-green-600 mt-4">تم الشراء بنجاح!</h2>
+                            <p className="text-sm text-muted-foreground mt-1">احتفظ برقم الكرت جيداً</p>
+                        </div>
+                        
+                        <div className="p-6 bg-muted rounded-[24px] border-2 border-dashed border-primary/20 space-y-3">
+                            <p className="text-[10px] font-bold text-primary uppercase tracking-widest">رقم الكرت</p>
+                            <p className="text-3xl font-black font-mono tracking-tighter text-foreground">
+                                {purchasedCard.cardID || purchasedCard.cardNumber}
+                            </p>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-3">
+                            <Button className="rounded-2xl h-12 font-bold" onClick={handleCopy}>
+                                <Copy className="ml-2 h-4 w-4" /> نسخ الكرت
+                            </Button>
+                            <Button variant="outline" className="rounded-2xl h-12 font-black" onClick={() => setIsSmsDialogOpen(true)}>
+                                <MessageSquare className="ml-2 h-4 w-4" /> ارسال SMS
+                            </Button>
+                        </div>
+                        <Button variant="ghost" className="w-full text-muted-foreground font-bold" onClick={() => { setPurchasedCard(null); setSelectedNetwork(null); }}>إغلاق</Button>
+                    </CardContent>
                 </Card>
             </div>
         )}
+
+        {/* SMS To Customer Dialog */}
+        <Dialog open={isSmsDialogOpen} onOpenChange={setIsSmsDialogOpen}>
+            <DialogContent className="rounded-[32px] max-sm p-6 z-[10002] bg-white dark:bg-slate-900 border-none shadow-2xl outline-none">
+                <DialogHeader>
+                    <div className="bg-primary/10 w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <Smartphone className="text-primary h-6 w-6" />
+                    </div>
+                    <DialogTitle className="text-center text-xl font-black">ارسال كرت لزبون</DialogTitle>
+                    <DialogDescription className="text-center font-bold">
+                        أدخل رقم جوال الزبون لفتح تطبيق الرسائل وإرسال بيانات الكرت.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-6">
+                    <div className="space-y-2 text-right">
+                        <Label htmlFor="sms-phone" className="text-[10px] font-black text-muted-foreground pr-1 uppercase tracking-widest">رقم جوال الزبون</Label>
+                        <Input 
+                            id="sms-phone"
+                            placeholder="7xxxxxxxx" 
+                            type="tel" 
+                            value={smsRecipient} 
+                            onChange={e => setSmsRecipient(e.target.value.replace(/\D/g, '').slice(0, 9))} 
+                            className="text-center text-2xl font-black h-14 rounded-2xl border-2 focus-visible:ring-primary tracking-widest text-foreground bg-muted/20 border-none" 
+                        />
+                    </div>
+                </div>
+                <DialogFooter className="grid grid-cols-2 gap-3">
+                    <Button onClick={handleSendSmsToCustomer} className="w-full h-12 rounded-2xl font-black text-base shadow-lg" disabled={!smsRecipient || smsRecipient.length < 9}>إرسال الآن</Button>
+                    <Button variant="outline" className="w-full h-12 rounded-2xl font-black text-base mt-0" onClick={() => setIsSmsDialogOpen(false)}>إلغاء</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        {isProcessing && <ProcessingOverlay />}
+        <Toaster />
     </div>
   );
 }
