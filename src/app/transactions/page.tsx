@@ -55,8 +55,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
+import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,6 +89,7 @@ const getTransactionIcon = (type: string) => {
 };
 
 const generateNumericId = (id: string): string => {
+    if (!id) return '000000';
     let hash = 0;
     for (let i = 0; i < id.length; i++) {
         const char = id.charCodeAt(i);
@@ -102,13 +102,12 @@ const generateNumericId = (id: string): string => {
 };
 
 export default function TransactionsPage() {
-  const { user } = useUser();
+  const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
 
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isDeleteAllAlertOpen, setIsDeleteAllAlertOpen] = useState(false);
   
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
@@ -151,10 +150,7 @@ export default function TransactionsPage() {
   const handleFilter = () => {
     setAppliedFrom(fromDate);
     setAppliedTo(toDate);
-    toast({
-        title: "تم تطبيق الفلترة",
-        description: `عرض العمليات من ${fromDate || 'البداية'} إلى ${toDate || 'اليوم'}`,
-    });
+    toast({ title: "تم تطبيق الفلترة" });
   };
 
   const handleResetFilter = () => {
@@ -166,40 +162,15 @@ export default function TransactionsPage() {
 
   const handleDeleteAll = () => {
     if (!firestore || !user || !transactions || transactions.length === 0) return;
-
     const batch = writeBatch(firestore);
-    const userTransactionsPath = `users/${user.uid}/transactions`;
-
-    transactions.forEach(transaction => {
-      const docRef = doc(firestore, userTransactionsPath, transaction.id);
-      batch.delete(docRef);
-    });
-
-    batch.commit()
-      .then(() => {
-        toast({
-          title: 'نجاح',
-          description: 'تمت أرشفة جميع العمليات بنجاح.'
-        });
-      })
-      .catch((serverError) => {
-        const contextualError = new FirestorePermissionError({
-          operation: 'delete',
-          path: userTransactionsPath
-        });
-        errorEmitter.emit('permission-error', contextualError);
-      });
-      
-    setIsDeleteAllAlertOpen(false);
+    transactions.forEach(tx => batch.delete(doc(firestore, `users/${user.uid}/transactions`, tx.id)));
+    batch.commit().then(() => toast({ title: 'نجاح', description: 'تمت الأرشفة بنجاح.' }));
   };
   
   const handleCopy = (text: string, label: string) => {
     if (!text) return;
     navigator.clipboard.writeText(text);
-    toast({
-        title: "تم النسخ",
-        description: `تم نسخ ${label} بنجاح.`,
-    });
+    toast({ title: "تم النسخ" });
   };
 
   const handleCardClick = (tx: Transaction) => {
@@ -207,87 +178,7 @@ export default function TransactionsPage() {
     setIsDialogOpen(true);
   };
 
-  const renderContent = () => {
-    if (isLoading) {
-      return (
-        <div className="space-y-4">
-          {[...Array(5)].map((_, i) => (
-            <Card key={i}>
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <Skeleton className="h-10 w-10 rounded-full" />
-                  <div className="space-y-2">
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-3 w-32" />
-                  </div>
-                </div>
-                <div className="text-left space-y-2">
-                    <Skeleton className="h-4 w-20" />
-                    <Skeleton className="h-3 w-16" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      );
-    }
-
-    if (!filteredTransactions || filteredTransactions.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center text-center h-64">
-          <FileText className="h-16 w-16 text-muted-foreground" />
-          <h3 className="mt-4 text-lg font-semibold">لا توجد عمليات</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            لم يتم العثور على عمليات في هذه الفترة.
-          </p>
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-3">
-        {filteredTransactions.map((tx) => {
-            const isCredit = tx.transactionType.includes('تغذية') || 
-                             tx.transactionType.includes('إيداع') || 
-                             tx.transactionType.includes('استلام') || 
-                             tx.transactionType.includes('أرباح') || 
-                             tx.transactionType.includes('استرجاع');
-            
-            return (
-                <Card 
-                    key={tx.id} 
-                    className="overflow-hidden animate-in fade-in-0 cursor-pointer hover:bg-muted/50 transition-colors border-none shadow-sm rounded-2xl bg-card"
-                    onClick={() => handleCardClick(tx)}
-                >
-                    <CardContent className="p-4 flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-muted/50 rounded-xl">
-                                {getTransactionIcon(tx.transactionType)}
-                            </div>
-                            <div className='text-right'>
-                                <p className="font-bold text-sm text-foreground">{tx.transactionType}</p>
-                                <p className="text-[10px] text-muted-foreground mt-0.5">
-                                    {tx.transactionDate ? format(parseISO(tx.transactionDate), 'd MMMM yyyy, h:mm a', { locale: ar }) : '...'}
-                                </p>
-                            </div>
-                        </div>
-                        <div className="text-left">
-                            <p className={`font-black text-sm ${isCredit ? 'text-green-600' : 'text-destructive'}`}>
-                                {tx.amount.toLocaleString('en-US')} ريال
-                            </p>
-                            {tx.notes && (
-                                <p className="text-[10px] text-muted-foreground truncate max-w-[100px] mt-0.5">
-                                    {tx.notes}
-                                </p>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-            );
-        })}
-      </div>
-    );
-  };
+  if (isUserLoading) return null;
 
   return (
     <>
@@ -305,48 +196,22 @@ export default function TransactionsPage() {
                     <CardContent className="space-y-4">
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1.5">
-                                <Label htmlFor="fromDate" className="text-[10px] text-muted-foreground pr-1">من تاريخ</Label>
-                                <Input 
-                                    id="fromDate"
-                                    type="date" 
-                                    value={fromDate}
-                                    onChange={(e) => setFromDate(e.target.value)}
-                                    className="rounded-xl h-10 text-xs bg-background cursor-pointer"
-                                />
+                                <Label className="text-[10px] text-muted-foreground pr-1">من تاريخ</Label>
+                                <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="rounded-xl h-10 text-xs bg-background" />
                             </div>
                             <div className="space-y-1.5">
-                                <Label htmlFor="toDate" className="text-[10px] text-muted-foreground pr-1">إلى تاريخ</Label>
-                                <Input 
-                                    id="toDate"
-                                    type="date" 
-                                    value={toDate}
-                                    onChange={(e) => setToDate(e.target.value)}
-                                    className="rounded-xl h-10 text-xs bg-background cursor-pointer"
-                                />
+                                <Label className="text-[10px] text-muted-foreground pr-1">إلى تاريخ</Label>
+                                <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="rounded-xl h-10 text-xs bg-background" />
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
-                            <Button 
-                                variant="outline" 
-                                size="sm" 
-                                className="rounded-xl text-xs font-bold" 
-                                onClick={handleResetFilter}
-                            >
-                                إعادة تعيين
-                            </Button>
-                            <Button 
-                                size="sm" 
-                                className="rounded-xl text-xs font-bold" 
-                                onClick={handleFilter}
-                            >
-                                <Search className="w-3 h-3 ml-1.5" />
-                                فلترة
-                            </Button>
+                            <Button variant="outline" size="sm" className="rounded-xl text-xs font-bold" onClick={handleResetFilter}>إعادة تعيين</Button>
+                            <Button size="sm" className="rounded-xl text-xs font-bold" onClick={handleFilter}>فلترة</Button>
                         </div>
                     </CardContent>
                 </Card>
 
-                {transactions && transactions.length > 0 && !appliedFrom && !appliedTo && (
+                {transactions && transactions.length > 0 && (
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
                             <Button variant="ghost" size="sm" className="w-full text-muted-foreground hover:text-destructive flex items-center gap-2 text-xs">
@@ -357,118 +222,94 @@ export default function TransactionsPage() {
                         <AlertDialogContent className="rounded-3xl">
                             <AlertDialogHeader>
                                 <AlertDialogTitle>تأكيد الأرشفة</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    هل أنت متأكد من رغبتك في أرشفة جميع العمليات؟ سيتم إخفاؤها نهائياً من سجلك الحالي.
-                                </AlertDialogDescription>
+                                <AlertDialogDescription>سيتم إخفاؤها نهائياً من سجلك الحالي.</AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter className="flex-row gap-2">
                                 <AlertDialogCancel className="flex-1 rounded-2xl">إلغاء</AlertDialogCancel>
-                                <AlertDialogAction onClick={handleDeleteAll} className="bg-destructive hover:bg-destructive/90 flex-1 rounded-2xl">
-                                    أرشفة الكل
-                                </AlertDialogAction>
+                                <AlertDialogAction onClick={handleDeleteAll} className="bg-destructive hover:bg-destructive/90 flex-1 rounded-2xl">أرشفة الكل</AlertDialogAction>
                             </AlertDialogFooter>
                         </AlertDialogContent>
                     </AlertDialog>
                 )}
 
-                <div className="flex justify-between items-center px-1">
-                    <h3 className="text-sm font-bold text-primary">
-                        {appliedFrom || appliedTo ? 'نتائج البحث' : 'أحدث العمليات'}
-                    </h3>
-                    <span className="text-[10px] bg-muted px-2 py-0.5 rounded-full font-bold">
-                        {filteredTransactions.length} عملية
-                    </span>
-                </div>
-
                 <div className="space-y-1">
-                    {renderContent()}
+                    {isLoading ? (
+                        [1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl mb-3" />)
+                    ) : filteredTransactions.length === 0 ? (
+                        <div className="text-center py-20 opacity-30">
+                            <FileText className="h-16 w-16 mx-auto mb-4" />
+                            <p className="font-bold">لا توجد عمليات</p>
+                        </div>
+                    ) : (
+                        filteredTransactions.map(tx => {
+                            const isCredit = tx.transactionType.includes('تغذية') || tx.transactionType.includes('إيداع') || tx.transactionType.includes('استلام') || tx.transactionType.includes('أرباح') || tx.transactionType.includes('استرجاع');
+                            return (
+                                <Card key={tx.id} className="overflow-hidden cursor-pointer hover:bg-muted/50 transition-colors border-none shadow-sm rounded-2xl bg-card mb-3" onClick={() => handleCardClick(tx)}>
+                                    <CardContent className="p-4 flex items-center justify-between gap-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-muted/50 rounded-xl">{getTransactionIcon(tx.transactionType)}</div>
+                                            <div className='text-right'>
+                                                <p className="font-bold text-sm text-foreground">{tx.transactionType}</p>
+                                                <p className="text-[10px] text-muted-foreground mt-0.5">{tx.transactionDate ? format(parseISO(tx.transactionDate), 'd MMMM yyyy', { locale: ar }) : '...'}</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-left">
+                                            <p className={cn("font-black text-sm", isCredit ? 'text-green-600' : 'text-destructive')}>{tx.amount.toLocaleString()} ر.ي</p>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            );
+                        })
+                    )}
                 </div>
             </div>
         </div>
       </div>
-      <Toaster />
-
-      {/* حوار تفاصيل العملية الموحد */}
+      
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="rounded-[32px] max-w-[90vw] sm:max-w-md bg-white dark:bg-slate-900">
+          <DialogContent className="rounded-[32px] max-w-[90vw] sm:max-w-md bg-white dark:bg-slate-900 outline-none">
               <DialogHeader>
                   <DialogTitle className="text-center font-black">تفاصيل العملية</DialogTitle>
-                  <DialogDescription className="text-center">
-                      الرقم المرجعي: {selectedTx ? generateNumericId(selectedTx.id) : '...'}
-                  </DialogDescription>
+                  <DialogDescription className="text-center">الرقم المرجعي: {selectedTx ? generateNumericId(selectedTx.id) : '...'}</DialogDescription>
               </DialogHeader>
               {selectedTx && (
                   <div className="space-y-4 py-4 text-sm" dir="rtl">
                       <div className="flex justify-between items-center py-2 border-b border-dashed">
-                          <span className="text-muted-foreground flex items-center gap-2"><Tag className="h-4 w-4 text-primary"/> نوع العملية:</span>
+                          <span className="text-muted-foreground flex items-center gap-2"><Tag className="h-4 w-4 text-primary"/> النوع:</span>
                           <span className="font-bold">{selectedTx.transactionType}</span>
                       </div>
-                      
-                      {selectedTx.recipientPhoneNumber && (
-                          <div className="flex justify-between items-center py-2 border-b border-dashed">
-                              <span className="text-muted-foreground flex items-center gap-2"><Smartphone className="h-4 w-4 text-primary"/> رقم الجوال:</span>
-                              <span className="font-mono font-bold tracking-wider">{selectedTx.recipientPhoneNumber}</span>
-                          </div>
-                      )}
-
                       <div className="flex justify-between items-center py-2 border-b border-dashed">
                           <span className="text-muted-foreground flex items-center gap-2"><Banknote className="h-4 w-4 text-primary"/> المبلغ:</span>
-                          <span className={`font-black text-lg ${selectedTx.transactionType.includes('تغذية') || selectedTx.transactionType.includes('إيداع') || selectedTx.transactionType.includes('أرباح') || selectedTx.transactionType.includes('استرجاع') ? 'text-green-600' : 'text-destructive'}`}>
-                              {selectedTx.amount.toLocaleString('en-US')} ريال
-                          </span>
+                          <span className="font-black text-lg text-primary">{selectedTx.amount.toLocaleString()} ريال</span>
                       </div>
-
                       <div className="flex justify-between items-center py-2 border-b border-dashed">
                           <span className="text-muted-foreground flex items-center gap-2"><Calendar className="h-4 w-4 text-primary"/> التاريخ:</span>
-                          <span className="font-bold">
-                              {selectedTx.transactionDate ? format(parseISO(selectedTx.transactionDate), 'eeee, d MMMM yyyy', { locale: ar }) : '...'}
-                          </span>
+                          <span className="font-bold">{selectedTx.transactionDate ? format(parseISO(selectedTx.transactionDate), 'eeee, d MMMM yyyy', { locale: ar }) : '...'}</span>
                       </div>
-
-                      <div className="flex justify-between items-center py-2 border-b border-dashed">
-                          <span className="text-muted-foreground flex items-center gap-2"><Clock className="h-4 w-4 text-primary"/> الوقت:</span>
-                          <span className="font-bold">
-                              {selectedTx.transactionDate ? format(parseISO(selectedTx.transactionDate), 'h:mm:ss a', { locale: ar }) : '...'}
-                          </span>
-                      </div>
-
-                      {selectedTx.subscriberName && (
-                          <div className="flex justify-between items-center py-2 border-b border-dashed">
-                              <span className="text-muted-foreground flex items-center gap-2"><UserIcon className="h-4 w-4 text-primary"/> اسم المشترك:</span>
-                              <span className="font-bold">{selectedTx.subscriberName}</span>
-                          </div>
-                      )}
-
                       {selectedTx.cardNumber && (
-                          <div className="pt-4 mt-2 bg-muted/30 p-4 rounded-2xl">
-                              <h4 className="font-bold text-sm mb-3 flex items-center gap-2 text-primary"><CreditCard className="w-4 h-4"/> تفاصيل الكرت المستلم</h4>
-                              <div className="flex justify-between items-center bg-background p-3 rounded-xl border">
-                                  <span className="text-xs text-muted-foreground">رقم الكرت:</span>
+                          <div className="pt-4 bg-muted/30 p-4 rounded-2xl">
+                              <h4 className="font-bold text-xs mb-3 flex items-center gap-2 text-primary"><CreditCard className="w-3.5 h-3.5"/> تفاصيل الكرت المستلم</h4>
+                              <div className="flex justify-between items-center bg-background p-3 rounded-xl border border-dashed">
+                                  <span className="text-[10px] text-muted-foreground">رقم الكرت:</span>
                                   <div className="flex items-center gap-3">
-                                      <span className="font-mono font-black text-lg tracking-widest">{selectedTx.cardNumber}</span>
-                                      <button className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors" onClick={() => handleCopy(selectedTx.cardNumber!, 'رقم الكرت')}>
-                                          <Copy className="h-4 w-4"/>
-                                      </button>
+                                      <span className="font-mono font-black text-base tracking-widest">{selectedTx.cardNumber}</span>
+                                      <button onClick={() => handleCopy(selectedTx.cardNumber!, 'الكرت')}><Copy className="h-3.5 w-3.5 text-primary"/></button>
                                   </div>
                               </div>
                           </div>
                       )}
-
                       {selectedTx.notes && (
                           <div className="pt-2">
-                              <p className="text-[10px] font-black text-muted-foreground uppercase mb-1">ملاحظات إضافية</p>
-                              <p className="text-xs font-bold bg-muted/50 p-3 rounded-xl border border-border/50">{selectedTx.notes}</p>
+                              <p className="text-[10px] font-black text-muted-foreground uppercase mb-1">ملاحظات</p>
+                              <p className="text-xs font-bold bg-muted/50 p-3 rounded-xl">{selectedTx.notes}</p>
                           </div>
                       )}
                   </div>
               )}
-              <DialogFooter>
-                  <DialogClose asChild>
-                      <Button className="w-full rounded-2xl h-12 font-black">إغلاق</Button>
-                  </DialogClose>
-              </DialogFooter>
+              <DialogFooter><DialogClose asChild><Button className="w-full h-12 rounded-2xl font-black">إغلاق</Button></DialogClose></DialogFooter>
           </DialogContent>
       </Dialog>
+      <Toaster />
     </>
   );
 }

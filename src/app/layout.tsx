@@ -13,7 +13,6 @@ import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
-// إصدار التطبيق المحدث لتطهير الكاش وتفعيل الواجهة الملكية
 const APP_VERSION = '1.7.5';
 
 type UserProfile = {
@@ -29,18 +28,13 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const [showSplash, setShowSplash] = useState(true);
   const [isPinVerified, setIsPinVerified] = useState(false);
 
-  // نظام تطهير الكاش القوي والآلي وملفات الارتباط عند تغيير النسخة
   useEffect(() => {
     const savedVersion = localStorage.getItem('star_app_version');
     
     if (savedVersion !== APP_VERSION) {
-      console.log('Force clearing all data for version: ' + APP_VERSION);
-      
-      // 1. مسح الذاكرة المحلية والجلسات
       localStorage.clear();
       sessionStorage.clear();
       
-      // 2. مسح كافة ملفات الارتباط (Cookies) برمجياً
       if (typeof document !== 'undefined') {
         const cookies = document.cookie.split(";");
         for (let i = 0; i < cookies.length; i++) {
@@ -51,7 +45,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 3. مسح الـ Service Worker إن وجد لضمان عدم تحميل HTML قديم
       if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then((registrations) => {
           for (const registration of registrations) {
@@ -60,18 +53,11 @@ function AppContent({ children }: { children: React.ReactNode }) {
         });
       }
 
-      // 4. حفظ النسخة الجديدة وإعادة تحميل إجبارية وشاملة
       localStorage.setItem('star_app_version', APP_VERSION);
-      
-      // إضافة باراميتر عشوائي للرابط لإجبار السيرفر على تقديم نسخة جديدة
-      const url = new URL(window.location.href);
-      url.searchParams.set('v', APP_VERSION);
-      url.searchParams.set('t', Date.now().toString());
-      window.location.replace(url.toString());
+      window.location.reload();
     }
   }, []);
 
-  // تسجيل Service Worker بباراميتر نسخة لضمان التحديث
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js?v=' + APP_VERSION, {
@@ -86,6 +72,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
   );
   const { data: userProfile } = useDoc<UserProfile>(userDocRef);
 
+  // تم إضافة /transactions هنا لضمان بقاء شريط التنقل
   const isNavVisiblePage = [
     '/login', 
     '/renewal-requests', 
@@ -94,7 +81,8 @@ function AppContent({ children }: { children: React.ReactNode }) {
     '/store-orders', 
     '/bill-payment-requests', 
     '/withdrawal-requests',
-    '/favorites'
+    '/favorites',
+    '/transactions'
   ].includes(pathname);
 
   useEffect(() => {

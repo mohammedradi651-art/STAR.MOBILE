@@ -114,11 +114,11 @@ export default function ForgotPasswordPage() {
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword.length < 6) {
-      toast({ variant: 'destructive', title: 'خطأ', description: 'كلمة المرور قصيرة جداً.' });
+      toast({ variant: 'destructive', title: 'كلمة المرور قصيرة جداً.' });
       return;
     }
     if (newPassword !== confirmPassword) {
-      toast({ variant: 'destructive', title: 'خطأ', description: 'كلمتا المرور غير متطابقتين.' });
+      toast({ variant: 'destructive', title: 'كلمتا المرور غير متطابقتين.' });
       return;
     }
 
