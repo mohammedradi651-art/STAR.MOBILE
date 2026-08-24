@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useEffect, useRef } from 'react';
@@ -29,10 +28,10 @@ type UserProfile = {
 
 const DashboardHero = () => {
   const plugin = useRef(
-    Autoplay({ delay: 7000, stopOnInteraction: false })
+    Autoplay({ delay: 5000, stopOnInteraction: false })
   );
 
-  const banners = ["/kh.png"];
+  const banners = ["/banr3.png", "/banr4.png"];
 
   return (
     <div className="px-4 mt-[-10px] pb-0"> 
