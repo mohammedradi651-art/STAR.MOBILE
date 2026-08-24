@@ -119,6 +119,7 @@ export const PREPAID_CATEGORIES = [
       { offerId: '4g_monthly', offerName: 'مزايا فورجي الشهرية', price: 2500, data: '4GB', minutes: '300', sms: '350', validity: '30 يوم', offertype: 'A88335' },
       { offerId: 'm_max_4g', offerName: 'مزايا ماكس فورجي', price: 4000, data: '4GB', minutes: '1100', sms: '600', validity: '30 يوم', offertype: 'A88441' },
       { offerId: 'm_aamal_4g', offerName: 'مزايا أعمال فورجي', price: 5000, data: '6GB', minutes: '1500', sms: '1000', validity: 'شهر', offertype: 'A39053' },
+      { offerId: 'm_aamal_4g', offerName: 'باقة 800 رسالة', price: 1000, data: '-', minutes: '-', sms: '800', validity: 'شهر', offertype: 'A31338' },
     ]
   },
   {
@@ -209,6 +210,7 @@ export const POSTPAID_CATEGORIES = [
       { offerId: 'm_aamal_4g', offerName: 'مزايا أعمال فورجي', price: 5000, data: '6GB', minutes: '1500', sms: '1000', validity: 'شهر', offertype: 'A49053' },
       { offerId: 'm_max', offerName: 'مزايا تواصل', price: 1500, data: '-', sms: '600', minutes: '600', validity: '30 يوم', offertype: 'A44881' },
       { offerId: 'm_max', offerName: 'مزايا تواصل ماكس', price: 2000, data: '-', sms: '500', minutes: '1000', validity: '30 يوم', offertype: 'A44882' },
+      { offerId: 'm_aamal_4g', offerName: 'باقة 800 رسالة', price: 1000, data: '-', minutes: '-', sms: '800', validity: 'شهر', offertype: 'A41338' },
     ]
   },
   {
