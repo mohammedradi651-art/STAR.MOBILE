@@ -192,6 +192,36 @@ export default function AccountPage() {
     }
   };
 
+  const handleLinkAction = (link: typeof userAppSettingsLinks[0]) => {
+    if (link.href) {
+      router.push(link.href);
+      return;
+    }
+
+    if (link.action === 'share') {
+      const shareUrl = appSettings?.appLink || window.location.origin;
+      if (navigator.share) {
+        navigator.share({
+          title: 'ستار موبايل',
+          text: 'حمل تطبيق ستار موبايل للخدمات الرقمية المتكاملة والسرعة الفائقة',
+          url: shareUrl,
+        }).catch(() => {});
+      } else {
+        navigator.clipboard.writeText(shareUrl);
+        toast({ title: "تم نسخ الرابط", description: "يمكنك الآن مشاركة الرابط مع أصدقائك." });
+      }
+    }
+
+    if (link.action === 'help') {
+      const phone = appSettings?.supportPhoneNumber || '770326828';
+      window.open(`https://wa.me/967${phone.replace(/\D/g, '')}`, '_blank');
+    }
+
+    if (link.action === 'developer') {
+      setIsDevDialogOpen(true);
+    }
+  };
+
   if (isUserLoading || !user) return <LoadingSpinner />;
 
   return (
@@ -281,7 +311,7 @@ export default function AccountPage() {
                     {userAppSettingsLinks.map((link, index) => {
                         const Icon = link.icon;
                         return (
-                            <div key={link.id} onClick={() => { if(link.href) router.push(link.href); else if(link.action === 'developer') setIsDevDialogOpen(true); }} className={cn("group flex items-center justify-between p-4 cursor-pointer transition-colors hover:bg-muted/30", index < userAppSettingsLinks.length - 1 && 'border-b border-muted')}>
+                            <div key={link.id} onClick={() => handleLinkAction(link)} className={cn("group flex items-center justify-between p-4 cursor-pointer transition-colors hover:bg-muted/30", index < userAppSettingsLinks.length - 1 && 'border-b border-muted')}>
                                 <div className="flex items-center gap-3"><Icon className="h-5 w-5 text-primary" /><span className="text-sm font-bold text-foreground">{link.title}</span></div>
                                 <ChevronLeft className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-transform group-hover:-translate-x-1" />
                             </div>
@@ -310,6 +340,37 @@ export default function AccountPage() {
         <div className="pt-4 pb-8 text-center"><Button variant="ghost" onClick={handleLogout} className="text-destructive font-black gap-2"><LogOut className="h-5 w-5" /> تسجيل الخروج</Button></div>
       </div>
     </div>
+
+    <Dialog open={isDevDialogOpen} onOpenChange={setIsDevDialogOpen}>
+        <DialogContent className="rounded-[40px] max-sm p-0 overflow-hidden border-none shadow-2xl bg-card outline-none [&>button]:hidden">
+            <div className="bg-mesh-gradient p-8 text-center text-white relative">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl" />
+                <DialogHeader>
+                    <div className="bg-white/20 p-4 rounded-full w-20 h-20 mx-auto mb-4 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl">
+                        <Code className="h-10 w-10 text-white" />
+                    </div>
+                    <DialogTitle className="text-center font-black text-2xl text-white">مطور التطبيق</DialogTitle>
+                    <DialogDescription className="text-center text-white/70 font-bold">رؤية تقنية بلمسة حضرمية</DialogDescription>
+                </DialogHeader>
+            </div>
+            <div className="p-8 text-center space-y-6">
+                <div className="space-y-2">
+                    <h3 className="text-xl font-black text-primary">محمد راضي باشادي</h3>
+                    <p className="text-sm font-bold text-muted-foreground leading-relaxed">
+                        متخصص في تطوير الحلول البرمجية الذكية وتطبيقات الويب المتقدمة. 
+                        تم تطوير ستار موبايل بأحدث التقنيات العالمية لضمان السرعة والأمان.
+                    </p>
+                </div>
+                <div className="flex flex-col gap-3">
+                    <Button className="rounded-2xl h-12 font-black gap-2" onClick={() => window.open('https://wa.me/967770326828', '_blank')}>
+                        <Phone className="h-4 w-4" /> تواصل مع المطور
+                    </Button>
+                    <Button variant="outline" className="rounded-2xl h-12 font-black" onClick={() => setIsDevDialogOpen(false)}>إغلاق</Button>
+                </div>
+            </div>
+        </DialogContent>
+    </Dialog>
+
     <Toaster />
     </>
   );
