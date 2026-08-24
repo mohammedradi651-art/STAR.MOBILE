@@ -5,7 +5,21 @@ import { SimpleHeader } from '@/components/layout/simple-header';
 import { useCollection, useFirestore, useMemoFirebase, useUser, deleteDocumentNonBlocking, useDoc } from '@/firebase';
 import { collection, query, where, doc, getDocs, writeBatch, increment, limit as firestoreLimit } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Wifi, Heart, Search, CheckCircle, Copy, MessageSquare, Wallet, Smartphone, Loader2, Clock, Database, AlertCircle, Globe } from 'lucide-react';
+import { 
+  Wifi, 
+  Heart, 
+  Search, 
+  CheckCircle, 
+  Copy, 
+  MessageSquare, 
+  Wallet, 
+  Smartphone, 
+  Loader2, 
+  Clock, 
+  Database, 
+  AlertCircle, 
+  Globe 
+} from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -22,7 +36,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 import { Label } from '@/components/ui/label';
-import Image from 'next/image';
+import { Separator } from '@/components/ui/separator';
+import { useRouter } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,6 +89,7 @@ export default function FavoritesPage() {
   const firestore = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
 
   const [selectedNetwork, setSelectedNetwork] = useState<CombinedNetwork | null>(null);
@@ -164,6 +180,15 @@ export default function FavoritesPage() {
     if (!selectedCategory || !selectedNetwork || !user || !userProfile || !firestore || !userDocRef) return;
 
     setIsProcessing(true);
+    const categoryPrice = selectedCategory.price;
+    const userBalance = userProfile?.balance ?? 0;
+
+    if (userBalance < categoryPrice) {
+        toast({ variant: "destructive", title: "رصيد غير كافٍ", description: "رصيدك الحالي لا يكفي لإتمام عملية الشراء." });
+        setIsProcessing(false);
+        return;
+    }
+
     try {
         const now = new Date().toISOString();
         const batch = writeBatch(firestore);
@@ -179,9 +204,9 @@ export default function FavoritesPage() {
             finalCardID = cardDoc.data().cardNumber;
 
             batch.update(cardDoc.ref, { status: 'sold', soldTo: user.uid, soldTimestamp: now });
-            batch.update(userDocRef, { balance: increment(-selectedCategory.price) });
+            batch.update(userDocRef, { balance: increment(-categoryPrice) });
             batch.set(doc(collection(firestore, `users/${user.uid}/transactions`)), {
-                userId: user.uid, transactionDate: now, amount: selectedCategory.price,
+                userId: user.uid, transactionDate: now, amount: categoryPrice,
                 transactionType: `شراء كرت ${selectedCategory.name}`, notes: `شبكة: ${selectedNetwork.name}`, cardNumber: finalCardID,
             });
             await batch.commit();
@@ -195,9 +220,9 @@ export default function FavoritesPage() {
             if (!response.ok) throw new Error(result.message || 'فشل الشراء من المصدر.');
             
             finalCardID = result.data.order.card.cardID;
-            batch.update(userDocRef, { balance: increment(-selectedCategory.price) });
+            batch.update(userDocRef, { balance: increment(-categoryPrice) });
             batch.set(doc(collection(firestore, `users/${user.uid}/transactions`)), {
-                userId: user.uid, transactionDate: now, amount: selectedCategory.price,
+                userId: user.uid, transactionDate: now, amount: categoryPrice,
                 transactionType: `شراء كرت ${selectedCategory.name}`, notes: `شبكة: ${selectedNetwork.name}`, cardNumber: finalCardID,
             });
             await batch.commit();
@@ -219,18 +244,6 @@ export default function FavoritesPage() {
     } finally { setIsProcessing(false); }
   };
 
-  const handlePurchaseViaSms = () => {
-    const selectedCategory = showConfirmPurchase;
-    if (!selectedCategory || !selectedNetwork) return;
-
-    const name = userProfile?.displayName || 'عميلنا';
-    const message = `ستار موبايل\nطلب شراء كرت (Offline)\n\nالمشترك: ${name}\nالشبكة: ${selectedNetwork.name}\nالفئة: ${selectedCategory.name}\nالسعر: ${selectedCategory.price} ريال\n\nيرجى تزويدي برقم الكرت 💙`;
-    
-    window.location.href = `sms:770326828?body=${encodeURIComponent(message)}`;
-    setShowConfirmPurchase(null);
-    setSelectedNetwork(null);
-  };
-
   const handleCopy = () => {
     if (purchasedCard) {
         const textToCopy = purchasedCard.cardID || purchasedCard.cardNumber;
@@ -239,7 +252,7 @@ export default function FavoritesPage() {
     }
   };
 
-  const handleSendSmsToCustomer = () => {
+  const handleSendSms = () => {
     if (!purchasedCard || !selectedNetwork || !smsRecipient) return;
     const name = userProfile?.displayName || 'عميلنا';
     const balance = (userProfile?.balance ?? 0).toLocaleString('en-US');
@@ -277,7 +290,7 @@ export default function FavoritesPage() {
         <div className="flex-1 overflow-y-auto px-4 pb-24 space-y-4 no-scrollbar">
             {isLoading ? (
                 <div className="space-y-4">
-                    {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}
+                    {[1, 2, 3].map(i => <Skeleton className="h-20 w-full rounded-2xl" />)}
                 </div>
             ) : filteredFavorites.length === 0 ? (
                 <div className="text-center py-20 opacity-30">
@@ -289,21 +302,21 @@ export default function FavoritesPage() {
                     {filteredFavorites.map((fav, index) => (
                         <Card 
                             key={fav.id} 
-                            className="bg-mesh-gradient cursor-pointer text-white rounded-[24px] border-none shadow-md overflow-hidden animate-in fade-in-0 slide-in-from-bottom-2 duration-500 active:scale-[0.98] transition-all"
+                            className="bg-mesh-gradient cursor-pointer text-white rounded-2xl border-none shadow-md overflow-hidden animate-in fade-in-0 slide-in-from-bottom-2"
                             style={{ animationDelay: `${index * 50}ms` }}
                             onClick={() => handleNetworkClick(fav)}
                         >
-                            <CardContent className="p-4 flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2.5 bg-white/20 rounded-xl backdrop-blur-md border border-white/10 shrink-0">
-                                        <Wifi className="h-5 w-5 text-white" />
-                                    </div>
-                                    <div className="text-right overflow-hidden">
-                                        <h4 className="font-black text-sm text-white truncate">{fav.name}</h4>
-                                        <p className="text-[10px] text-white/70 font-bold truncate opacity-80">{fav.location}</p>
-                                    </div>
+                            <CardContent className="p-4 flex items-center justify-between gap-2">
+                                <div className="p-3 bg-white/20 rounded-xl shrink-0 backdrop-blur-sm border border-white/10 w-12 h-12 flex items-center justify-center overflow-hidden">
+                                    <Wifi className="h-6 w-6 text-white" />
                                 </div>
-                                <div className="p-2 bg-white/10 rounded-full">
+                                
+                                <div className="flex-1 text-right mx-2 space-y-0.5 overflow-hidden">
+                                    <h4 className="font-black text-base text-white truncate">{fav.name}</h4>
+                                    <p className="text-[10px] text-white/70 font-bold truncate opacity-80">{fav.location}</p>
+                                </div>
+                                
+                                <div className="p-2.5 bg-white/10 rounded-full shrink-0">
                                     <Heart className="h-5 w-5 text-white fill-white animate-pulse" />
                                 </div>
                             </CardContent>
@@ -313,62 +326,76 @@ export default function FavoritesPage() {
             )}
         </div>
 
-        {/* Dialog for Categories */}
+        {/* Dialog for Categories - Identical to Services Page */}
         <Dialog open={!!selectedNetwork} onOpenChange={(open) => !open && !isProcessing && setSelectedNetwork(null)}>
             <DialogContent className="max-w-[95%] sm:max-w-md rounded-[32px] p-0 overflow-hidden border-none shadow-2xl [&>button]:hidden bg-white dark:bg-slate-950">
                 {selectedNetwork && (
                     <div className="flex flex-col max-h-[85vh]">
-                        <div className="bg-mesh-gradient pt-12 pb-8 px-8 text-center relative overflow-hidden">
+                        <div className="bg-mesh-gradient p-0 relative overflow-hidden">
                             <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl animate-pulse" />
-                            <div className="bg-white/20 p-3 rounded-2xl w-14 h-14 mx-auto mb-3 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl">
-                                <Wifi className="h-7 w-7 text-white" />
-                            </div>
-                            <DialogTitle className="text-xl font-black text-white drop-shadow-md">{selectedNetwork.name}</DialogTitle>
-                            <DialogDescription className="text-[10px] text-white/70 font-bold mt-1 bg-white/10 py-1 px-3 rounded-full border border-white/5 inline-block">
-                                استعراض الفئات المتاحة
-                            </DialogDescription>
+                            <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-white/10 rounded-full blur-3xl animate-pulse" />
+                            
+                            <DialogHeader className="pt-12 pb-8 px-8 text-white text-center relative z-10">
+                                <DialogTitle className="sr-only">{selectedNetwork.name}</DialogTitle>
+                                <DialogDescription className="sr-only">استعراض فئات الكروت المتاحة</DialogDescription>
+                                <div className="bg-white/20 p-3 rounded-2xl w-14 h-14 mx-auto mb-3 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl overflow-hidden">
+                                    <Wifi className="h-7 w-7 text-white" />
+                                </div>
+                                <h2 className="text-xl font-black text-white drop-shadow-md">{selectedNetwork.name}</h2>
+                                <p className="text-[10px] text-white/70 font-bold mt-1 bg-white/10 py-1 px-3 rounded-full border border-white/5 inline-block">{selectedNetwork.location}</p>
+                            </DialogHeader>
                         </div>
                         
                         <div className="flex-1 overflow-y-auto p-4 bg-white dark:bg-slate-900 no-scrollbar">
-                            {isLoadingCategories ? (
-                                <div className="flex justify-center py-10"><Loader2 className="animate-spin text-primary h-10 w-10" /></div>
-                            ) : categoryError ? (
-                                <div className="text-center py-10 space-y-3">
-                                    <AlertCircle className="h-10 w-10 text-destructive mx-auto" />
-                                    <p className="text-xs font-bold text-destructive">{categoryError}</p>
+                            {(isLoadingCategories && categories.length === 0) ? (
+                                <div className="flex justify-center py-10">
+                                    <ProcessingOverlay />
                                 </div>
-                            ) : sortedCategories.length === 0 ? (
-                                <p className="text-center py-10 text-muted-foreground font-bold text-sm">لا توجد فئات حالياً</p>
+                            ) : categoryError ? (
+                                <p className="text-center text-destructive font-bold p-4 bg-destructive/10 rounded-2xl">{categoryError}</p>
                             ) : (
                                 <div className="space-y-3">
                                     {sortedCategories.map((cat, idx) => {
                                         const gradient = CARD_GRADIENTS[idx % CARD_GRADIENTS.length];
                                         return (
-                                            <div key={cat.id} className="animate-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${idx * 100}ms` }}>
+                                            <div key={cat.id} className="animate-in slide-in-from-bottom-4 duration-500 fill-mode-both" style={{ animationDelay: `${idx * 100}ms` }}>
                                                 <Card 
                                                     className={cn(
-                                                        "relative overflow-hidden rounded-[26px] border-none shadow-lg transition-all active:scale-[0.97]",
-                                                        "bg-gradient-to-br p-[1.5px]",
+                                                        "relative overflow-hidden rounded-[28px] border-none shadow-xl transition-all duration-300 group cursor-pointer active:scale-[0.97]",
+                                                        "bg-gradient-to-br p-[2px]",
                                                         gradient
                                                     )}
                                                     onClick={() => setShowConfirmPurchase(cat)}
                                                 >
-                                                    <div className="relative rounded-[25px] p-3.5 flex items-center justify-between gap-4 h-full bg-white/95 dark:bg-slate-900/95">
+                                                    <div className="relative rounded-[26px] p-3.5 flex items-center justify-between gap-4 h-full transition-colors bg-white/95 dark:bg-slate-900/95 hover:bg-primary/[0.02]">
                                                         <div className="flex items-center gap-3">
-                                                            <div className={cn("h-10 w-10 rounded-2xl flex items-center justify-center shrink-0 shadow-md text-white", gradient)}>
-                                                                <Database className="h-5 w-5" />
+                                                            <div className={cn(
+                                                                "h-11 w-11 rounded-[18px] flex items-center justify-center shrink-0 shadow-lg bg-gradient-to-br text-white overflow-hidden",
+                                                                gradient
+                                                            )}>
+                                                                <Wifi className="h-5 w-5" />
                                                             </div>
-                                                            <div className="text-right">
-                                                                <h4 className="text-xs font-black text-foreground">{cat.name}</h4>
-                                                                <div className="flex gap-2 mt-1">
-                                                                    {cat.capacity && <span className="text-[9px] font-bold text-primary flex items-center gap-1"><Globe className="h-2.5 w-2.5" /> {cat.capacity}</span>}
-                                                                    {(cat.validity || cat.expirationDate) && <span className="text-[9px] font-bold text-muted-foreground flex items-center gap-1"><Clock className="h-2.5 w-2.5" /> {cat.validity || cat.expirationDate}</span>}
+                                                            <div className="text-right space-y-0.5">
+                                                                <h4 className="text-xs font-black text-foreground group-hover:text-primary transition-colors">{cat.name}</h4>
+                                                                <div className="flex gap-2.5 mt-1">
+                                                                    <div className="flex items-center gap-1 text-[9px] font-bold text-primary">
+                                                                        <Database className="h-2.5 w-2.5" />
+                                                                        <span>{cat.capacity || '-'}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1 text-[9px] font-bold text-muted-foreground">
+                                                                        <Clock className="h-2.5 w-2.5" />
+                                                                        <span>{cat.validity || cat.expirationDate || '-'}</span>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                        <div className="flex flex-col items-end">
-                                                            <span className="text-lg font-black text-primary leading-none">{cat.price.toLocaleString('en-US')}</span>
-                                                            <span className="text-[7px] font-black text-muted-foreground uppercase mt-0.5">ريال</span>
+
+                                                        <div className="flex flex-col items-end gap-1.5">
+                                                            <div className="flex flex-col items-end leading-tight">
+                                                                <span className="text-xl font-black tracking-tighter text-primary">{cat.price.toLocaleString('en-US')}</span>
+                                                                <span className="text-[7px] font-black text-muted-foreground uppercase opacity-60">ريال</span>
+                                                            </div>
+                                                            <Button size="sm" className="h-7 rounded-lg text-[9px] font-black px-4 bg-primary shadow-md shadow-primary/20">شراء</Button>
                                                         </div>
                                                     </div>
                                                 </Card>
@@ -378,30 +405,30 @@ export default function FavoritesPage() {
                                 </div>
                             )}
                         </div>
-                        <div className="p-4 bg-white dark:bg-slate-900 border-t">
-                            <Button variant="ghost" className="w-full h-11 rounded-2xl font-black text-sm text-muted-foreground" onClick={() => setSelectedNetwork(null)}>إغلاق</Button>
+                        <div className="p-4 border-t bg-white dark:bg-slate-900">
+                            <Button variant="outline" className="w-full h-11 rounded-2xl font-black text-sm" onClick={() => setSelectedNetwork(null)}>إغلاق</Button>
                         </div>
                     </div>
                 )}
             </DialogContent>
         </Dialog>
 
-        {/* 3-Button Purchase Dialog */}
+        {/* Confirmation Dialog - Identical to Services Page but without SMS Purchase as per user request */}
         <Dialog open={!!showConfirmPurchase} onOpenChange={(open) => !open && setShowConfirmPurchase(null)}>
-            <DialogContent className="rounded-[36px] max-sm text-center bg-white dark:bg-slate-900 z-[10000] border-none shadow-2xl outline-none p-0 overflow-hidden">
+            <DialogContent className="rounded-[32px] max-sm text-center bg-white dark:bg-slate-900 z-[10000] border-none shadow-2xl outline-none p-0 overflow-hidden">
                 <div className="bg-primary/5 p-8 flex flex-col items-center border-b border-primary/5">
                     <div className="bg-primary/10 w-16 h-16 rounded-full flex items-center justify-center mb-4">
                         <CheckCircle className="h-10 w-10 text-primary" />
                     </div>
-                    <DialogTitle className="font-black text-xl text-primary">تأكيد طلب الشراء</DialogTitle>
+                    <DialogTitle className="font-black text-xl text-primary">تأكيد عملية الشراء</DialogTitle>
                     <DialogDescription className="font-bold text-muted-foreground mt-1">
-                        كرت: <span className="text-foreground">{showConfirmPurchase?.name}</span>
+                        هل أنت متأكد من شراء كرت <span className="text-primary">"{showConfirmPurchase?.name}"</span>؟
                     </DialogDescription>
                 </div>
                 
                 <div className="p-6 space-y-3">
-                    <div className="py-5 bg-muted/30 rounded-[28px] border-2 border-dashed border-primary/10 mb-4 text-center">
-                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">المبلغ المطلوب</p>
+                    <div className="py-6 bg-muted/30 rounded-[28px] border-2 border-dashed border-primary/10 space-y-2 mt-4">
+                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">سيتم خصم المبلغ من رصيدك</p>
                         <p className="text-3xl font-black text-primary">{showConfirmPurchase?.price.toLocaleString('en-US')} <span className="text-sm">ريال</span></p>
                     </div>
 
@@ -410,35 +437,29 @@ export default function FavoritesPage() {
                         onClick={handlePurchase} 
                         disabled={isProcessing}
                     >
-                        {isProcessing ? <Loader2 className="animate-spin h-5 w-5" /> : <><Wallet className="ml-2 h-5 w-5" /> شراء من الرصيد</>}
+                        {isProcessing ? <Loader2 className="animate-spin h-5 w-5" /> : 'تأكيد الشراء'}
                     </Button>
                     
                     <Button 
                         variant="outline" 
-                        className="w-full h-12 rounded-2xl font-black text-base border-2 border-primary/20 text-primary hover:bg-primary/5"
-                        onClick={handlePurchaseViaSms}
-                    >
-                        <MessageSquare className="ml-2 h-5 w-5" /> شراء عبر الرسائل SMS
-                    </Button>
-
-                    <Button 
-                        variant="ghost" 
-                        className="w-full h-12 rounded-2xl font-bold text-muted-foreground"
+                        className="w-full h-12 rounded-2xl font-black text-base mt-0"
                         onClick={() => setShowConfirmPurchase(null)}
                     >
-                        إلغاء
+                        تراجع
                     </Button>
                 </div>
             </DialogContent>
         </Dialog>
 
-        {/* Success Card Dialog */}
+        {/* Success Card Dialog - Identical to Services Page */}
         {purchasedCard && (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10001] flex items-center justify-center p-4 animate-in fade-in-0">
                 <Card className="w-full max-sm text-center shadow-2xl rounded-[40px] overflow-hidden border-none bg-background">
                     <CardContent className="p-8 space-y-6">
                         <div className="bg-green-500 p-8 flex justify-center mb-4 rounded-t-[40px] -m-8">
-                            <CheckCircle className="h-16 w-16 text-white animate-bounce" />
+                            <div className="bg-white/20 p-4 rounded-full animate-bounce">
+                                <CheckCircle className="h-16 w-16 text-white" />
+                            </div>
                         </div>
                         <div>
                             <h2 className="text-2xl font-black text-green-600 mt-4">تم الشراء بنجاح!</h2>
@@ -474,13 +495,13 @@ export default function FavoritesPage() {
                         <Smartphone className="text-primary h-6 w-6" />
                     </div>
                     <DialogTitle className="text-center text-xl font-black">ارسال كرت لزبون</DialogTitle>
-                    <DialogDescription className="text-center font-bold">
+                    <DialogDescription className="text-center">
                         أدخل رقم جوال الزبون لفتح تطبيق الرسائل وإرسال بيانات الكرت.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-6">
                     <div className="space-y-2 text-right">
-                        <Label htmlFor="sms-phone" className="text-[10px] font-black text-muted-foreground pr-1 uppercase tracking-widest">رقم جوال الزبون</Label>
+                        <Label htmlFor="sms-phone" className="text-sm font-bold text-muted-foreground pr-1">رقم جوال الزبون</Label>
                         <Input 
                             id="sms-phone"
                             placeholder="7xxxxxxxx" 
@@ -492,7 +513,7 @@ export default function FavoritesPage() {
                     </div>
                 </div>
                 <DialogFooter className="grid grid-cols-2 gap-3">
-                    <Button onClick={handleSendSmsToCustomer} className="w-full h-12 rounded-2xl font-black text-base shadow-lg" disabled={!smsRecipient || smsRecipient.length < 9}>إرسال الآن</Button>
+                    <Button onClick={handleSendSms} className="w-full h-12 rounded-2xl font-black text-base shadow-lg" disabled={!smsRecipient || smsRecipient.length < 9}>إرسال الآن</Button>
                     <Button variant="outline" className="w-full h-12 rounded-2xl font-black text-base mt-0" onClick={() => setIsSmsDialogOpen(false)}>إلغاء</Button>
                 </DialogFooter>
             </DialogContent>
