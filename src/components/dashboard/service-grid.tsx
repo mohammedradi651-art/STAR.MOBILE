@@ -27,9 +27,7 @@ import { Button } from '@/components/ui/button';
 type Service = {
   name: string;
   icon: any;
-  href?: string;
-  isTrigger?: boolean;
-  id?: string;
+  href: string;
   requiresInternet?: boolean;
 };
 
@@ -38,11 +36,10 @@ const ServiceItem = ({
   icon: Icon,
   index,
   href,
-  isTrigger,
-  onClick,
   isOffline,
-  requiresInternet
-}: Service & { index: number, onClick?: () => void, isOffline: boolean }) => {
+  requiresInternet,
+  onClick
+}: Service & { index: number, isOffline: boolean, onClick?: () => void }) => {
   
   const isDisabled = isOffline && requiresInternet;
 
@@ -58,7 +55,7 @@ const ServiceItem = ({
         animationDelay: `${100 + index * 50}ms`,
         animationFillMode: 'backwards',
       }}
-      onClick={isDisabled ? onClick : (isTrigger ? onClick : undefined)}
+      onClick={isDisabled ? onClick : undefined}
     >
       <div className={cn(
           "mb-1.5 flex h-8 w-8 items-center justify-center rounded-2xl overflow-hidden",
@@ -82,19 +79,14 @@ const ServiceItem = ({
     return <div className="w-full cursor-pointer">{content}</div>;
   }
 
-  if (isTrigger) {
-    return <div className="w-full cursor-pointer">{content}</div>;
-  }
-
   return (
-    <Link href={href || '#'} className="w-full" prefetch={true}>
+    <Link href={href} className="w-full" prefetch={true}>
       {content}
     </Link>
   );
 };
 
 export function ServiceGrid() {
-  const [isPaymentHubOpen, setIsPaymentHubOpen] = useState(false);
   const [isOfflineAlertOpen, setIsOfflineAlertOpen] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
 
@@ -112,7 +104,7 @@ export function ServiceGrid() {
   const services: Service[] = [
     { name: 'تسديد رصيد', icon: Smartphone, href: '/telecom-services', requiresInternet: true },
     { name: 'الشبكات', icon: Wifi, href: '/services', requiresInternet: false },
-    { id: 'payments', name: 'المدفوعات', icon: CreditCard, isTrigger: true, onClick: () => setIsPaymentHubOpen(true), requiresInternet: true },
+    { name: 'المدفوعات', icon: CreditCard, href: '/payment-services', requiresInternet: true },
     { name: 'تحويل لمشترك', icon: ArrowLeftRight, href: '/transfer', requiresInternet: true },
     { name: 'غذي حسابك', icon: Wallet, href: '/top-up', requiresInternet: true },
     { name: 'معرض الألعاب', icon: Gamepad2, href: '/games', requiresInternet: true },
@@ -133,8 +125,6 @@ export function ServiceGrid() {
             onClick={() => {
                 if (isOffline && service.requiresInternet) {
                     setIsOfflineAlertOpen(true);
-                } else if (service.isTrigger && service.onClick) {
-                    service.onClick();
                 }
             }}
           />

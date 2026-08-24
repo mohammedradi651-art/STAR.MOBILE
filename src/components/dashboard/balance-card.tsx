@@ -16,10 +16,9 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { useRouter } from "next/navigation";
 
 const Icon4G = ({ size }: { size?: number }) => (
   <span className="font-black leading-none" style={{ fontSize: size ? `${size * 0.8}px` : "10px" }}>
@@ -38,7 +37,7 @@ const availableServices = [
   { id: "yemen-4g", name: "يمن فورجي", icon: Icon4G, href: "/yemen-4g", requiresInternet: true },
   { id: "pay-bills", name: "تسديد رصيد", icon: Smartphone, href: "/telecom-services", requiresInternet: true },
   { id: "digital-cards", name: "الشبكات", icon: Wifi, href: "/services", requiresInternet: false },
-  { id: "payments", name: "المدفوعات", icon: CreditCard, href: "#", requiresInternet: true },
+  { id: "payments", name: "المدفوعات", icon: CreditCard, href: "/payment-services", requiresInternet: true },
   { id: "alwadi", name: "منظومة الوادي", icon: SatelliteDish, href: "/alwadi", requiresInternet: true },
   { id: "alsafaa", name: "شبكة الصفاء الرقمية", icon: AlsafaaIcon, href: "/alsafaa", requiresInternet: true },
   { id: "withdraw", name: "غذي حسابك", icon: Wallet, href: "/top-up", requiresInternet: true },
@@ -61,7 +60,6 @@ export function BalanceCard() {
   const [leftAction, setLeftAction] = useState(availableServices.find((s) => s.id === "payments") || availableServices[4]);
   const [rightAction, setRightAction] = useState(availableServices.find((s) => s.id === "pay-bills") || availableServices[2]);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
-  const [isPaymentHubOpen, setIsPaymentHubOpen] = useState(false);
   const [editingSide, setEditingSide] = useState<"left" | "right" | null>(null);
   const [isOffline, setIsOffline] = useState(false);
 
@@ -106,11 +104,7 @@ export function BalanceCard() {
     if (isOffline && service.requiresInternet) {
       return;
     }
-    if (service.id === "payments") {
-      setIsPaymentHubOpen(true);
-    } else {
-      router.push(service.href);
-    }
+    router.push(service.href);
   };
 
   const selectService = (service: (typeof availableServices)[0]) => {
@@ -154,11 +148,8 @@ export function BalanceCard() {
     );
   };
 
-  const previewCardClass =
-    "w-[28vw] min-w-[112px] max-w-[136px] h-[186px] rounded-[26px] border border-white/10 bg-[#18181d] shadow-[0_18px_45px_rgba(0,0,0,0.38)] opacity-55 scale-[0.92] blur-[0.1px]";
-
   const renderPreview = (side: "left" | "right") => (
-    <Card className={previewCardClass}>
+    <Card className="w-[28vw] min-w-[112px] max-w-[136px] h-[186px] rounded-[26px] border border-white/10 bg-[#18181d] shadow-[0_18px_45px_rgba(0,0,0,0.38)] opacity-55 scale-[0.92] blur-[0.1px]">
       <CardContent className="h-full p-4 flex flex-col justify-between">
         <div className="flex justify-between items-start">
           <div className="w-10 h-10 rounded-2xl bg-white/5 border border-white/10" />
@@ -216,7 +207,7 @@ export function BalanceCard() {
       </div>
 
       <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
-        <DialogContent className="rounded-[32px] max-sm p-6 [&>button]:hidden">
+        <DialogContent className="rounded-[32px] max-sm p-6 [&>button]:hidden bg-white dark:bg-slate-900">
           <DialogHeader>
             <DialogTitle className="text-center font-black">اختيار اختصار مفضل</DialogTitle>
             <DialogDescription className="text-center">
@@ -241,76 +232,11 @@ export function BalanceCard() {
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="ghost" className="w-full rounded-2xl">
+              <Button variant="ghost" className="w-full rounded-2xl font-black">
                 إلغاء
               </Button>
             </DialogClose>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isPaymentHubOpen} onOpenChange={setIsPaymentHubOpen}>
-        <DialogContent className="rounded-[40px] max-sm p-0 overflow-hidden border-none shadow-2xl bg-[#F8FAFC] dark:bg-slate-950 outline-none [&>button]:hidden">
-          <div className="bg-mesh-gradient p-8 text-center text-white relative">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl animate-pulse" />
-            <DialogHeader>
-              <div className="bg-white/20 p-4 rounded-[28px] w-16 h-16 mx-auto mb-4 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl">
-                <CreditCard className="h-8 w-8 text-white" />
-              </div>
-              <DialogTitle className="text-2xl font-black text-white drop-shadow-md">المدفوعات</DialogTitle>
-              <DialogDescription className="text-xs text-white/70 font-bold mt-1 uppercase tracking-widest">اختر الخدمة المطلوبة</DialogDescription>
-            </DialogHeader>
-          </div>
-
-          <div className="p-6 space-y-3 max-h-[60vh] overflow-y-auto no-scrollbar">
-            {[
-              { id: "alwadi", name: "منظومة الوادي", img: "wjKrdNX2/images-(5).jpg", href: "/alwadi" },
-              { id: "alsafaa", name: "شبكة الصفاء الرقمية", img: "nL2S7w6S/20260728-152016.jpg", href: "/alsafaa" },
-              { id: "electricity", name: "سداد الكهرباء", img: "3RbLf0J5/images-(6).jpg", href: "/electricity" },
-              { id: "water", name: "سداد المياه", img: "FzMTNtL3/images-(7).jpg", href: "/water" },
-            ].map((s) => (
-              <div
-                key={s.id}
-                onClick={() => {
-                  if (!isOffline) {
-                    setIsPaymentHubOpen(false);
-                    router.push(s.href);
-                  }
-                }}
-                className={cn(
-                  "w-full h-16 rounded-2xl border-2 transition-all flex items-center justify-between px-6 text-right cursor-pointer",
-                  isOffline
-                    ? "bg-red-500/5 border-red-500/20 opacity-70 grayscale-[0.5]"
-                    : "bg-white dark:bg-slate-900 border-primary/5 shadow-sm hover:border-primary/20 hover:bg-primary/5"
-                )}
-                dir="rtl"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="p-0.5 bg-white rounded-xl overflow-hidden border border-muted w-10 h-10 shrink-0">
-                    <div className="relative w-full h-full rounded-[10px] overflow-hidden">
-                      <Image src={`https://i.postimg.cc/${s.img}`} alt={s.name} fill className="object-cover" />
-                    </div>
-                  </div>
-                  <span className={cn("font-black", isOffline ? "text-red-700/60" : "text-foreground")}>{s.name}</span>
-                </div>
-                {isOffline ? (
-                  <WifiOff className="w-4 h-4 text-red-500" />
-                ) : (
-                  <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center group-hover:-translate-x-1 transition-transform">
-                    <LucideChevronLeft className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                )}
-              </div>
-            ))}
-
-            <div className="pt-4">
-              <DialogClose asChild>
-                <Button variant="ghost" className="w-full rounded-2xl font-black text-muted-foreground">
-                  إغلاق
-                </Button>
-              </DialogClose>
-            </div>
-          </div>
         </DialogContent>
       </Dialog>
     </div>
