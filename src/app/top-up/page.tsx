@@ -98,6 +98,8 @@ export default function TopUpPage() {
                 const batch = writeBatch(firestore);
                 const now = new Date().toISOString();
 
+                const newBalance = (userProfile.balance || 0) + notifData.amount;
+
                 batch.update(userDocRef, { balance: increment(notifData.amount) });
                 batch.update(notifDoc.ref, { status: 'paid', paidTo: userProfile.id, paidAt: now });
                 batch.set(doc(collection(firestore, `users/${userProfile.id}/transactions`)), {
@@ -106,10 +108,10 @@ export default function TopUpPage() {
                 });
                 await batch.commit();
 
+                // إرسال SMS بالصيغة الملكية الجديدة
                 if (userProfile.phoneNumber) {
-                    const currentBalance = (userProfile.balance || 0) + notifData.amount;
                     const shortName = getFirstLast(userProfile.displayName);
-                    const smsMessage = `ستار موبايل\nمرحباً ${shortName}،\nتم ايداع مبلغ ${notifData.amount.toLocaleString('en-US')} ريال إلى حسابك\n\nالرصيد الحالي: ${currentBalance.toLocaleString('en-US')} ريال`;
+                    const smsMessage = `ستار موبايل\nمرحباً ${shortName}،\nتم ايداع مبلغ ${notifData.amount.toLocaleString('en-US')} ريال إلى حسابك\n\nالرصيد الحالي: ${newBalance.toLocaleString('en-US')} ريال`;
                     fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phoneNumber: userProfile.phoneNumber.trim(), message: smsMessage }) }).catch(() => {});
                 }
                 setShowSuccess(true);

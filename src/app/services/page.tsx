@@ -133,14 +133,12 @@ export default function CombinedNetworksPage() {
     return `${parts[0]} ${parts[parts.length - 1]}`;
   };
 
-  // Fetch local networks
   const localNetworksQuery = useMemoFirebase(
     () => (firestore ? collection(firestore, 'networks') : null),
     [firestore]
   );
   const { data: localNetworks, isLoading: isLoadingLocal } = useCollection<any>(localNetworksQuery);
 
-  // Fetch API networks with Caching
   useEffect(() => {
     const fetchApiNetworks = async () => {
       const cached = localStorage.getItem('star_mobile_api_networks_cache');
@@ -301,7 +299,6 @@ export default function CombinedNetworksPage() {
 
     try {
         const now = new Date().toISOString();
-        const formattedDate = new Date().toLocaleDateString('ar-YE');
         const batch = writeBatch(firestore);
         let finalCardID = '';
 
@@ -384,7 +381,7 @@ export default function CombinedNetworksPage() {
             setPurchasedCard(cardData);
         }
         
-        // --- نظام إشعارات SMS التلقائي بالصيغة الجديدة ---
+        // إرسال SMS بالصيغة الملكية الجديدة
         if (userProfile?.phoneNumber) {
             const shortName = getFirstLast(userProfile.displayName);
             const smsMsg = `ستار موبايل\nمرحباً ${shortName}،\n\nتم شراء كرت الإنترنت الخاص بك بنجاح.\n\nالشبكة: ${selectedNetwork.name}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${finalCardID}`;
@@ -397,20 +394,6 @@ export default function CombinedNetworksPage() {
                     message: smsMsg
                 })
             }).catch(e => console.error("SMS Notify Error", e));
-        }
-
-        // --- نظام إرسال الواتساب التلقائي (باستخدام API Wassenger) ---
-        if (userProfile?.phoneNumber) {
-            const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${selectedNetwork?.name}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${finalCardID}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
-            
-            fetch('/api/send-whatsapp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    phone: userProfile.phoneNumber,
-                    message: waMsg
-                })
-            }).catch(e => console.error("WhatsApp Notify Error", e));
         }
 
         setShowConfirmPurchase(null);

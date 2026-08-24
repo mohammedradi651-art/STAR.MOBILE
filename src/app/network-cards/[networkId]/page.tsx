@@ -84,7 +84,6 @@ function NetworkPurchasePageComponent() {
   ), [firestore, networkId]);
   const { data: categories, isLoading: isLoadingCategories } = useCollection<CardCategory>(categoriesQuery);
 
-  // ترتيب الكروت من الأقل سعراً إلى الأعلى سعراً
   const sortedCategories = useMemo(() => {
     if (!categories) return [];
     return [...categories].sort((a, b) => a.price - b.price);
@@ -143,22 +142,13 @@ function NetworkPurchasePageComponent() {
         
         const batch = writeBatch(firestore);
         const now = new Date().toISOString();
-        const formattedDate = new Date().toLocaleDateString('ar-YE');
         const commission = Math.ceil(categoryPrice * 0.10);
         const payoutAmount = categoryPrice - commission;
         const ownerId = networkData.ownerId;
   
-        // 1. تحديث حالة الكرت
-        batch.update(cardToPurchaseDoc.ref, { 
-            status: 'sold', 
-            soldTo: user.uid, 
-            soldTimestamp: now 
-        });
-        
-        // 2. خصم الرصيد من المشتري
+        batch.update(cardToPurchaseDoc.ref, { status: 'sold', soldTo: user.uid, soldTimestamp: now });
         batch.update(userDocRef, { balance: increment(-categoryPrice) });
         
-        // 3. سجل عملية للمشتري
         const buyerTransactionRef = doc(collection(firestore, `users/${user.uid}/transactions`));
         batch.set(buyerTransactionRef, {
             userId: user.uid,
@@ -169,7 +159,6 @@ function NetworkPurchasePageComponent() {
             cardNumber: cardToPurchaseData.cardNumber,
         });
 
-        // 5. سجل الكروت المباعة (الحالة: انتظار للتحويل اليدوي من الإدارة)
         const soldCardRef = doc(collection(firestore, 'soldCards'));
         batch.set(soldCardRef, {
             networkId: networkId,
@@ -186,12 +175,12 @@ function NetworkPurchasePageComponent() {
             buyerName: userProfile.displayName || 'مشترك',
             buyerPhoneNumber: userProfile.phoneNumber || '',
             soldTimestamp: now,
-            payoutStatus: 'pending' // انتظار التحويل اليدوي من الإدارة
+            payoutStatus: 'pending'
         });
         
         await batch.commit();
 
-        // --- نظام إشعارات SMS التلقائي بالصيغة الجديدة ---
+        // إرسال SMS بالصيغة الملكية الجديدة
         if (userProfile?.phoneNumber) {
             const shortName = getFirstLast(userProfile.displayName);
             const smsMsg = `ستار موبايل\nمرحباً ${shortName}،\n\nتم شراء كرت الإنترنت الخاص بك بنجاح.\n\nالشبكة: ${networkName}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardToPurchaseData.cardNumber}`;
@@ -208,20 +197,6 @@ function NetworkPurchasePageComponent() {
 
         setPurchasedCard(cardToPurchaseData);
         audioRef.current?.play().catch(() => {});
-
-        // --- نظام إرسال الواتساب التلقائي (باستخدام API Wassenger) ---
-        if (userProfile?.phoneNumber) {
-            const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${networkName}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardToPurchaseData.cardNumber}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
-            
-            fetch('/api/send-whatsapp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    phone: userProfile.phoneNumber,
-                    message: waMsg
-                })
-            }).catch(e => console.error("WhatsApp Notify Error", e));
-        }
   
     } catch (error: any) {
         console.error("Local network purchase failure:", error);
@@ -244,10 +219,8 @@ function NetworkPurchasePageComponent() {
     
     const name = userProfile?.displayName || 'عميلنا';
     const balance = (userProfile?.balance ?? 0).toLocaleString('en-US');
-    
     const messageBody = `${name} 🖐️\nنشكرك على طلبك من ستار موبايل 💙\n\n*معلومات الكرت:*\nالشبكة : ${networkName}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${purchasedCard.cardNumber}\n\n*رصيدك:* ${balance} ريال\n\nتطبيق ستار موبايل :\nhttps://star26.vercel.app\n\nجهّزنا لك هالكرت، تقدر تشحن فيه وتستانس 🔥`;
     
-    // فتح تطبيق الرسائل في الجوال مباشرة
     window.location.href = `sms:${smsRecipient}?body=${encodeURIComponent(messageBody)}`;
     setIsSmsDialogOpen(false);
   };
@@ -256,7 +229,7 @@ function NetworkPurchasePageComponent() {
     if (isLoadingCategories) {
         return (
             <div className="space-y-4">
-                {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}
+                {[...Array(3)].map((_, i) => <Skeleton className="h-28 w-full rounded-xl" key={i}/>)}
             </div>
         );
     }

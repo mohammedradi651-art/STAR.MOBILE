@@ -198,7 +198,7 @@ export default function AlwadiPage() {
 
         await batch.commit();
 
-        // إرسال إشعار SMS تلقائي بصيغة المستخدم الجديدة
+        // إرسال إشعار SMS تلقائي بالصيغة الملكية المطلوبة
         if (userProfile?.phoneNumber) {
             const smsMsg = `ستار موبايل\nتم تجديد اشتراكك بنجاح\n\nالمشترك: ${inquiryResult.data.name}\nرقم الكرت: ${cardNumber}\nفئة التجديد: ${selectedOption.title}\nالمبلغ: ${finalPrice.toLocaleString()} ريال\n\nشكراً لاستخدامك تطبيق ستار موبايل 💙`;
             

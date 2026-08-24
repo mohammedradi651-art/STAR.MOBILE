@@ -61,7 +61,7 @@ export const dynamic = 'force-dynamic';
 
 type Transaction = {
   id: string;
-  transactionDate: string;
+  transactionDate: any;
   amount: number;
   transactionType: string;
   notes?: string;
@@ -127,6 +127,27 @@ export default function TransactionsPage() {
 
   const { data: transactions, isLoading } = useCollection<Transaction>(transactionsQuery);
 
+  const safeFormatDate = (dateInput: any, formatStr: string) => {
+    if (!dateInput) return '...';
+    try {
+        let date;
+        if (typeof dateInput === 'string') {
+            date = parseISO(dateInput);
+        } else if (dateInput?.seconds) {
+            date = new Date(dateInput.seconds * 1000);
+        } else if (dateInput instanceof Date) {
+            date = dateInput;
+        } else {
+            date = new Date(dateInput);
+        }
+        
+        if (!isValid(date)) return '...';
+        return format(date, formatStr, { locale: ar });
+    } catch (e) {
+        return '...';
+    }
+  };
+
   const filteredTransactions = useMemo(() => {
     if (!transactions) return [];
     if (!appliedFrom && !appliedTo) return transactions;
@@ -138,7 +159,14 @@ export default function TransactionsPage() {
         if (!isValid(start) || !isValid(end)) return transactions;
 
         return transactions.filter(tx => {
-          const txDate = parseISO(tx.transactionDate);
+          let txDate;
+          if (typeof tx.transactionDate === 'string') {
+              txDate = parseISO(tx.transactionDate);
+          } else if (tx.transactionDate?.seconds) {
+              txDate = new Date(tx.transactionDate.seconds * 1000);
+          } else {
+              txDate = new Date(tx.transactionDate);
+          }
           if (!isValid(txDate)) return false;
           return isWithinInterval(txDate, { start, end });
         });
@@ -250,7 +278,7 @@ export default function TransactionsPage() {
                                             <div className="p-2 bg-muted/50 rounded-xl">{getTransactionIcon(tx.transactionType)}</div>
                                             <div className='text-right'>
                                                 <p className="font-bold text-sm text-foreground">{tx.transactionType}</p>
-                                                <p className="text-[10px] text-muted-foreground mt-0.5">{tx.transactionDate ? format(parseISO(tx.transactionDate), 'd MMMM yyyy', { locale: ar }) : '...'}</p>
+                                                <p className="text-[10px] text-muted-foreground mt-0.5">{safeFormatDate(tx.transactionDate, 'd MMMM yyyy')}</p>
                                             </div>
                                         </div>
                                         <div className="text-left">
@@ -284,7 +312,7 @@ export default function TransactionsPage() {
                       </div>
                       <div className="flex justify-between items-center py-2 border-b border-dashed">
                           <span className="text-muted-foreground flex items-center gap-2"><Calendar className="h-4 w-4 text-primary"/> التاريخ:</span>
-                          <span className="font-bold">{selectedTx.transactionDate ? format(parseISO(selectedTx.transactionDate), 'eeee, d MMMM yyyy', { locale: ar }) : '...'}</span>
+                          <span className="font-bold">{safeFormatDate(selectedTx.transactionDate, 'eeee, d MMMM yyyy')}</span>
                       </div>
                       {selectedTx.cardNumber && (
                           <div className="pt-4 bg-muted/30 p-4 rounded-2xl">

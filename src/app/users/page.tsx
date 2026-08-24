@@ -91,41 +91,19 @@ type User = {
   email?: string;
 };
 
-type AppSettings = {
-    boxBalance?: number;
-    totalDebts?: number;
-};
-
-const filterOptions = [
-    { label: 'الكل', value: 'all', icon: LayoutGrid },
-    { label: 'لديه رصيد', value: 'with-balance', icon: Wallet },
-    { label: 'مستخدمون', value: 'user', icon: UserIcon },
-    { label: 'ملاك شبكات', value: 'network-owner', icon: Crown },
-];
-
 export default function UsersPage() {
   const firestore = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [accountTypeFilter, setAccountTypeFilter] = useState<'all' | 'user' | 'with-balance' | 'network-owner'>('all');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [topUpAmount, setTopUpAmount] = useState('');
-  const [isTopUpDialogOpen, setIsTopUpDialogOpen] = useState(false);
   const [isManualDepositOpen, setIsManualDepositOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isWithdrawDialogOpen, setIsWithdrawDialogOpen] = useState(false);
-  const [withdrawAmount, setWithdrawAmount] = useState('');
   const [editingName, setEditingName] = useState('');
   const [editingPhoneNumber, setEditingPhoneNumber] = useState('');
-  
-  const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
-  const [tempApiKey, setTempApiKey] = useState('');
-
-  const [isDiscountDialogOpen, setIsDiscountDialogOpen] = useState(false);
-  const [discounts, setDiscounts] = useState({ alwadi: 0, networks: 0, telecom: 0, games: 0 });
 
   const isUserAdmin = user?.email === '770326828@shabakat.com' || user?.uid === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2';
 
@@ -142,26 +120,6 @@ export default function UsersPage() {
     return `${parts[0]} ${parts[parts.length - 1]}`;
   };
 
-  const handleTopUp = async () => {
-    if (!selectedUser || !topUpAmount || !firestore) return;
-    const amount = parseFloat(topUpAmount);
-    if (isNaN(amount) || amount <= 0) return;
-  
-    const userDocRef = doc(firestore, 'users', selectedUser.id);
-    const userNotificationsRef = collection(firestore, 'users', selectedUser.id, 'notifications');
-    
-    updateDocumentNonBlocking(userDocRef, { balance: increment(amount) });
-    addDocumentNonBlocking(userNotificationsRef, {
-      title: 'تمت تغذية حسابك',
-      body: `تمت إضافة مبلغ ${amount.toLocaleString('en-US')} ريال إلى رصيدك.`,
-      timestamp: new Date().toISOString()
-    });
-
-    toast({ title: "نجاح", description: `تمت إضافة الرصيد بنجاح.` });
-    setIsTopUpDialogOpen(false);
-    setTopUpAmount('');
-  };
-  
   const handleManualDeposit = async () => {
     if (!selectedUser || !topUpAmount || !firestore || !selectedUser.phoneNumber) return;
     const amount = parseFloat(topUpAmount);
@@ -169,6 +127,8 @@ export default function UsersPage() {
 
     const userDocRef = doc(firestore, 'users', selectedUser.id);
     const userTransactionsRef = collection(firestore, 'users', selectedUser.id, 'transactions');
+
+    const newBalance = (selectedUser.balance ?? 0) + amount;
 
     updateDocumentNonBlocking(userDocRef, { balance: increment(amount) });
     addDocumentNonBlocking(userTransactionsRef, {
@@ -179,7 +139,7 @@ export default function UsersPage() {
         notes: 'إيداع من الإدارة',
     });
 
-    const newBalance = (selectedUser.balance ?? 0) + amount;
+    // إرسال SMS بالصيغة الملكية المطلوبة
     const shortName = getFirstLast(selectedUser.displayName);
     const smsMessage = `ستار موبايل\nمرحباً ${shortName}،\nتم ايداع مبلغ ${amount.toLocaleString('en-US')} ريال إلى حسابك\n\nالرصيد الحالي: ${newBalance.toLocaleString('en-US')} ريال`;
     
@@ -237,7 +197,6 @@ export default function UsersPage() {
                             </div>
                         </div>
                         <div className="flex justify-end gap-2 mt-4">
-                            <Button variant="ghost" size="icon" className="rounded-xl bg-muted/30" onClick={() => { setSelectedUser(u); setIsWithdrawDialogOpen(true); }}><Banknote className="h-4 w-4 text-destructive" /></Button>
                             <Button variant="ghost" size="icon" className="rounded-xl bg-muted/30" onClick={() => { setSelectedUser(u); setIsManualDepositOpen(true); }}><Wallet className="h-4 w-4 text-primary" /></Button>
                             <Button variant="ghost" size="icon" className="rounded-xl bg-muted/30" onClick={() => { setEditingUser(u); setEditingName(u.displayName); setEditingPhoneNumber(u.phoneNumber || ''); setIsEditDialogOpen(true); }}><Edit className="h-4 w-4" /></Button>
                             <Button variant="ghost" size="icon" className="rounded-xl bg-muted/30" onClick={() => handleDelete(u.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>

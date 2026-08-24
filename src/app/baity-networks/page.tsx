@@ -168,7 +168,7 @@ export default function BaityNetworksPage() {
         setSelectedNetwork(null);
         audioRef.current?.play().catch(() => {});
 
-        // إرسال SMS بصيغة المستخدم الجديدة
+        // إرسال SMS بالصيغة الملكية الجديدة
         if (userProfile?.phoneNumber) {
             const shortName = getFirstLast(userProfile.displayName);
             const smsMsg = `ستار موبايل\nمرحباً ${shortName}،\n\nتم شراء كرت الإنترنت الخاص بك بنجاح.\n\nالشبكة: ${selectedNetwork?.name || 'الخير'}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardData.cardID}`;

@@ -62,7 +62,6 @@ export function QuickBuyCard() {
     return `${parts[0]} ${parts[parts.length - 1]}`;
   };
 
-  // تفاصيل عرض العيد لشبكة الخير المحدثة (تم حذف فورجي)
   const cardDetails = {
     name: "عرض العيد: 55GB - شبكة الخير",
     price: 2000,
@@ -103,8 +102,6 @@ export function QuickBuyCard() {
       }
 
       const cardData = result.data.order.card;
-      const formattedDate = new Date().toLocaleDateString('ar-YE');
-
       const batch = writeBatch(firestore);
       const now = new Date().toISOString();
 
@@ -122,7 +119,7 @@ export function QuickBuyCard() {
 
       await batch.commit();
       
-      // --- إرسال SMS بالصيغة الجديدة ---
+      // إرسال SMS بالصيغة الملكية الجديدة
       if (userProfile?.phoneNumber) {
           const shortName = getFirstLast(userProfile.displayName);
           const smsMsg = `ستار موبايل\nمرحباً ${shortName}،\n\nتم شراء كرت الإنترنت الخاص بك بنجاح.\n\nالشبكة: شبكة الخير\nالفئة: عرض العيد 55GB\nرقم الكرت: ${cardData.cardID}`;
@@ -140,21 +137,6 @@ export function QuickBuyCard() {
       setPurchasedCard(cardData);
       setIsOpen(false);
       audioRef.current?.play().catch(() => {});
-
-      // --- نظام إرسال الواتساب التلقائي (باستخدام API Wassenger) ---
-      if (userProfile?.phoneNumber) {
-        const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: شبكة الخير\nالفئة: عرض العيد 55GB\nرقم الكرت: ${cardData.cardID}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
-        
-        await fetch('/api/send-whatsapp', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                phone: userProfile.phoneNumber,
-                message: waMsg
-            })
-        }).catch(e => console.error("WhatsApp Notify Error", e));
-      }
-      
     } catch (error: any) {
       toast({ 
         variant: "destructive", 
