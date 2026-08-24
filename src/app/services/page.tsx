@@ -126,6 +126,13 @@ export default function CombinedNetworksPage() {
   const [smsRecipient, setSmsRecipient] = useState('');
   const audioRef = useRef<HTMLAudioElement>(null);
 
+  const getFirstLast = (name?: string) => {
+    if (!name) return 'عميلنا';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length <= 1) return name;
+    return `${parts[0]} ${parts[parts.length - 1]}`;
+  };
+
   // Fetch local networks
   const localNetworksQuery = useMemoFirebase(
     () => (firestore ? collection(firestore, 'networks') : null),
@@ -377,9 +384,11 @@ export default function CombinedNetworksPage() {
             setPurchasedCard(cardData);
         }
         
-        // --- نظام إشعارات SMS التلقائي ---
+        // --- نظام إشعارات SMS التلقائي بالصيغة الجديدة ---
         if (userProfile?.phoneNumber) {
-            const smsMsg = `ستار موبايل: تم شراء كرت ${selectedCategory.name} لشبكة ${selectedNetwork.name} بنجاح ✅. رقم الكرت: ${finalCardID}. شكراً لثقتك بنا 💙`;
+            const shortName = getFirstLast(userProfile.displayName);
+            const smsMsg = `ستار موبايل\nمرحباً ${shortName}،\n\nتم شراء كرت الإنترنت الخاص بك بنجاح.\n\nالشبكة: ${selectedNetwork.name}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${finalCardID}`;
+            
             fetch('/api/sms', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

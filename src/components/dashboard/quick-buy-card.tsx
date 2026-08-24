@@ -55,6 +55,13 @@ export function QuickBuyCard() {
   );
   const { data: userProfile } = useDoc<any>(userDocRef);
 
+  const getFirstLast = (name?: string) => {
+    if (!name) return 'عميلنا';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length <= 1) return name;
+    return `${parts[0]} ${parts[parts.length - 1]}`;
+  };
+
   // تفاصيل عرض العيد لشبكة الخير المحدثة (تم حذف فورجي)
   const cardDetails = {
     name: "عرض العيد: 55GB - شبكة الخير",
@@ -115,6 +122,21 @@ export function QuickBuyCard() {
 
       await batch.commit();
       
+      // --- إرسال SMS بالصيغة الجديدة ---
+      if (userProfile?.phoneNumber) {
+          const shortName = getFirstLast(userProfile.displayName);
+          const smsMsg = `ستار موبايل\nمرحباً ${shortName}،\n\nتم شراء كرت الإنترنت الخاص بك بنجاح.\n\nالشبكة: شبكة الخير\nالفئة: عرض العيد 55GB\nرقم الكرت: ${cardData.cardID}`;
+          
+          fetch('/api/sms', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  phoneNumber: userProfile.phoneNumber.trim(),
+                  message: smsMsg
+              })
+          }).catch(e => console.error("SMS Notify Error", e));
+      }
+
       setPurchasedCard(cardData);
       setIsOpen(false);
       audioRef.current?.play().catch(() => {});

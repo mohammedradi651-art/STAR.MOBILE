@@ -98,6 +98,13 @@ function NetworkPurchasePageComponent() {
   const [smsRecipient, setSmsRecipient] = useState('');
   const audioRef = useRef<HTMLAudioElement>(null);
 
+  const getFirstLast = (name?: string) => {
+    if (!name) return 'عميلنا';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length <= 1) return name;
+    return `${parts[0]} ${parts[parts.length - 1]}`;
+  };
+
   const userDocRef = useMemoFirebase(
     () => (user && firestore ? doc(firestore, 'users', user.uid) : null),
     [user, firestore]
@@ -184,9 +191,11 @@ function NetworkPurchasePageComponent() {
         
         await batch.commit();
 
-        // --- نظام إشعارات SMS التلقائي ---
+        // --- نظام إشعارات SMS التلقائي بالصيغة الجديدة ---
         if (userProfile?.phoneNumber) {
-            const smsMsg = `ستار موبايل: تم شراء كرت ${selectedCategory.name} لشبكة ${networkName} بنجاح ✅. رقم الكرت: ${cardToPurchaseData.cardNumber}. شكراً لاستخدامك تطبيقنا 💙`;
+            const shortName = getFirstLast(userProfile.displayName);
+            const smsMsg = `ستار موبايل\nمرحباً ${shortName}،\n\nتم شراء كرت الإنترنت الخاص بك بنجاح.\n\nالشبكة: ${networkName}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardToPurchaseData.cardNumber}`;
+            
             fetch('/api/sms', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
