@@ -120,11 +120,6 @@ type UserProfile = {
   balance?: number;
 };
 
-type AppSettings = {
-    appLink: string;
-    supportPhoneNumber: string;
-};
-
 const LoadingSpinner = () => (
   <div className="fixed inset-0 flex flex-col justify-center items-center z-[100] bg-mesh-gradient">
     <div className="relative w-28 h-28 overflow-hidden rounded-[32px] border-4 border-white/30 shadow-2xl bg-white">
@@ -149,12 +144,6 @@ export default function AccountPage() {
   );
   const { data: userProfile } = useDoc<UserProfile>(userDocRef);
 
-  const settingsDocRef = useMemoFirebase(
-    () => (firestore ? doc(firestore, 'appSettings', 'global') : null),
-    [firestore]
-  );
-  const { data: appSettings } = useDoc<AppSettings>(settingsDocRef);
-  
   const isUserAdmin = user?.email === '770326828@shabakat.com' || user?.uid === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2';
 
   // جلب آخر الإيداعات الواردة للمدير
@@ -199,7 +188,7 @@ export default function AccountPage() {
     }
 
     if (link.action === 'share') {
-      const shareUrl = appSettings?.appLink || window.location.origin;
+      const shareUrl = 'https://star26.vercel.app';
       if (navigator.share) {
         navigator.share({
           title: 'ستار موبايل',
@@ -213,7 +202,7 @@ export default function AccountPage() {
     }
 
     if (link.action === 'help') {
-      const phone = appSettings?.supportPhoneNumber || '770326828';
+      const phone = '770326828';
       window.open(`https://wa.me/967${phone.replace(/\D/g, '')}`, '_blank');
     }
 
@@ -350,7 +339,6 @@ export default function AccountPage() {
                         <Code className="h-10 w-10 text-white" />
                     </div>
                     <DialogTitle className="text-center font-black text-2xl text-white">مطور التطبيق</DialogTitle>
-                    <DialogDescription className="text-center text-white/70 font-bold">رؤية تقنية بلمسة حضرمية</DialogDescription>
                 </DialogHeader>
             </div>
             <div className="p-8 text-center space-y-6">
