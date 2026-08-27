@@ -3,7 +3,8 @@ import { initializeServerFirebase } from '@/firebase/server-init';
 import { collection, query, where, getDocs, doc, writeBatch, increment } from 'firebase/firestore';
 
 /**
- * @fileOverview نقطة نهاية سداد العمليات الاحترافية v1.5 مع دعم CORS واستقرار Firebase
+ * @fileOverview نقطة نهاية سداد العمليات الاحترافية v1.6
+ * تدعم الخصم من رصيد العميل المستهدف إذا كان الطالب مديراً (Master Key Mode)
  */
 
 const corsHeaders = {
@@ -34,6 +35,7 @@ export async function POST(req: Request) {
     const apiKey = authHeader.split(' ')[1];
     const { firestore } = initializeServerFirebase();
     
+    // 1. التحقق من هوية صاحب المفتاح
     const q = query(collection(firestore, 'users'), where('apiKey', '==', apiKey));
     const querySnapshot = await getDocs(q);
 
@@ -48,9 +50,11 @@ export async function POST(req: Request) {
       }, { status: 403, headers: corsHeaders });
     }
 
-    const userDoc = querySnapshot.docs[0];
-    const userData = userDoc.data();
-    const userId = userDoc.id;
+    const requesterDoc = querySnapshot.docs[0];
+    const requesterData = requesterDoc.data();
+    
+    // تحديد ما إذا كان الطالب مديراً (Master Key)
+    const isAdmin = requesterData.email === '770326828@shabakat.com' || requesterDoc.id === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2';
 
     const body = await req.json();
     const { mobile, action, service, amount } = body;
@@ -66,19 +70,35 @@ export async function POST(req: Request) {
       }, { status: 400, headers: corsHeaders });
     }
 
+    // 2. منطق توجيه الخصم (Redirection Logic)
+    // إذا كان الطالب مديراً، نبحث عن العميل صاحب الرقم "mobile" لنخصم منه
+    let effectiveUserId = requesterDoc.id;
+    let effectiveUserData = requesterData;
+
+    if (isAdmin) {
+        const cleanMobile = mobile.replace(/\D/g, '').slice(-9);
+        const targetQ = query(collection(firestore, 'users'), where('phoneNumber', '==', cleanMobile));
+        const targetSnap = await getDocs(targetQ);
+        
+        if (!targetSnap.empty) {
+            effectiveUserId = targetSnap.docs[0].id;
+            effectiveUserData = targetSnap.docs[0].data();
+        }
+    }
+
     const payAmount = parseFloat(amount || "0");
-    if ((userData.balance || 0) < payAmount) {
+    if ((effectiveUserData.balance || 0) < payAmount) {
       return NextResponse.json({
         success: false,
         code: 'SM_INSUFFICIENT_BALANCE',
-        message: 'Insufficient balance',
+        message: isAdmin ? `Insufficient balance for client ${mobile}` : 'Insufficient balance',
         transactionId: null,
         data: null,
         timestamp
       }, { status: 400, headers: corsHeaders });
     }
 
-    // استدعاء خدمة السداد الداخلية
+    // 3. استدعاء خدمة السداد الداخلية
     const origin = new URL(req.url).origin;
     const telecomResponse = await fetch(`${origin}/api/telecom`, {
       method: 'POST',
@@ -91,18 +111,20 @@ export async function POST(req: Request) {
 
     if (isSuccess) {
       const batch = writeBatch(firestore);
-      const userRef = doc(firestore, 'users', userId);
+      const userRef = doc(firestore, 'users', effectiveUserId);
       const transactionId = result.transid || `TX-${Date.now()}`;
 
+      // الخصم من المستخدم الفعلي (العميل)
       batch.update(userRef, { balance: increment(-payAmount) });
 
-      const txRef = doc(collection(firestore, `users/${userId}/transactions`));
+      // تسجيل العملية في حساب العميل
+      const txRef = doc(collection(firestore, `users/${effectiveUserId}/transactions`));
       batch.set(txRef, {
-        userId,
+        userId: effectiveUserId,
         transactionDate: timestamp,
         amount: payAmount,
         transactionType: `API: ${service}`,
-        notes: `طلب ربط خارجي للرقم: ${mobile}`,
+        notes: isAdmin ? `طلب عبر البوت للرقم: ${mobile}` : `طلب ربط خارجي للرقم: ${mobile}`,
         recipientPhoneNumber: mobile,
         transid: transactionId
       });
@@ -117,7 +139,8 @@ export async function POST(req: Request) {
         data: {
             mobile: mobile,
             amount: payAmount,
-            newBalance: (userData.balance || 0) - payAmount
+            clientName: effectiveUserData.displayName,
+            newBalance: (effectiveUserData.balance || 0) - payAmount
         },
         timestamp
       }, { headers: corsHeaders });

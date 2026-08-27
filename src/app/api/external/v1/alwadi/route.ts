@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, writeBatch, increment } from 'firebase/firestore';
 
 /**
- * @fileOverview نقطة نهاية منظومة الوادي v1.5 مع دعم CORS واستقرار Firebase
+ * @fileOverview نقطة نهاية منظومة الوادي v1.6
+ * تدعم الخصم من رصيد العميل بناءً على رقم جوال مرسل إذا كان الطالب مديراً (Master Key)
  */
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
@@ -48,13 +49,27 @@ export async function POST(req: Request) {
       }, { status: 403, headers: corsHeaders });
     }
 
-    const userDoc = querySnapshot.docs[0];
-    const userData = userDoc.data();
-    const userId = userDoc.id;
+    const requesterDoc = querySnapshot.docs[0];
+    const requesterData = requesterDoc.data();
+    const isAdmin = requesterData.email === '770326828@shabakat.com' || requesterDoc.id === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2';
 
     const body = await req.json();
-    const { action, number, packageId, subscriberId } = body;
+    const { action, number, packageId, subscriberId, mobile } = body;
     const origin = new URL(req.url).origin;
+
+    // تحديد العميل الفعلي الذي سيخصم منه الرصيد
+    let effectiveUserId = requesterDoc.id;
+    let effectiveUserData = requesterData;
+
+    if (isAdmin && mobile) {
+        const cleanMobile = mobile.replace(/\D/g, '').slice(-9);
+        const targetQ = query(collection(firestore, 'users'), where('phoneNumber', '==', cleanMobile));
+        const targetSnap = await getDocs(targetQ);
+        if (!targetSnap.empty) {
+            effectiveUserId = targetSnap.docs[0].id;
+            effectiveUserData = targetSnap.docs[0].data();
+        }
+    }
 
     if (action === 'lookup') {
         const response = await fetch(`${origin}/api/alwadi/lookup`, {
@@ -93,7 +108,7 @@ export async function POST(req: Request) {
         const prices: Record<string, number> = { "1": 3000, "3": 6000, "7": 9000, "9": 15000 };
         const price = prices[packageId] || 0;
 
-        if ((userData.balance || 0) < price) {
+        if ((effectiveUserData.balance || 0) < price) {
             return NextResponse.json({ 
                 success: false, 
                 code: 'SM_INSUFFICIENT_BALANCE', 
@@ -107,17 +122,25 @@ export async function POST(req: Request) {
         const response = await fetch(`${origin}/api/alwadi/renew`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId, cardNumber: number, packageId, subscriberId })
+            body: JSON.stringify({ userId: effectiveUserId, cardNumber: number, packageId, subscriberId })
         });
         const result = await response.json();
 
         if (result.success) {
+            // الخصم من حساب العميل الفعلي في Firebase (تم في استدعاء api/alwadi/renew داخلياً، لكننا نؤكده هنا)
+            // ملاحظة: استدعاء /api/alwadi/renew يقوم بالخصم وتحديث المعاملات للـ userId الممرر له.
+            
             return NextResponse.json({
                 success: true,
                 code: 'SM_SUCCESS',
                 message: 'Renewal successful',
                 transactionId: `ALW-${Date.now()}`,
-                data: { cardNumber: number, packageId, amount: price },
+                data: { 
+                    cardNumber: number, 
+                    packageId, 
+                    amount: price,
+                    clientName: effectiveUserData.displayName 
+                },
                 timestamp
             }, { headers: corsHeaders });
         }

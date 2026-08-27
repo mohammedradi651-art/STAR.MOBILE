@@ -3,9 +3,8 @@ import { initializeServerFirebase } from '@/firebase/server-init';
 import { collection, query, where, getDocs, doc, writeBatch, increment, limit as firestoreLimit, getDoc } from 'firebase/firestore';
 
 /**
- * @fileOverview بوابة الربط البرمجي للشبكات v1.5 المحدثة
- * تدعم: جلب الشبكات، جلب الفئات، وشراء الكروت (محلي + بيتي)
- * تم الإصلاح لضمان إرسال networkId ومعالجة الشراء بشكل سليم
+ * @fileOverview بوابة الربط البرمجي للشبكات v1.6
+ * تدعم الخصم من رصيد العميل (بناءً على رقم الجوال) إذا كان الطالب مديراً (Master Key)
  */
 
 const corsHeaders = {
@@ -47,13 +46,27 @@ export async function POST(req: Request) {
       }, { status: 403, headers: corsHeaders });
     }
 
-    const userDoc = uSnap.docs[0];
-    const userData = userDoc.data();
-    const userId = userDoc.id;
+    const requesterDoc = uSnap.docs[0];
+    const requesterData = requesterDoc.data();
+    const isAdmin = requesterData.email === '770326828@shabakat.com' || requesterDoc.id === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2';
 
     const body = await req.json();
-    const { action, networkId, classId } = body;
+    const { action, networkId, classId, mobile } = body;
     const origin = new URL(req.url).origin;
+
+    // تحديد العميل الفعلي الذي سيخصم منه الرصيد
+    let effectiveUserId = requesterDoc.id;
+    let effectiveUserData = requesterData;
+
+    if (isAdmin && mobile) {
+        const cleanMobile = mobile.replace(/\D/g, '').slice(-9);
+        const targetQ = query(collection(firestore, 'users'), where('phoneNumber', '==', cleanMobile));
+        const targetSnap = await getDocs(targetQ);
+        if (!targetSnap.empty) {
+            effectiveUserId = targetSnap.docs[0].id;
+            effectiveUserData = targetSnap.docs[0].data();
+        }
+    }
 
     // 1. جلب كافة الشبكات (محلية + بيتي)
     if (action === 'list_networks') {
@@ -137,7 +150,7 @@ export async function POST(req: Request) {
             if (!catSnap.exists()) return NextResponse.json({ success: false, code: 'SM_NOT_FOUND', message: 'Category not found' }, { status: 404, headers: corsHeaders });
             
             const price = catSnap.data().price;
-            if ((userData.balance || 0) < price) return NextResponse.json({ success: false, code: 'SM_INSUFFICIENT_BALANCE', message: 'Insufficient balance' }, { status: 400, headers: corsHeaders });
+            if ((effectiveUserData.balance || 0) < price) return NextResponse.json({ success: false, code: 'SM_INSUFFICIENT_BALANCE', message: 'Insufficient balance' }, { status: 400, headers: corsHeaders });
 
             const cardsQ = query(
                 collection(firestore, `networks/${networkId}/cards`),
@@ -153,14 +166,14 @@ export async function POST(req: Request) {
             const cardData = cardDoc.data();
             
             const batch = writeBatch(firestore);
-            batch.update(doc(firestore, 'users', userId), { balance: increment(-price) });
-            batch.update(cardDoc.ref, { status: 'sold', soldTo: userId, soldTimestamp: timestamp });
-            batch.set(doc(collection(firestore, `users/${userId}/transactions`)), {
-                userId,
+            batch.update(doc(firestore, 'users', effectiveUserId), { balance: increment(-price) });
+            batch.update(cardDoc.ref, { status: 'sold', soldTo: effectiveUserId, soldTimestamp: timestamp });
+            batch.set(doc(collection(firestore, `users/${effectiveUserId}/transactions`)), {
+                userId: effectiveUserId,
                 transactionDate: timestamp,
                 amount: price,
                 transactionType: 'API: شراء كرت محلي',
-                notes: `شبكة: ${localSnap.data().name}`,
+                notes: `شبكة: ${localSnap.data().name}${isAdmin ? ' (عبر البوت)' : ''}`,
                 cardNumber: cardData.cardNumber
             });
             await batch.commit();
@@ -172,7 +185,8 @@ export async function POST(req: Request) {
                 data: {
                     cardNumber: cardData.cardNumber,
                     cardPassword: cardData.cardNumber,
-                    price: price
+                    price: price,
+                    clientName: effectiveUserData.displayName
                 },
                 timestamp
             }, { headers: corsHeaders });
@@ -188,24 +202,23 @@ export async function POST(req: Request) {
 
             if (orderRes.ok && result.status === 200) {
                 const card = result.data.order.card;
-                // جلب السعر من قائمة الفئات للتأكد من الخصم الصحيح
                 const classesRes = await fetch(`${origin}/services/networks-api/${networkId}/classes`);
                 const classesData = await classesRes.json();
                 const targetClass = classesData.find((c: any) => String(c.id) === String(classId));
                 const price = targetClass ? targetClass.price : 0;
 
-                if (price > 0 && (userData.balance || 0) < price) {
+                if (price > 0 && (effectiveUserData.balance || 0) < price) {
                     return NextResponse.json({ success: false, code: 'SM_INSUFFICIENT_BALANCE', message: 'Insufficient balance' }, { status: 400, headers: corsHeaders });
                 }
 
                 const batch = writeBatch(firestore);
-                if (price > 0) batch.update(doc(firestore, 'users', userId), { balance: increment(-price) });
-                batch.set(doc(collection(firestore, `users/${userId}/transactions`)), {
-                    userId,
+                if (price > 0) batch.update(doc(firestore, 'users', effectiveUserId), { balance: increment(-price) });
+                batch.set(doc(collection(firestore, `users/${effectiveUserId}/transactions`)), {
+                    userId: effectiveUserId,
                     transactionDate: timestamp,
                     amount: price,
                     transactionType: 'API: شراء كرت خارجي',
-                    notes: `شبكة بيتي: ${networkId}`,
+                    notes: `شبكة بيتي: ${networkId}${isAdmin ? ' (عبر البوت)' : ''}`,
                     cardNumber: card.cardID
                 });
                 await batch.commit();
@@ -217,7 +230,8 @@ export async function POST(req: Request) {
                     data: {
                         cardNumber: card.cardID,
                         cardPassword: card.cardPass || card.cardID,
-                        price: price
+                        price: price,
+                        clientName: effectiveUserData.displayName
                     },
                     timestamp
                 }, { headers: corsHeaders });
