@@ -56,6 +56,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,16 +77,15 @@ type Transaction = {
 
 const getTransactionIcon = (type: string) => {
     const t = type.toLowerCase();
-    if (t.includes('استرجاع')) return <Undo2 className="h-6 w-6 text-orange-500" />;
-    if (t.includes('تغذية') || t.includes('إيداع') || t.includes('استلام')) return <Wallet className="h-6 w-6 text-green-500" />;
-    if (t.includes('تحويل')) return <Send className="h-6 w-6 text-blue-500" />;
-    if (t.includes('سحب')) return <Banknote className="h-6 w-6 text-destructive" />;
-    if (t.includes('شراء كرت')) return <Wifi className="h-6 w-6 text-primary" />;
-    if (t.includes('سداد') || t.includes('رصيد') || t.includes('باقة')) return <Smartphone className="h-6 w-6 text-primary" />;
-    if (t.includes('تجديد')) return <SatelliteDish className="h-6 w-6 text-primary" />;
-    if (t.includes('متجر') || t.includes('منتج')) return <ShoppingBag className="h-6 w-6 text-pink-500" />;
-    if (t.includes('أرباح')) return <TrendingUp className="h-6 w-6 text-green-600" />;
-    return <FileText className="h-6 w-6 text-muted-foreground" />;
+    if (t.includes('تغذية') || t.includes('إيداع') || t.includes('استلام')) return '/icons/tadia.png';
+    if (t.includes('تحويل')) return '/icons/tahwel.png';
+    if (t.includes('شراء كرت')) return '/icons/shbkat.png';
+    if (t.includes('سداد') || t.includes('رصيد') || t.includes('باقة')) return '/icons/rsed.png';
+    if (t.includes('تجديد') || t.includes('مدفوعات') || t.includes('كهرباء') || t.includes('مياه')) return '/icons/mddfwt.png';
+    if (t.includes('متجر') || t.includes('منتج')) return '/icons/slaa.png';
+    if (t.includes('ألعاب') || t.includes('شدات')) return '/icons/alab.png';
+    if (t.includes('سحب')) return '/icons/tahwel.png';
+    return '/icons/rsed.png';
 };
 
 const generateNumericId = (id: string): string => {
@@ -271,11 +271,17 @@ export default function TransactionsPage() {
                     ) : (
                         filteredTransactions.map(tx => {
                             const isCredit = tx.transactionType.includes('تغذية') || tx.transactionType.includes('إيداع') || tx.transactionType.includes('استلام') || tx.transactionType.includes('أرباح') || tx.transactionType.includes('استرجاع');
+                            const iconSrc = getTransactionIcon(tx.transactionType);
+                            
                             return (
                                 <Card key={tx.id} className="overflow-hidden cursor-pointer hover:bg-muted/50 transition-colors border-none shadow-sm rounded-2xl bg-card mb-3" onClick={() => handleCardClick(tx)}>
                                     <CardContent className="p-4 flex items-center justify-between gap-4">
                                         <div className="flex items-center gap-3">
-                                            <div className="p-2 bg-muted/50 rounded-xl">{getTransactionIcon(tx.transactionType)}</div>
+                                            <div className="p-1 bg-muted/50 rounded-xl">
+                                                <div className="relative h-8 w-8">
+                                                    <Image src={iconSrc} alt="Tx Icon" fill className="object-contain" priority />
+                                                </div>
+                                            </div>
                                             <div className='text-right'>
                                                 <p className="font-bold text-sm text-foreground">{tx.transactionType}</p>
                                                 <p className="text-[10px] text-muted-foreground mt-0.5">{safeFormatDate(tx.transactionDate, 'd MMMM yyyy')}</p>

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -40,6 +39,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import Image from 'next/image';
 
 type Transaction = {
   id: string;
@@ -57,16 +57,15 @@ type Transaction = {
 
 const getTransactionIcon = (type: string) => {
     const t = type.toLowerCase();
-    if (t.includes('استرجاع')) return Undo2;
-    if (t.includes('تغذية') || t.includes('إيداع') || t.includes('استلام')) return Wallet;
-    if (t.includes('تحويل')) return Send;
-    if (t.includes('سحب')) return Banknote;
-    if (t.includes('شراء كرت')) return Wifi;
-    if (t.includes('سداد') || t.includes('رصيد') || t.includes('باقة')) return Smartphone;
-    if (t.includes('تجديد')) return SatelliteDish;
-    if (t.includes('متجر') || t.includes('منتج')) return ShoppingBag;
-    if (t.includes('أرباح')) return TrendingUp;
-    return CreditCard;
+    if (t.includes('تغذية') || t.includes('إيداع') || t.includes('استلام')) return '/icons/tadia.png';
+    if (t.includes('تحويل')) return '/icons/tahwel.png';
+    if (t.includes('شراء كرت')) return '/icons/shbkat.png';
+    if (t.includes('سداد') || t.includes('رصيد') || t.includes('باقة')) return '/icons/rsed.png';
+    if (t.includes('تجديد') || t.includes('مدفوعات') || t.includes('كهرباء') || t.includes('مياه')) return '/icons/mddfwt.png';
+    if (t.includes('متجر') || t.includes('منتج')) return '/icons/slaa.png';
+    if (t.includes('ألعاب') || t.includes('شدات')) return '/icons/alab.png';
+    if (t.includes('سحب')) return '/icons/tahwel.png';
+    return '/icons/rsed.png';
 };
 
 const generateNumericId = (id: string): string => {
@@ -132,7 +131,7 @@ export function RecentTransactions() {
                                    tx.transactionType.includes('استرجاع') || 
                                    tx.transactionType.includes('إيداع');
                     
-                    const Icon = getTransactionIcon(tx.transactionType);
+                    const iconSrc = getTransactionIcon(tx.transactionType);
                     
                     return (
                         <Dialog key={tx.id} open={isDialogOpen && selectedTx?.id === tx.id} onOpenChange={(open) => {
@@ -147,8 +146,10 @@ export function RecentTransactions() {
                             <DialogTrigger asChild>
                                 <Card className="rounded-3xl border-border/50 shadow-sm overflow-hidden bg-card cursor-pointer hover:bg-muted/30 transition-all active:scale-[0.98]">
                                     <CardContent className="p-4 flex items-center justify-between">
-                                        <div className="p-2.5 bg-muted/30 rounded-xl border border-border/50 shrink-0">
-                                            <Icon className="h-4 w-4" style={{ stroke: 'url(#icon-gradient)' }} />
+                                        <div className="p-1 bg-muted/30 rounded-xl border border-border/50 shrink-0">
+                                            <div className="relative h-8 w-8">
+                                                <Image src={iconSrc} alt="Tx Icon" fill className="object-contain" priority />
+                                            </div>
                                         </div>
 
                                         <div className="flex-1 text-right mx-4 overflow-hidden">
@@ -190,7 +191,7 @@ export function RecentTransactions() {
                                         )}
 
                                         <div className="flex justify-between items-center py-2 border-b border-dashed">
-                                            <span className="text-muted-foreground flex items-center gap-2"><Banknote className="h-4 w-4 text-primary"/> المبلغ:</span>
+                                            <span className="text-muted-foreground flex items-center gap-2"><CreditCard className="h-4 w-4 text-primary"/> المبلغ:</span>
                                             <span className={`font-black text-lg ${isCredit ? 'text-green-600' : 'text-destructive'}`}>
                                                 {selectedTx.amount.toLocaleString('en-US')} ريال
                                             </span>
