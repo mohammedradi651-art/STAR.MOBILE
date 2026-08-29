@@ -23,6 +23,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
+import Image from 'next/image';
 
 type Service = {
   name: string;
@@ -58,10 +59,19 @@ const ServiceItem = ({
       onClick={isDisabled ? onClick : undefined}
     >
       <div className={cn(
-          "mb-1.5 flex h-8 w-8 items-center justify-center rounded-2xl overflow-hidden",
-          isDisabled ? "bg-red-500/10" : "bg-muted/20 dark:bg-white/5"
+          "mb-1.5 flex h-9 w-9 items-center justify-center rounded-2xl overflow-hidden",
+          isDisabled ? "bg-red-500/10" : ""
       )}>
-        {typeof Icon === 'function' ? (
+        {typeof Icon === 'string' ? (
+             <div className="relative w-full h-full p-0.5">
+                <Image 
+                    src={Icon} 
+                    alt={name} 
+                    fill 
+                    className={cn("object-contain transition-transform group-hover:scale-110", isDisabled && "grayscale")} 
+                />
+             </div>
+        ) : typeof Icon === 'function' ? (
              <Icon 
              className={cn("h-5 w-5 transition-transform", isDisabled ? "text-red-500" : "text-primary")} 
                style={{ strokeWidth: 2.5 }}
@@ -102,15 +112,15 @@ export function ServiceGrid() {
   }, []);
 
   const services: Service[] = [
-    { name: 'تسديد رصيد', icon: Smartphone, href: '/telecom-services', requiresInternet: true },
-    { name: 'الشبكات', icon: Wifi, href: '/services', requiresInternet: false },
-    { name: 'المدفوعات', icon: CreditCard, href: '/payment-services', requiresInternet: true },
-    { name: 'تحويل لمشترك', icon: ArrowLeftRight, href: '/transfer', requiresInternet: true },
-    { name: 'غذي حسابك', icon: Wallet, href: '/top-up', requiresInternet: true },
-    { name: 'معرض الألعاب', icon: Gamepad2, href: '/games', requiresInternet: true },
-    { name: 'المفضلة', icon: Heart, href: '/favorites', requiresInternet: false },
-    { name: 'سجل العمليات', icon: History, href: '/transactions', requiresInternet: true },
-    { name: 'متجر ستار ميديا', icon: ShoppingBag, href: '/store', requiresInternet: true },
+    { name: 'تسديد رصيد', icon: '/icons/rsed.png', href: '/telecom-services', requiresInternet: true },
+    { name: 'الشبكات', icon: '/icons/shbkat.png', href: '/services', requiresInternet: false },
+    { name: 'المدفوعات', icon: '/icons/mddfwt.png', href: '/payment-services', requiresInternet: true },
+    { name: 'تحويل لمشترك', icon: '/icons/tahwel.png', href: '/transfer', requiresInternet: true },
+    { name: 'غذي حسابك', icon: '/icons/tadia.png', href: '/top-up', requiresInternet: true },
+    { name: 'معرض الألعاب', icon: '/icons/alab.png', href: '/games', requiresInternet: true },
+    { name: 'المفضلة', icon: '/icons/mfdaa.png', href: '/favorites', requiresInternet: false },
+    { name: 'سجل العمليات', icon: '/icons/rassed.png', href: '/transactions', requiresInternet: true },
+    { name: 'متجر ستار ميديا', icon: '/icons/slaa.png', href: '/store', requiresInternet: true },
   ];
 
   return (
