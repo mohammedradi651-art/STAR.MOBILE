@@ -31,8 +31,8 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // تم استثناء الأيقونات والصور من منع التخزين لضمان بقائها في الذاكرة وظهورها الفوري
-        source: '/((?!icons|banners|_next|static|favicon).*)',
+        // تم استثناء الأيقونات والبانرات (icons|banners|banr) من منع التخزين لضمان بقائها في الذاكرة وظهورها الفوري
+        source: '/((?!icons|banners|banr|_next|static|favicon).*)',
         headers: [
           {
             key: 'X-Content-Type-Options',

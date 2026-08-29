@@ -31,6 +31,7 @@ const DashboardHero = () => {
     Autoplay({ delay: 5000, stopOnInteraction: false })
   );
 
+  // البانرات المعتمدة للتخزين الدائم
   const banners = ["/banr3.png", "/banr4.png"];
 
   return (
@@ -52,8 +53,8 @@ const DashboardHero = () => {
                   alt={`بانر ${index + 1}`} 
                   fill 
                   className="object-contain" 
-                  priority={true}
-                  unoptimized={true}
+                  priority={true} // تحميل مسبق لضمان الظهور الفوري
+                  unoptimized={true} // تجاوز معالجة الصور لضمان استخدام النسخة المخزنة في الكاش
                 />
               </div>
             </CarouselItem>
