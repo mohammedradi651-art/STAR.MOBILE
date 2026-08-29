@@ -63,7 +63,7 @@ const ServiceItem = ({
           isDisabled ? "bg-red-500/10" : ""
       )}>
         {typeof Icon === 'string' ? (
-             <div className="relative w-full h-full p-3">
+             <div className="relative w-full h-full p-[14px]">
                 <Image 
                     src={Icon} 
                     alt={name} 
@@ -73,11 +73,11 @@ const ServiceItem = ({
              </div>
         ) : typeof Icon === 'function' ? (
              <Icon 
-             className={cn("h-5 w-5 transition-transform", isDisabled ? "text-red-500" : "text-primary")} 
+             className={cn("h-4 w-4 transition-transform", isDisabled ? "text-red-500" : "text-primary")} 
                style={{ strokeWidth: 2.5 }}
              />
         ) : (
-            <Icon size={20} className="transition-transform group-hover:scale-110" />
+            <Icon size={16} className="transition-transform group-hover:scale-110" />
         )}
       </div>
       <span className={cn("text-[11px] font-black text-center px-1 leading-tight", isDisabled && "text-red-700")}>{name}</span>
