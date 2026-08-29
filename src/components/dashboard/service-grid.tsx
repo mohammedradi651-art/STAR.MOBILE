@@ -63,7 +63,7 @@ const ServiceItem = ({
           isDisabled ? "bg-red-500/10" : ""
       )}>
         {typeof Icon === 'string' ? (
-             <div className="relative w-full h-full p-1.5">
+             <div className="relative w-full h-full p-2.5">
                 <Image 
                     src={Icon} 
                     alt={name} 
