@@ -31,8 +31,8 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // منع التخزين المؤقت الشامل للصفحات لضمان تحميل أحدث ملفات JS/CSS وعدم حدوث خطأ 404
-        source: '/(.*)',
+        // تم استثناء الأيقونات والصور من منع التخزين لضمان بقائها في الذاكرة وظهورها الفوري
+        source: '/((?!icons|banners|_next|static|favicon).*)',
         headers: [
           {
             key: 'X-Content-Type-Options',

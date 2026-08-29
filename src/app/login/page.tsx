@@ -52,7 +52,8 @@ const DashboardHero = () => {
                   alt={`بانر ${index + 1}`} 
                   fill 
                   className="object-contain" 
-                  priority={index === 0}
+                  priority={true}
+                  unoptimized={true}
                 />
               </div>
             </CarouselItem>

@@ -69,6 +69,8 @@ const ServiceItem = ({
                     alt={name} 
                     fill 
                     className={cn("object-contain transition-transform group-hover:scale-110", isDisabled && "grayscale")} 
+                    priority={true}
+                    unoptimized={true}
                 />
              </div>
         ) : typeof Icon === 'function' ? (
