@@ -59,11 +59,11 @@ const ServiceItem = ({
       onClick={isDisabled ? onClick : undefined}
     >
       <div className={cn(
-          "mb-1 flex h-9 w-9 items-center justify-center rounded-2xl overflow-hidden",
+          "mb-1 flex h-10 w-10 items-center justify-center rounded-2xl overflow-hidden",
           isDisabled ? "bg-red-500/10" : ""
       )}>
         {typeof Icon === 'string' ? (
-             <div className="relative w-full h-full p-2.5">
+             <div className="relative w-full h-full p-5.5">
                 <Image 
                     src={Icon} 
                     alt={name} 
