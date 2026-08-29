@@ -179,7 +179,12 @@ export function BalanceCard() {
             <div className="relative z-10 flex items-start justify-between w-full flex-row-reverse">
               <button
                 type="button"
-                onClick={() => setIsBalanceVisible(!isBalanceVisible)}
+                onClick={() => {
+                  setIsBalanceVisible(!isBalanceVisible);
+                  if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                    navigator.vibrate(50);
+                  }
+                }}
                 className="h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center text-white backdrop-blur-md border border-white/10"
               >
                 {isBalanceVisible ? <Eye size={18} /> : <EyeOff size={18} />}
