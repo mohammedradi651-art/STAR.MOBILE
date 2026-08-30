@@ -88,7 +88,6 @@ export default function TopUpPage() {
     const { toast } = useToast();
     const { user } = useUser();
     const router = useRouter();
-    const audioRef = useRef<HTMLAudioElement>(null);
     
     const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
     const [alomqyAccount, setAlomqyAccount] = useState('');
@@ -220,7 +219,6 @@ export default function TopUpPage() {
                 });
                 
                 setShowSuccess(true);
-                audioRef.current?.play().catch(() => {});
             }
         } catch (error: any) {
             console.error("Bank Deposit Processing Error:", error);
@@ -238,7 +236,6 @@ export default function TopUpPage() {
     if (showSuccess && lastTxDetails) {
         return (
             <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-black/60 backdrop-blur-3xl animate-in fade-in-0 duration-700">
-                <audio ref={audioRef} src="/ashar.mp3" preload="auto" />
                 <div className="w-full max-w-[320px] text-center space-y-8 animate-in zoom-in-95 duration-500">
                     {/* أيقونة النجاح الخضراء الثابتة */}
                     <div className="relative mx-auto">
@@ -262,9 +259,9 @@ export default function TopUpPage() {
                         </p>
                     </div>
 
-                    {/* زر العودة للرئيسية */}
+                    {/* زر العودة للرئيسية بلون التطبيق الأزرق وبدون صوت */}
                     <Button 
-                        className="w-full h-14 rounded-2xl font-black text-lg bg-green-600 text-white shadow-[0_20px_50px_rgba(34,197,94,0.3)] active:scale-95 transition-all border-none" 
+                        className="w-full h-14 rounded-2xl font-black text-lg bg-[#0048ad] text-white shadow-xl shadow-primary/20 active:scale-95 transition-all border-none" 
                         onClick={() => router.push('/login')}
                     >
                         الرئيسية
@@ -315,7 +312,7 @@ export default function TopUpPage() {
                                         key={method.id} 
                                         onClick={() => setSelectedMethod(method)} 
                                         className={cn(
-                                            "group flex flex-col items-center justify-center space-y-3 rounded-[32px] p-5 aspect-square cursor-pointer transition-all duration-500 border-2 relative overflow-hidden shadow-sm", 
+                                            "group flex flex-col items-center justify-center space-y-3 rounded-[32px] p-5 aspect-square cursor-pointer transition-all duration-300 border-2 relative overflow-hidden shadow-sm", 
                                             selectedMethod?.id === method.id 
                                                 ? 'border-[#0048ad] bg-primary/5 shadow-xl shadow-primary/10 scale-[1.03]' 
                                                 : 'border-transparent bg-white dark:bg-slate-900 hover:border-primary/20'
