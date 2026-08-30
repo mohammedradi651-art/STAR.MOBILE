@@ -88,6 +88,7 @@ export default function TopUpPage() {
     const { toast } = useToast();
     const { user } = useUser();
     const router = useRouter();
+    const audioRef = useRef<HTMLAudioElement>(null);
     
     const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
     const [alomqyAccount, setAlomqyAccount] = useState('');
@@ -114,6 +115,12 @@ export default function TopUpPage() {
             setSelectedMethod(paymentMethods[0]);
         }
     }, [paymentMethods, selectedMethod]);
+
+    useEffect(() => {
+        if (showSuccess && audioRef.current) {
+            audioRef.current.play().catch(e => console.error("Audio playback failed", e));
+        }
+    }, [showSuccess]);
 
     const handleCopy = (accountNumber: string) => {
         navigator.clipboard.writeText(accountNumber);
@@ -203,7 +210,7 @@ export default function TopUpPage() {
                         }) 
                     }).catch(e => console.error("SMS Confirmation Error:", e));
 
-                    const waMsg = `⭐ ستار موبايل\n\nتم شحن رصيدك آلياً بنجاح ✅\n\nالمبلغ: ${notifData.amount.toLocaleString()} ر.ي\nالرصيد الجديد: ${currentBalance.toLocaleString()} ر.ي\nالوسيلة: ${selectedMethod?.name}\n\nشكراً لاستخدام ستار موبايل 💙`;
+                    const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName}\n\nتم شحن رصيدك آلياً بنجاح ✅\n\nالمبلغ: ${notifData.amount.toLocaleString()} ر.ي\nالرصيد الجديد: ${currentBalance.toLocaleString()} ر.ي\nالوسيلة: ${selectedMethod?.name}\n\nشكراً لاستخدام ستار موبايل 💙`;
                     fetch('/api/send-whatsapp', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -236,8 +243,8 @@ export default function TopUpPage() {
     if (showSuccess && lastTxDetails) {
         return (
             <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-black/60 backdrop-blur-3xl animate-in fade-in-0 duration-700">
+                <audio ref={audioRef} src="/ashar.mp3" preload="auto" />
                 <div className="w-full max-w-[320px] text-center space-y-8 animate-in zoom-in-95 duration-500">
-                    {/* أيقونة النجاح الخضراء الثابتة */}
                     <div className="relative mx-auto">
                         <div className="absolute inset-0 bg-green-500/30 rounded-[40px] blur-3xl" />
                         <div className="relative w-24 h-24 bg-green-500/20 backdrop-blur-md rounded-[32px] border border-green-500/30 mx-auto flex items-center justify-center shadow-2xl overflow-hidden">
@@ -245,7 +252,6 @@ export default function TopUpPage() {
                         </div>
                     </div>
 
-                    {/* نص النجاح المودرن */}
                     <div className="space-y-3">
                         <h2 className="text-2xl font-black text-white drop-shadow-md">تم الشحن بنجاح</h2>
                         <div className="bg-green-500/10 backdrop-blur-md py-4 px-6 rounded-[28px] border border-green-500/20 shadow-inner">
@@ -259,7 +265,6 @@ export default function TopUpPage() {
                         </p>
                     </div>
 
-                    {/* زر العودة للرئيسية بلون التطبيق الأزرق وبدون صوت */}
                     <Button 
                         className="w-full h-14 rounded-2xl font-black text-lg bg-[#0048ad] text-white shadow-xl shadow-primary/20 active:scale-95 transition-all border-none" 
                         onClick={() => router.push('/login')}
@@ -273,6 +278,7 @@ export default function TopUpPage() {
 
     return (
         <div className="flex flex-col h-full bg-[#F8FAFC] dark:bg-slate-950">
+            <audio ref={audioRef} src="/ashar.mp3" preload="auto" />
             <SimpleHeader title="تغذية الحساب" />
             
             {isVerifyingBank && <TopUpMovingLoader />}
@@ -366,25 +372,29 @@ export default function TopUpPage() {
                                                     <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">
                                                         {isAlOmqy ? 'حسابك بالعمقي' : 'رقم المرجع'}
                                                     </Label>
-                                                    <Input 
-                                                        value={isAlOmqy ? alomqyAccount : kuraimiReference} 
-                                                        onChange={e => isAlOmqy ? setAlomqyAccount(e.target.value.replace(/\D/g, '')) : setKuraimiReference(e.target.value.replace(/\D/g, ''))} 
-                                                        placeholder={isAlOmqy ? "25******" : "الرقم"} 
-                                                        className="h-14 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-lg focus-visible:ring-0 placeholder:text-primary/20 tracking-widest w-full shadow-inner"
-                                                        style={{ direction: 'ltr' }}
-                                                    />
+                                                    <div className="relative">
+                                                      <Input 
+                                                          value={isAlOmqy ? alomqyAccount : kuraimiReference} 
+                                                          onChange={e => isAlOmqy ? setAlomqyAccount(e.target.value.replace(/\D/g, '')) : setKuraimiReference(e.target.value.replace(/\D/g, ''))} 
+                                                          placeholder={isAlOmqy ? "25******" : "الرقم"} 
+                                                          className="h-14 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-lg focus-visible:ring-0 placeholder:text-primary/20 tracking-widest w-full shadow-inner"
+                                                          style={{ direction: 'ltr' }}
+                                                      />
+                                                    </div>
                                                 </div>
                                             )}
 
                                             <div className={cn("space-y-2 text-right", isAmjad ? "col-span-2" : "col-span-1")}>
                                                 <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">المبلغ المودع</Label>
-                                                <Input 
-                                                    type="number" 
-                                                    value={bankAmount} 
-                                                    onChange={e => setBankAmount(e.target.value)} 
-                                                    placeholder="0.00" 
-                                                    className="h-14 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-xl focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10 w-full shadow-inner" 
-                                                />
+                                                <div className="relative">
+                                                  <Input 
+                                                      type="number" 
+                                                      value={bankAmount} 
+                                                      onChange={e => setBankAmount(e.target.value)} 
+                                                      placeholder="0.00" 
+                                                      className="h-14 bg-primary/5 border-2 border-solid border-[#0048ad]/40 rounded-2xl text-center font-black text-xl focus-visible:ring-0 text-[#0048ad] placeholder:text-[#0048ad]/10 w-full shadow-inner" 
+                                                  />
+                                                </div>
                                             </div>
                                         </div>
 
