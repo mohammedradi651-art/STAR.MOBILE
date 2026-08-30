@@ -237,40 +237,37 @@ export default function TopUpPage() {
 
     if (showSuccess && lastTxDetails) {
         return (
-            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-black/40 backdrop-blur-3xl animate-in fade-in-0 duration-700">
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-black/60 backdrop-blur-3xl animate-in fade-in-0 duration-700">
                 <audio ref={audioRef} src="/ashar.mp3" preload="auto" />
                 <div className="w-full max-w-[320px] text-center space-y-8 animate-in zoom-in-95 duration-500">
-                    {/* أيقونة النجاح العصرية */}
+                    {/* أيقونة النجاح الخضراء الثابتة */}
                     <div className="relative mx-auto">
-                        <div className="absolute inset-0 bg-white/20 rounded-[40px] blur-3xl animate-pulse" />
-                        <div className="relative w-24 h-24 bg-white/10 backdrop-blur-md rounded-[32px] border border-white/20 mx-auto flex items-center justify-center shadow-2xl overflow-hidden">
-                            <CheckCircle2 className="h-12 w-12 text-white animate-in zoom-in-50 duration-700" />
-                            <div className="absolute -top-1 -right-1">
-                                <Sparkles className="h-5 w-5 text-yellow-300 animate-bounce" />
-                            </div>
+                        <div className="absolute inset-0 bg-green-500/30 rounded-[40px] blur-3xl" />
+                        <div className="relative w-24 h-24 bg-green-500/20 backdrop-blur-md rounded-[32px] border border-green-500/30 mx-auto flex items-center justify-center shadow-2xl overflow-hidden">
+                            <CheckCircle2 className="h-12 w-12 text-green-400 animate-in zoom-in-50 duration-700" />
                         </div>
                     </div>
 
                     {/* نص النجاح المودرن */}
                     <div className="space-y-3">
                         <h2 className="text-2xl font-black text-white drop-shadow-md">تم الشحن بنجاح</h2>
-                        <div className="bg-white/10 backdrop-blur-md py-4 px-6 rounded-[28px] border border-white/10 shadow-inner">
-                            <p className="text-white/70 text-[10px] font-black uppercase tracking-widest mb-1">المبلغ المضاف</p>
-                            <p className="text-3xl font-black text-white tracking-tighter">
-                                {lastTxDetails.amount.toLocaleString()} <span className="text-sm font-bold text-white/60">ر.ي</span>
+                        <div className="bg-green-500/10 backdrop-blur-md py-4 px-6 rounded-[28px] border border-green-500/20 shadow-inner">
+                            <p className="text-green-200/70 text-[10px] font-black uppercase tracking-widest mb-1">المبلغ المضاف</p>
+                            <p className="text-3xl font-black text-green-400 tracking-tighter">
+                                {lastTxDetails.amount.toLocaleString()} <span className="text-sm font-bold text-green-400/60">ر.ي</span>
                             </p>
                         </div>
                         <p className="text-white/60 text-xs font-bold px-4 leading-relaxed">
-                            تمت إضافة الرصيد إلى محفظتك الإلكترونية، يمكنك الآن استخدامه في جميع خدمات ستار موبايل.
+                            تمت إضافة الرصيد إلى محفظتك الإلكترونية بنجاح، يمكنك الآن استخدامه في جميع خدمات ستار موبايل.
                         </p>
                     </div>
 
-                    {/* زر الإغلاق الفخم */}
+                    {/* زر العودة للرئيسية */}
                     <Button 
-                        className="w-full h-14 rounded-2xl font-black text-lg bg-white text-primary shadow-[0_20px_50px_rgba(255,255,255,0.15)] active:scale-95 transition-all border-none" 
+                        className="w-full h-14 rounded-2xl font-black text-lg bg-green-600 text-white shadow-[0_20px_50px_rgba(34,197,94,0.3)] active:scale-95 transition-all border-none" 
                         onClick={() => router.push('/login')}
                     >
-                        حسناً، رائع!
+                        الرئيسية
                     </Button>
                 </div>
             </div>
