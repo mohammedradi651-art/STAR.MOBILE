@@ -52,7 +52,7 @@ export async function POST(req: Request) {
             db, agentUid, STATIC_PASSWORD, "renewal.proces", "search_read",
             [['|', ["num_card", "=", cardNumber], ["number", "=", cardNumber]]],
             { 
-                fields: ["subscriber", "expiry_date", "num_card"], 
+                fields: ["subscriber", "expiry_date", "num_card", "mobile"], 
                 limit: 1, 
                 order: "id desc",
                 context: pageContext 
@@ -80,6 +80,7 @@ export async function POST(req: Request) {
                     expiry: expiryDate || "غير محدد",
                     days_left: daysLeft,
                     cardNumber: cardNumber,
+                    mobile: item.mobile || null,
                     saleCenter: "مركز الوادي"
                 }
             });
@@ -112,6 +113,7 @@ export async function POST(req: Request) {
             }
 
             let actualExpiry = null;
+            let actualMobile = null;
             try {
                 const onchangeResult = await xmlrpcCall(models, "execute_kw", [
                     db, agentUid, STATIC_PASSWORD, "renewal.proces", "onchange",
@@ -124,12 +126,13 @@ export async function POST(req: Request) {
                             expiry_date: false, 
                             payment_type: false 
                         },
-                        ["subscriber", "num_card", "number"],
+                        ["subscriber", "num_card", "number", "mobile"],
                         {
                             number: {},
                             subscriber: {},
                             num_card: {},
-                            expiry_date: {}
+                            expiry_date: {},
+                            mobile: {}
                         }
                     ],
                     { context: pageContext }
@@ -137,6 +140,7 @@ export async function POST(req: Request) {
 
                 if (onchangeResult && onchangeResult.value) {
                     actualExpiry = onchangeResult.value.expiry_date || null;
+                    actualMobile = onchangeResult.value.mobile || null;
                 }
             } catch (onchangeError) {
                 console.error("فشلت محاكاة onchange:", onchangeError);
@@ -151,6 +155,7 @@ export async function POST(req: Request) {
                     expiry: actualExpiry || "غير محدد",
                     days_left: calculateDaysLeft(actualExpiry), 
                     cardNumber: cardNumber,
+                    mobile: actualMobile,
                     saleCenter: "مركز الوادي"
                 }
             });

@@ -13,7 +13,8 @@ import {
   Wallet, 
   Hash, 
   Loader2, 
-  Clock
+  Clock,
+  Smartphone
 } from 'lucide-react';
 import { 
   AlertDialog, 
@@ -97,6 +98,9 @@ export default function AlwadiPage() {
     [firestore, user]
   );
   const { data: userProfile } = useDoc<any>(userDocRef);
+
+  // التحقق مما إذا كان المستخدم هو المدير
+  const isAdmin = user?.email === '770326828@shabakat.com' || userProfile?.phoneNumber === '770326828';
 
   const getFinalPrice = (price: number) => {
     const discountPercent = userProfile?.alwadiDiscount || 0;
@@ -198,15 +202,22 @@ export default function AlwadiPage() {
 
         await batch.commit();
 
-        // إرسال إشعار SMS تلقائي بالصيغة الملكية المطلوبة
-        if (userProfile?.phoneNumber) {
+        // منطق إرسال SMS الذكي
+        // إذا كان مديراً، نرسل للرقم المربوط بالمنظومة، وإذا لم يتوفر نرسل لجوال المدير (أو لا نرسل)
+        // إذا كان مستخدماً عادياً، نرسل لجوال المستخدم كالمعتاد
+        let targetSmsPhone = userProfile?.phoneNumber;
+        if (isAdmin && inquiryResult.data.mobile) {
+            targetSmsPhone = inquiryResult.data.mobile.trim();
+        }
+
+        if (targetSmsPhone) {
             const smsMsg = `ستار موبايل\nتم تجديد اشتراكك بنجاح\n\nالمشترك: ${inquiryResult.data.name}\nرقم الكرت: ${cardNumber}\nفئة التجديد: ${selectedOption.title}\nالمبلغ: ${finalPrice.toLocaleString()} ريال\n\nشكراً لاستخدامك تطبيق ستار موبايل 💙`;
             
             fetch('/api/sms', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    phoneNumber: userProfile.phoneNumber.trim(),
+                    phoneNumber: targetSmsPhone,
                     message: smsMsg
                 })
             }).catch(e => console.error("SMS Notify Error", e));
@@ -240,7 +251,7 @@ export default function AlwadiPage() {
                     <h2 className="text-xl font-black text-white tracking-tight">تجديد اشتراك منظومة الوادي</h2>
                     <div className="flex items-center justify-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-                        <p className="text-[10px] text-white/80 font-bold uppercase tracking-[0.2em]">نظام التجديد المباشر</p>
+                        <p className="text-[10px] text-white/80 font-bold uppercase tracking-[0.2em]">نظام التجديد المباشر {isAdmin && "(Admin Mode)"}</p>
                     </div>
                 </div>
             </div>
@@ -286,6 +297,14 @@ export default function AlwadiPage() {
                                 <div className="text-center mb-6">
                                     <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">الاسم</p>
                                     <h3 className="text-lg font-black text-foreground">{inquiryResult.data.name}</h3>
+                                    
+                                    {/* إظهار رقم الجوال فقط للمدير */}
+                                    {isAdmin && inquiryResult.data.mobile && (
+                                        <div className="mt-2 flex items-center justify-center gap-2 text-primary animate-in fade-in slide-in-from-top-1">
+                                            <Smartphone className="w-3.5 h-3.5" />
+                                            <span className="text-sm font-black font-mono tracking-widest">{inquiryResult.data.mobile}</span>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl text-center border border-slate-100 dark:border-slate-700">
