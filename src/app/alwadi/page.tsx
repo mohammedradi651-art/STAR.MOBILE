@@ -88,6 +88,7 @@ export default function AlwadiPage() {
   const [cardNumber, setCardNumber] = useState('');
   const [isInquiring, setIsInquiring] = useState(false);
   const [inquiryResult, setInquiryResult] = useState<any>(null);
+  const [editableMobile, setEditableMobile] = useState('');
   const [selectedOption, setSelectedOption] = useState<RenewalOption | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -99,7 +100,6 @@ export default function AlwadiPage() {
   );
   const { data: userProfile } = useDoc<any>(userDocRef);
 
-  // التحقق مما إذا كان المستخدم هو المدير
   const isAdmin = user?.email === '770326828@shabakat.com' || userProfile?.phoneNumber === '770326828';
 
   const getFinalPrice = (price: number) => {
@@ -120,6 +120,7 @@ export default function AlwadiPage() {
     }
     setIsInquiring(true);
     setInquiryResult(null);
+    setEditableMobile('');
     setSelectedOption(null);
 
     try {
@@ -131,6 +132,9 @@ export default function AlwadiPage() {
       const result = await res.json();
       if (result.success) {
         setInquiryResult(result);
+        if (result.data.mobile) {
+            setEditableMobile(result.data.mobile.trim());
+        }
       } else {
         toast({ variant: "destructive", title: "عذراً", description: result.message || "رقم الكرت غير موجود." });
       }
@@ -203,13 +207,9 @@ export default function AlwadiPage() {
         await batch.commit();
 
         // منطق إرسال SMS الذكي
-        // إذا كان مديراً، نرسل للرقم المربوط بالمنظومة، وإذا لم يتوفر نرسل لجوال المدير (أو لا نرسل)
-        // إذا كان مستخدماً عادياً، نرسل لجوال المستخدم كالمعتاد
-        let targetSmsPhone = userProfile?.phoneNumber;
-        if (isAdmin && inquiryResult.data.mobile) {
-            targetSmsPhone = inquiryResult.data.mobile.trim();
-        }
-
+        // إذا كان مديراً، نرسل للرقم الموجود في حقل الإدخال القابل للتعديل
+        let targetSmsPhone = isAdmin ? editableMobile : userProfile?.phoneNumber;
+        
         if (targetSmsPhone) {
             const smsMsg = `ستار موبايل\nتم تجديد اشتراكك بنجاح\n\nالمشترك: ${inquiryResult.data.name}\nرقم الكرت: ${cardNumber}\nفئة التجديد: ${selectedOption.title}\nالمبلغ: ${finalPrice.toLocaleString()} ريال\n\nشكراً لاستخدامك تطبيق ستار موبايل 💙`;
             
@@ -298,11 +298,22 @@ export default function AlwadiPage() {
                                     <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">الاسم</p>
                                     <h3 className="text-lg font-black text-foreground">{inquiryResult.data.name}</h3>
                                     
-                                    {/* إظهار رقم الجوال فقط للمدير */}
-                                    {isAdmin && inquiryResult.data.mobile && (
-                                        <div className="mt-2 flex items-center justify-center gap-2 text-primary animate-in fade-in slide-in-from-top-1">
-                                            <Smartphone className="w-3.5 h-3.5" />
-                                            <span className="text-sm font-black font-mono tracking-widest">{inquiryResult.data.mobile}</span>
+                                    {/* حقل جوال قابل للتعديل يظهر فقط للمدير */}
+                                    {isAdmin && (
+                                        <div className="mt-4 space-y-2 animate-in slide-in-from-top-2">
+                                            <Label className="text-[10px] font-black text-primary uppercase tracking-widest text-center block">رقم الجوال (قابل للتعديل)</Label>
+                                            <div className="relative max-w-[200px] mx-auto">
+                                                <Input 
+                                                    id="mobile_0"
+                                                    type="tel"
+                                                    autoComplete="off"
+                                                    value={editableMobile}
+                                                    onChange={(e) => setEditableMobile(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                                                    className="h-10 rounded-xl bg-primary/5 border-primary/20 text-center font-black text-sm tracking-widest text-primary focus-visible:ring-primary"
+                                                    placeholder="7xxxxxxxx"
+                                                />
+                                                <Smartphone className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary opacity-40" />
+                                            </div>
                                         </div>
                                     )}
                                 </div>
