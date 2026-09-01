@@ -5,8 +5,8 @@ const url = "api.alwaadi.net";
 const db = "alwaadi_DB";
 
 // بيانات الدخول المباشرة
-const STATIC_USERNAME = "770326M";
-const STATIC_PASSWORD = "770326828moh";
+const STATIC_USERNAME = "770326828M";
+const STATIC_PASSWORD = "84a167f4e26e831ba4bea62ce3c65b1f54cf3656";
 
 function xmlrpcCall(client: any, method: string, params: any[]): Promise<any> {
     return new Promise((resolve, reject) => {
@@ -16,6 +16,24 @@ function xmlrpcCall(client: any, method: string, params: any[]): Promise<any> {
             resolve(value);
         });
     });
+}
+
+function calculateDaysLeft(expiryDateString: any): number | string {
+    if (!expiryDateString || expiryDateString === "false" || expiryDateString === false) return "غير محدد";
+    try {
+        const expiryDate = new Date(expiryDateString);
+        if (isNaN(expiryDate.getTime())) return "غير محدد";
+        
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        expiryDate.setHours(0,0,0,0);
+        
+        const differenceInTime = expiryDate.getTime() - today.getTime();
+        const days = Math.ceil(differenceInTime / (1000 * 3600 * 24));
+        return isNaN(days) ? "غير محدد" : days;
+    } catch (e) {
+        return "غير محدد";
+    }
 }
 
 export async function POST(req: Request) {
@@ -30,7 +48,7 @@ export async function POST(req: Request) {
 
     const common = xmlrpc.createSecureClient({ host: url, port: 443, path: '/xmlrpc/2/common' });
     
-    // 1. التوثيق المبدئي باستخدام البيانات المباشرة
+    // 1. التوثيق المبدئي
     const agentUid = await xmlrpcCall(common, "authenticate", [db, STATIC_USERNAME, STATIC_PASSWORD, {}]);
     
     if (!agentUid || typeof agentUid !== 'number') {
@@ -69,7 +87,8 @@ export async function POST(req: Request) {
             }
 
             const expiryDate = item.expiry_date || null;
-            const daysLeft = calculateDaysLeft(expiryDate);
+            // معالجة رقم الجوال الراجع من اودو
+            const mobileStr = (item.mobile && item.mobile !== false) ? String(item.mobile).trim() : '';
 
             return NextResponse.json({
                 success: true,
@@ -77,10 +96,10 @@ export async function POST(req: Request) {
                 data: {
                     id: subId,
                     name: rawName || "مشترك معروف",
-                    expiry: expiryDate || "غير محدد",
-                    days_left: daysLeft,
+                    expiry: (expiryDate && expiryDate !== false) ? expiryDate : "غير محدد",
+                    days_left: calculateDaysLeft(expiryDate),
                     cardNumber: cardNumber,
-                    mobile: item.mobile || null,
+                    mobile: mobileStr,
                     saleCenter: "مركز الوادي"
                 }
             });
@@ -113,7 +132,7 @@ export async function POST(req: Request) {
             }
 
             let actualExpiry = null;
-            let actualMobile = null;
+            let actualMobile = '';
             try {
                 const onchangeResult = await xmlrpcCall(models, "execute_kw", [
                     db, agentUid, STATIC_PASSWORD, "renewal.proces", "onchange",
@@ -140,7 +159,8 @@ export async function POST(req: Request) {
 
                 if (onchangeResult && onchangeResult.value) {
                     actualExpiry = onchangeResult.value.expiry_date || null;
-                    actualMobile = onchangeResult.value.mobile || null;
+                    const mob = onchangeResult.value.mobile;
+                    actualMobile = (mob && mob !== false) ? String(mob).trim() : '';
                 }
             } catch (onchangeError) {
                 console.error("فشلت محاكاة onchange:", onchangeError);
@@ -152,7 +172,7 @@ export async function POST(req: Request) {
                 data: {
                     id: subId,
                     name: rawName,
-                    expiry: actualExpiry || "غير محدد",
+                    expiry: (actualExpiry && actualExpiry !== false) ? actualExpiry : "غير محدد",
                     days_left: calculateDaysLeft(actualExpiry), 
                     cardNumber: cardNumber,
                     mobile: actualMobile,
@@ -169,18 +189,4 @@ export async function POST(req: Request) {
     console.error("Global Lookup Error:", error);
     return NextResponse.json({ success: false, message: "حدث خطأ غير متوقع." }, { status: 500 });
   }
-}
-
-function calculateDaysLeft(expiryDateString: string | null): number | string {
-    if (!expiryDateString) return "غير محدد";
-    try {
-        const expiryDate = new Date(expiryDateString);
-        const today = new Date();
-        expiryDate.setHours(0,0,0,0);
-        today.setHours(0,0,0,0);
-        const differenceInTime = expiryDate.getTime() - today.getTime();
-        return Math.ceil(differenceInTime / (1000 * 3600 * 24)); 
-    } catch (e) {
-        return "غير محدد";
-    }
 }
