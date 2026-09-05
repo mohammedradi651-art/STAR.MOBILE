@@ -13,8 +13,7 @@ import {
   Wallet, 
   Hash, 
   Loader2, 
-  Clock,
-  Smartphone
+  Clock
 } from 'lucide-react';
 import { 
   AlertDialog, 
@@ -88,7 +87,6 @@ export default function AlwadiPage() {
   const [cardNumber, setCardNumber] = useState('');
   const [isInquiring, setIsInquiring] = useState(false);
   const [inquiryResult, setInquiryResult] = useState<any>(null);
-  const [editableMobile, setEditableMobile] = useState('');
   const [selectedOption, setSelectedOption] = useState<RenewalOption | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -99,8 +97,6 @@ export default function AlwadiPage() {
     [firestore, user]
   );
   const { data: userProfile } = useDoc<any>(userDocRef);
-
-  const isAdmin = user?.email === '770326828@shabakat.com' || user?.uid === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2';
 
   const getFinalPrice = (price: number) => {
     const discountPercent = userProfile?.alwadiDiscount || 0;
@@ -120,7 +116,6 @@ export default function AlwadiPage() {
     }
     setIsInquiring(true);
     setInquiryResult(null);
-    setEditableMobile('');
     setSelectedOption(null);
 
     try {
@@ -132,12 +127,6 @@ export default function AlwadiPage() {
       const result = await res.json();
       if (result.success) {
         setInquiryResult(result);
-        // تعيين رقم الجوال في حقل الإيداع فوراً للمدير
-        if (result.data.mobile) {
-            setEditableMobile(String(result.data.mobile).trim());
-        } else {
-            setEditableMobile('');
-        }
       } else {
         toast({ variant: "destructive", title: "عذراً", description: result.message || "رقم الكرت غير موجود." });
       }
@@ -209,17 +198,15 @@ export default function AlwadiPage() {
 
         await batch.commit();
 
-        // إرسال SMS للرقم المكتوب في حقل الجوال إذا كان مديراً
-        let targetSmsPhone = isAdmin && editableMobile ? editableMobile : userProfile?.phoneNumber;
-        
-        if (targetSmsPhone) {
+        // إرسال إشعار SMS تلقائي بالصيغة الملكية المطلوبة
+        if (userProfile?.phoneNumber) {
             const smsMsg = `ستار موبايل\nتم تجديد اشتراكك بنجاح\n\nالمشترك: ${inquiryResult.data.name}\nرقم الكرت: ${cardNumber}\nفئة التجديد: ${selectedOption.title}\nالمبلغ: ${finalPrice.toLocaleString()} ريال\n\nشكراً لاستخدامك تطبيق ستار موبايل 💙`;
             
             fetch('/api/sms', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    phoneNumber: targetSmsPhone,
+                    phoneNumber: userProfile.phoneNumber.trim(),
                     message: smsMsg
                 })
             }).catch(e => console.error("SMS Notify Error", e));
@@ -253,7 +240,7 @@ export default function AlwadiPage() {
                     <h2 className="text-xl font-black text-white tracking-tight">تجديد اشتراك منظومة الوادي</h2>
                     <div className="flex items-center justify-center gap-2">
                         <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-                        <p className="text-[10px] text-white/80 font-bold uppercase tracking-[0.2em]">نظام التجديد المباشر {isAdmin && "(مدير)"}</p>
+                        <p className="text-[10px] text-white/80 font-bold uppercase tracking-[0.2em]">نظام التجديد المباشر</p>
                     </div>
                 </div>
             </div>
@@ -299,36 +286,15 @@ export default function AlwadiPage() {
                                 <div className="text-center mb-6">
                                     <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">الاسم</p>
                                     <h3 className="text-lg font-black text-foreground">{inquiryResult.data.name}</h3>
-                                    
-                                    {/* حقل جوال قابل للتعديل يظهر فقط للمدير ويأخذ القيمة من اودو */}
-                                    {isAdmin && (
-                                        <div className="mt-4 space-y-2 animate-in slide-in-from-top-2">
-                                            <Label className="text-[10px] font-black text-primary uppercase tracking-widest text-center block">رقم الجوال (الإشعارات)</Label>
-                                            <div className="relative max-w-[200px] mx-auto">
-                                                <Input 
-                                                    id="mobile_0"
-                                                    type="tel"
-                                                    autoComplete="off"
-                                                    value={editableMobile}
-                                                    onChange={(e) => setEditableMobile(e.target.value.replace(/\D/g, '').slice(0, 9))}
-                                                    className="h-10 rounded-xl bg-primary/5 border-primary/20 text-center font-black text-sm tracking-widest text-primary focus-visible:ring-primary"
-                                                    placeholder="7xxxxxxxx"
-                                                />
-                                                <Smartphone className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary opacity-40" />
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl text-center border border-slate-100 dark:border-slate-700">
                                         <p className="text-[11px] font-bold text-muted-foreground uppercase mb-2">تاريخ الانتهاء</p>
                                         <p className="text-sm font-black text-foreground">{inquiryResult.data.expiry}</p>
                                     </div>
-                                    <div className={cn("p-4 rounded-2xl text-center border", (typeof inquiryResult.data.days_left === 'number' && inquiryResult.data.days_left > 10) ? "bg-green-50 border-green-100" : "bg-red-50 border-red-100")}>
-                                        <p className={cn("text-[9px] font-bold uppercase mb-1", (typeof inquiryResult.data.days_left === 'number' && inquiryResult.data.days_left > 10) ? "text-green-600" : "text-red-600")}>الأيام المتبقية</p>
-                                        <p className={cn("text-2xl font-black", (typeof inquiryResult.data.days_left === 'number' && inquiryResult.data.days_left > 10) ? "text-green-600" : "text-red-600")}>
-                                            {typeof inquiryResult.data.days_left === 'number' ? Math.max(0, inquiryResult.data.days_left) : inquiryResult.data.days_left}
-                                        </p>
+                                    <div className={cn("p-4 rounded-2xl text-center border", inquiryResult.data.days_left > 10 ? "bg-green-50 border-green-100" : "bg-red-50 border-red-100")}>
+                                        <p className={cn("text-[9px] font-bold uppercase mb-1", inquiryResult.data.days_left > 10 ? "text-green-600" : "text-red-600")}>الأيام المتبقية</p>
+                                        <p className={cn("text-2xl font-black", inquiryResult.data.days_left > 10 ? "text-green-600" : "text-red-600")}>{Math.max(0, inquiryResult.data.days_left)}</p>
                                     </div>
                                 </div>
                             </div>
