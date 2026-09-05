@@ -190,7 +190,7 @@ export default function TopUpPage() {
                     userId: userProfile.id,
                     transactionDate: now,
                     amount: notifData.amount,
-                    transactionType: `تغذية آلي - ${bankType === 'alomqy' ? 'العمقي' : bankType === 'kuraimi' ? 'الكريمي' : 'بنك أمجاد'}`,
+                    transactionType: `تغذية آلي - ${bankType === 'alomqy' ? 'المشقاص' : bankType === 'kuraimi' ? 'الكريمي' : 'بنك أمجاد'}`,
                     notes: `مطابقة آلية. الوسيلة: ${selectedMethod?.name}`,
                     status: 'success'
                 });
@@ -236,7 +236,7 @@ export default function TopUpPage() {
     };
 
     const methodName = selectedMethod?.name || '';
-    const isAlOmqy = methodName.includes('العمقي');
+    const isAlOmqy = methodName.includes('العمقي') || methodName.includes('المشقاص');
     const isKuraimi = methodName.includes('الكريمي');
     const isAmjad = methodName.includes('امجاد') || methodName.includes('أمجاد');
 
@@ -370,7 +370,7 @@ export default function TopUpPage() {
                                             {!isAmjad && (
                                                 <div className="space-y-2 text-right">
                                                     <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">
-                                                        {isAlOmqy ? 'حسابك بالعمقي' : 'رقم المرجع'}
+                                                        {isAlOmqy ? 'حسابك بالمشقاص' : 'رقم المرجع'}
                                                     </Label>
                                                     <div className="relative">
                                                       <Input 
