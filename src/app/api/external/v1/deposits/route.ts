@@ -3,8 +3,8 @@ import { initializeServerFirebase } from '@/firebase/server-init';
 import { collection, query, where, getDocs, orderBy, limit as firestoreLimit, doc, getDoc, writeBatch, increment } from 'firebase/firestore';
 
 /**
- * @fileOverview نقطة نهاية مراقبة وشحن الإيداعات البنكية v1.7 (Master Scope)
- * تتيح للمدير (Master Key) جلب قائمة الإشعارات، ومطابقتها آلياً مع حسابات العملاء.
+ * @fileOverview نقطة نهاية مراقبة وشحن الإيداعات البنكية v1.8 (Master Scope)
+ * تتيح للمدير (Master Key) جلب قائمة الإشعارات، ومطابقتها مع حسابات العملاء، أو سحبها يدوياً.
  */
 
 const corsHeaders = {
@@ -17,7 +17,7 @@ export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
-// 1. جلب قائمة الإيداعات (موجود مسبقاً)
+// 1. جلب قائمة الإيداعات
 export async function GET(req: Request) {
   const timestamp = new Date().toISOString();
   try {
@@ -70,7 +70,7 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. مطابقة وشحن الإيداع لحساب عميل (الجديد)
+// 2. مطابقة وشحن الإيداع أو سحبه يدوياً
 export async function POST(req: Request) {
     const timestamp = new Date().toISOString();
     try {
@@ -94,11 +94,10 @@ export async function POST(req: Request) {
         const body = await req.json();
         const { depositId, mobile } = body;
 
-        if (!depositId || !mobile) {
-            return NextResponse.json({ success: false, code: 'SM_VALIDATION_ERROR', message: 'depositId and mobile are required', timestamp }, { status: 400, headers: corsHeaders });
+        if (!depositId) {
+            return NextResponse.json({ success: false, code: 'SM_VALIDATION_ERROR', message: 'depositId is required', timestamp }, { status: 400, headers: corsHeaders });
         }
 
-        // 1. جلب بيانات الإيداع
         const depositRef = doc(firestore, 'bankNotifications', depositId);
         const depositSnap = await getDoc(depositRef);
 
@@ -108,71 +107,78 @@ export async function POST(req: Request) {
 
         const depositData = depositSnap.data();
         if (depositData.status === 'paid') {
-            return NextResponse.json({ success: false, code: 'SM_ALREADY_PAID', message: 'Deposit already processed and credited', timestamp }, { status: 400, headers: corsHeaders });
+            return NextResponse.json({ success: false, code: 'SM_ALREADY_PAID', message: 'Deposit already processed', timestamp }, { status: 400, headers: corsHeaders });
         }
 
-        // 2. جلب بيانات العميل المستهدف
-        const cleanMobile = mobile.replace(/\D/g, '').slice(-9);
-        const targetQ = query(collection(firestore, 'users'), where('phoneNumber', '==', cleanMobile));
-        const targetSnap = await getDocs(targetQ);
-
-        if (targetSnap.empty) {
-            return NextResponse.json({ success: false, code: 'SM_USER_NOT_FOUND', message: 'Target user not found', timestamp }, { status: 404, headers: corsHeaders });
-        }
-
-        const targetDoc = targetSnap.docs[0];
-        const targetId = targetDoc.id;
-        const targetData = targetDoc.data();
-
-        // 3. تنفيذ العملية التبادلية (Batch)
         const batch = writeBatch(firestore);
-        
-        // أ. شحن رصيد العميل
-        batch.update(targetDoc.ref, { balance: increment(depositData.amount) });
 
-        // ب. تحديث حالة الإيداع في لوحة تحكم المدير
-        batch.update(depositRef, { 
-            status: 'paid', 
-            paidTo: targetId, 
-            paidAt: timestamp,
-            matchedVia: 'Master-API'
-        });
+        // الحالة الأولى: السحب لشحن حساب عميل (إذا توفر رقم الجوال)
+        if (mobile) {
+            const cleanMobile = mobile.replace(/\D/g, '').slice(-9);
+            const targetQ = query(collection(firestore, 'users'), where('phoneNumber', '==', cleanMobile));
+            const targetSnap = await getDocs(targetQ);
 
-        // ج. تسجيل العملية في حساب العميل
-        const txRef = doc(collection(firestore, `users/${targetId}/transactions`));
-        batch.set(txRef, {
-            userId: targetId,
-            transactionDate: timestamp,
-            amount: depositData.amount,
-            transactionType: `تغذية حساب (API)`,
-            notes: `مطابقة آلية عبر البوت - ${depositData.bank}`,
-            status: 'success'
-        });
+            if (targetSnap.empty) {
+                return NextResponse.json({ success: false, code: 'SM_USER_NOT_FOUND', message: 'Target user not found', timestamp }, { status: 404, headers: corsHeaders });
+            }
 
-        // د. إرسال إشعار للعميل
-        const notifRef = doc(collection(firestore, `users/${targetId}/notifications`));
-        batch.set(notifRef, {
-            title: 'تم شحن رصيدك ✅',
-            body: `تم إضافة ${depositData.amount.toLocaleString()} ريال لحسابك عبر مطابقة إيداع بنكي.`,
-            timestamp: timestamp
-        });
+            const targetDoc = targetSnap.docs[0];
+            const targetId = targetDoc.id;
+            const targetData = targetDoc.data();
 
-        await batch.commit();
+            batch.update(targetDoc.ref, { balance: increment(depositData.amount) });
+            batch.update(depositRef, { status: 'paid', paidTo: targetId, paidAt: timestamp, matchedVia: 'Master-API' });
 
-        return NextResponse.json({
-            success: true,
-            code: 'SM_SUCCESS',
-            message: 'Deposit credited to user successfully',
-            data: {
-                creditedTo: targetData.displayName,
+            const txRef = doc(collection(firestore, `users/${targetId}/transactions`));
+            batch.set(txRef, {
+                userId: targetId,
+                transactionDate: timestamp,
                 amount: depositData.amount,
-                newBalance: (targetData.balance || 0) + depositData.amount
-            },
-            timestamp
-        }, { headers: corsHeaders });
+                transactionType: `تغذية حساب (API)`,
+                notes: `مطابقة آلية عبر البوت - ${depositData.bank}`,
+                status: 'success'
+            });
+
+            const notifRef = doc(collection(firestore, `users/${targetId}/notifications`));
+            batch.set(notifRef, {
+                title: 'تم شحن رصيدك ✅',
+                body: `تم إضافة ${depositData.amount.toLocaleString()} ريال لحسابك عبر مطابقة إيداع بنكي.`,
+                timestamp: timestamp
+            });
+
+            await batch.commit();
+
+            return NextResponse.json({
+                success: true,
+                code: 'SM_SUCCESS',
+                message: 'Deposit credited to user successfully',
+                data: { creditedTo: targetData.displayName, amount: depositData.amount, type: 'credit' },
+                timestamp
+            }, { headers: corsHeaders });
+        } 
+        
+        // الحالة الثانية: سحب يدوي (بدون رقم جوال) - فقط تصفير الحوالة
+        else {
+            batch.update(depositRef, { 
+                status: 'paid', 
+                paidTo: 'manual_withdrawal', 
+                paidAt: timestamp,
+                matchedVia: 'Master-API-Manual'
+            });
+
+            await batch.commit();
+
+            return NextResponse.json({
+                success: true,
+                code: 'SM_SUCCESS',
+                message: 'Deposit marked as paid (Manual Withdrawal)',
+                data: { amount: depositData.amount, type: 'manual' },
+                timestamp
+            }, { headers: corsHeaders });
+        }
 
     } catch (error: any) {
-        console.error('API Deposit Credit Error:', error);
+        console.error('API Deposit Processing Error:', error);
         return NextResponse.json({ success: false, code: 'SM_INTERNAL_ERROR', message: error.message, timestamp }, { status: 500, headers: corsHeaders });
     }
 }
