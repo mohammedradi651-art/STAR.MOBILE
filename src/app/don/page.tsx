@@ -5,14 +5,13 @@ import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 
 /**
- * @fileOverview صفحة التحميل التعريفية المحدثة
- * إصلاح الصور، توسيط الأزرار، وتعديل شبكة الخدمات لتكون بعمودين زرقاء بالكامل.
+ * @fileOverview صفحة التحميل التعريفية النهائية
+ * استخدام الصور المحلية المحددة ورفع التذييل قليلاً مع الحفاظ على تنسيق الخدمات (2 في سطر).
  */
 export default function DownloadPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // التمرير السلس للروابط
     const handleAnchorClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       const link = target.closest('a');
@@ -100,13 +99,13 @@ export default function DownloadPage() {
             padding: 10px; background: #fff; border-radius: 27px; box-shadow: 0 18px 32px rgba(28,62,102,.14);
             transform: rotate(-7deg); display: flex; align-items: center; justify-content: center;
         }
-        .hero-brand img { width: 100%; height: 100%; object-fit: cover; border-radius: 18px; }
+        .hero-brand img { width: 100%; height: 100%; object-fit: contain; border-radius: 18px; }
         .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; background: #fff; border: 1px solid #dfe7f1; border-radius: 14px; margin-top: 20px; }
         .stats > div { padding: 22px 10px; border-left: 1px solid #dfe7f1; text-align: center; }
         .stats > div:last-child { border-left: none; }
         .stats strong { display: block; font-size: 25px; color: #0758ae; font-family: 'Manrope', sans-serif; }
         .stats small { color: #71809a; font-size: 9px; }
-        .services-section { padding: 80px 0; }
+        .services-section { padding: 80px 0 40px; } /* تم تقليل الـ bottom padding */
         .service-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
         .feature-card { 
             min-height: 220px; padding: 20px; border-radius: 24px; background: linear-gradient(145deg, #0b4d9f, #0965bd); 
@@ -115,7 +114,7 @@ export default function DownloadPage() {
         }
         .feature-card h3 { font-size: 16px; font-weight: 800; margin-bottom: 10px; color: #fff; }
         .feature-card p { font-size: 11px; opacity: 0.9; lineHeight: 1.8; color: #fff; }
-        .footer { padding: 40px 0; border-top: 1px solid #dfe7f1; text-align: center; display: flex; flex-direction: column; gap: 12px; }
+        .footer { padding: 20px 0 40px; border-top: 1px solid #dfe7f1; text-align: center; display: flex; flex-direction: column; gap: 8px; } /* تم رفع الفوتر بتقليل الـ padding و الـ gap */
         
         @media(max-width: 650px) {
             .hero { grid-template-columns: 1fr; gap: 40px; text-align: center; padding-top: 20px; }
@@ -135,7 +134,7 @@ export default function DownloadPage() {
       <div className="don-page-root site-shell">
         <header className="topbar container">
           <div className="brand">
-            <img src="https://i.postimg.cc/2551nF1s/20260308-183624.jpg" alt="Star Mobile" className="brand-logo" style={{ borderRadius: '12px' }} />
+            <img src="/Untitled-1.png" alt="Star Mobile" className="brand-logo" style={{ borderRadius: '12px' }} />
           </div>
           <nav className="desktop-nav" style={{ display: 'flex', gap: '30px' }}>
             <a href="#home" style={{ fontSize: '13px', fontWeight: 'bold', color: '#122d5b', textDecoration: 'none' }}>الرئيسية</a>
@@ -172,11 +171,11 @@ export default function DownloadPage() {
 
             <div className="hero-visual">
               <div className="hero-brand">
-                <img src="https://i.postimg.cc/2551nF1s/20260308-183624.jpg" alt="Logo" />
+                <img src="/Untitled-1.png" alt="Logo" />
               </div>
               <div className="phone">
                 <div className="phone-screen">
-                  <img src="https://i.postimg.cc/SNtjK4ZZ/IMG-20260224-WA0012.jpg" alt="App Preview" className="phone-preview-image" />
+                  <img src="/لقطة شاشة 2026-09-11 174421.png" alt="App Preview" className="phone-preview-image" />
                 </div>
               </div>
             </div>
@@ -217,7 +216,7 @@ export default function DownloadPage() {
         </main>
 
         <footer className="footer container">
-          <img src="https://i.postimg.cc/2551nF1s/20260308-183624.jpg" alt="Star Mobile" style={{ width: '80px', margin: '0 auto', borderRadius: '12px' }} />
+          <img src="/Untitled-1.png" alt="Star Mobile" style={{ width: '80px', margin: '0 auto', borderRadius: '12px' }} />
           <p style={{ fontSize: '12px', color: '#71809a' }}>خدماتك كلها، بلمسة ستار.</p>
           <span style={{ fontSize: '10px', color: '#71809a', opacity: 0.5 }}>© 2026 ستار موبايل</span>
         </footer>
