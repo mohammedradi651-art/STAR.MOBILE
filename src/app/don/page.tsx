@@ -6,7 +6,7 @@ import { Toaster } from '@/components/ui/toaster';
 
 /**
  * @fileOverview صفحة التحميل التعريفية النهائية المحدثة
- * تطبيق طلبات المدير: شعار منحني، دوائر تقييم ملونة، وشعار عائم مصغر ومرتفع لظهور الجوال كاملاً.
+ * إصلاح شامل: الشعارات مربعة منحنية، الشعار العائم مرتفع، والجوال يظهر كاملاً.
  */
 export default function DownloadPage() {
   const { toast } = useToast();
@@ -65,9 +65,21 @@ export default function DownloadPage() {
                         linear-gradient(135deg,#f7f9fd 0%,#fff 52%,#f6f8fc 100%);
         }
         .container { width: min(1160px, calc(100% - 48px)); margin: 0 auto; }
-        .topbar { height: 82px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(190,205,223,.55); }
-        .brand-logo { width: 126px; height: 52px; object-fit: contain; border-radius: 16px; margin-right: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-        .hero { display: grid; grid-template-columns: 1.02fr .98fr; gap: 72px; padding-top: 40px; min-height: 620px; align-items: center; }
+        .topbar { height: 90px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(190,205,223,.55); }
+        
+        /* شعار الهيدر - مربع منحني */
+        .brand-logo { 
+            width: 65px; 
+            height: 65px; 
+            object-fit: contain; 
+            border-radius: 20px; 
+            margin-left: 20px; 
+            box-shadow: 0 8px 20px rgba(0,0,0,0.08); 
+            background: #fff;
+            padding: 8px;
+        }
+        
+        .hero { display: grid; grid-template-columns: 1.02fr .98fr; gap: 72px; padding-top: 40px; min-height: 700px; align-items: center; }
         .eyebrow { color: #0758ae; font-size: 10px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
         .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #0758ae; box-shadow: 0 0 0 5px rgba(7,88,174,.1); }
         h1 { font-size: clamp(43px, 5.8vw, 70px); line-height: 1.28; letter-spacing: -1.8px; color: #122d5b; margin: 22px 0 20px; font-weight: 900; }
@@ -75,77 +87,120 @@ export default function DownloadPage() {
         .hero-text { color: #71809a; font-size: 12px; line-height: 2.15; max-width: 475px; margin-bottom: 29px; }
         .hero-actions { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 320px; }
         .primary-btn { 
-            height: 52px; border-radius: 14px; cursor: pointer; border: none;
-            background: #0758ae; color: #fff; font-weight: 800; font-size: 14px;
-            box-shadow: 0 8px 18px rgba(7,88,174,0.2); transition: all 0.3s;
+            height: 55px; border-radius: 16px; cursor: pointer; border: none;
+            background: #0758ae; color: #fff; font-weight: 800; font-size: 15px;
+            box-shadow: 0 10px 25px rgba(7,88,174,0.25); transition: all 0.3s;
             display: flex; align-items: center; justify-content: center; gap: 10px;
         }
         .primary-btn:active { transform: scale(0.95); }
         .secondary-btn { 
-            height: 52px; border-radius: 14px; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 10px;
-            border: 2px solid #0758ae; color: #0758ae; background: #fff; font-weight: 800; font-size: 14px; transition: all 0.3s;
+            height: 55px; border-radius: 16px; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 10px;
+            border: 2.5px solid #0758ae; color: #0758ae; background: #fff; font-weight: 800; font-size: 15px; transition: all 0.3s;
         }
         .secondary-btn:active { background: #f0f7ff; transform: scale(0.95); }
-        .hero-visual { position: relative; height: 600px; display: flex; align-items: center; justify-content: center; margin-top: 20px; }
+        
+        /* منطقة العرض - تم زيادة الارتفاع لظهور الجوال كاملاً */
+        .hero-visual { position: relative; height: 680px; display: flex; align-items: center; justify-content: center; margin-top: 30px; }
+        
         .phone { 
-            width: 275px; height: 530px; background: #1a234d; border-radius: 34px; padding: 8px; 
-            transform: rotate(2.5deg); box-shadow: 0 28px 50px rgba(26,65,113,.22); 
+            width: 285px; height: 580px; background: #1a234d; border-radius: 40px; padding: 10px; 
+            transform: rotate(2.5deg); box-shadow: 0 35px 70px rgba(26,65,113,0.3); 
             position: relative; z-index: 2;
         }
-        .phone-screen { height: 100%; border-radius: 28px; background: #dfe6ef; overflow: hidden; position: relative; }
+        .phone-screen { height: 100%; border-radius: 32px; background: #dfe6ef; overflow: hidden; position: relative; }
         .phone-preview-image { width: 100%; height: 100%; object-fit: cover; }
+        
+        /* الشعار العائم - مربع منحني ومرفوع وصغير */
         .hero-brand { 
-            position: absolute; left: -10px; top: -10px; z-index: 4; width: 85px; height: 85px; 
-            padding: 8px; background: #fff; border-radius: 22px; box-shadow: 0 18px 32px rgba(28,62,102,.14);
-            transform: rotate(-7deg); display: flex; align-items: center; justify-content: center;
+            position: absolute; 
+            left: -15px; 
+            top: -45px; 
+            z-index: 5; 
+            width: 95px; 
+            height: 95px; 
+            padding: 12px; 
+            background: #fff; 
+            border-radius: 28px; 
+            box-shadow: 0 20px 45px rgba(28,62,102,0.18);
+            transform: rotate(-8deg); 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
         }
-        .hero-brand img { width: 100%; height: 100%; object-fit: contain; border-radius: 16px; }
+        .hero-brand img { width: 100%; height: 100%; object-fit: contain; border-radius: 18px; }
+        
         .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; background: #fff; border: 1px solid #dfe7f1; border-radius: 14px; margin-top: 20px; }
         .stats > div { padding: 22px 10px; border-left: 1px solid #dfe7f1; text-align: center; }
         .stats > div:last-child { border-left: none; }
         .stats strong { display: block; font-size: 25px; color: #0758ae; font-family: 'Manrope', sans-serif; }
         .stats small { color: #71809a; font-size: 9px; }
-        .services-section { padding: 80px 0 40px; }
-        .service-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-        .feature-card { 
-            min-height: 220px; padding: 20px; border-radius: 24px; background: linear-gradient(145deg, #0b4d9f, #0965bd); 
-            color: #fff; border: none; box-shadow: 0 12px 25px rgba(5, 73, 157, 0.15);
-            display: flex; flex-direction: column; justify-content: center; text-align: center;
-        }
-        .feature-card h3 { font-size: 16px; font-weight: 800; margin-bottom: 10px; color: #fff; }
-        .feature-card p { font-size: 11px; opacity: 0.9; lineHeight: 1.8; color: #fff; }
-        .footer { padding: 20px 0 40px; border-top: 1px solid #dfe7f1; text-align: center; display: flex; flex-direction: column; gap: 8px; }
         
+        .services-section { padding: 80px 0 60px; }
+        
+        /* الخدمات - 2 في سطر وتصميم موحد */
+        .service-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+        .feature-card { 
+            min-height: 220px; 
+            padding: 24px; 
+            border-radius: 28px; 
+            background: linear-gradient(145deg, #0b4d9f, #0965bd); 
+            color: #fff; 
+            border: none; 
+            box-shadow: 0 15px 35px rgba(5, 73, 157, 0.18);
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            text-align: center;
+            transition: transform 0.3s;
+        }
+        .feature-card:active { transform: scale(0.97); }
+        .feature-card h3 { font-size: 16px; font-weight: 800; margin-bottom: 10px; color: #fff; }
+        .feature-card p { font-size: 11px; opacity: 0.95; line-height: 1.85; color: #fff; }
+        
+        .footer { padding: 40px 0 50px; border-top: 1px solid #dfe7f1; text-align: center; display: flex; flex-direction: column; gap: 12px; margin-top: 30px; }
+        
+        /* شعار التذييل - مربع منحني */
+        .footer-logo {
+            width: 85px;
+            height: 85px;
+            margin: 0 auto;
+            border-radius: 24px;
+            background: #fff;
+            padding: 10px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.06);
+            object-fit: contain;
+        }
+
         .avatar {
-            width: 32px; height: 32px; border-radius: 50%; border: 2px solid #fff; 
-            margin-left: -10px; display: flex; align-items: center; justify-content: center; 
-            font-size: 11px; font-weight: 900; color: #fff; box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            width: 36px; height: 36px; border-radius: 50%; border: 2px solid #fff; 
+            margin-left: -12px; display: flex; align-items: center; justify-content: center; 
+            font-size: 13px; font-weight: 900; color: #fff; box-shadow: 0 6px 12px rgba(0,0,0,0.12);
         }
 
         @media(max-width: 650px) {
-            .hero { grid-template-columns: 1fr; gap: 40px; text-align: center; padding-top: 20px; }
+            .hero { grid-template-columns: 1fr; gap: 50px; text-align: center; padding-top: 30px; }
             .hero-copy { display: flex; flex-direction: column; align-items: center; }
             .hero-actions { width: 100%; }
-            .phone { width: 240px; height: 464px; }
+            .phone { width: 260px; height: 530px; }
+            .hero-visual { height: 580px; }
             .stats { grid-template-columns: repeat(2, 1fr); }
             .stats > div:nth-child(2) { border-left: none; }
             .stats > div:nth-child(3), .stats > div:nth-child(4) { border-top: 1px solid #dfe7f1; }
-            .service-cards { gap: 10px; }
-            .feature-card { min-height: 200px; padding: 15px; }
-            .feature-card h3 { font-size: 14px; }
-            .feature-card p { font-size: 10px; }
-            .hero-brand { width: 70px; height: 70px; top: -15px; left: calc(50% - 145px); }
+            .service-cards { gap: 12px; }
+            .feature-card { min-height: 200px; padding: 20px; }
+            .hero-brand { width: 80px; height: 80px; top: -35px; left: calc(50% - 155px); }
+            .brand-logo { margin-left: 10px; width: 60px; height: 60px; }
         }
       ` }} />
 
       <div className="don-page-root site-shell">
         <header className="topbar container">
-          <div className="brand">
+          <div className="brand" style={{ display: 'flex', alignItems: 'center' }}>
             <img src="/Untitled-1.png" alt="Star Mobile" className="brand-logo" />
           </div>
           <nav className="desktop-nav" style={{ display: 'flex', gap: '30px' }}>
-            <a href="#home" style={{ fontSize: '13px', fontWeight: 'bold', color: '#122d5b', textDecoration: 'none' }}>الرئيسية</a>
-            <a href="#services" style={{ fontSize: '13px', fontWeight: 'bold', color: '#71809a', textDecoration: 'none' }}>الخدمات</a>
+            <a href="#home" style={{ fontSize: '14px', fontWeight: '900', color: '#122d5b', textDecoration: 'none' }}>الرئيسية</a>
+            <a href="#services" style={{ fontSize: '14px', fontWeight: '900', color: '#71809a', textDecoration: 'none' }}>الخدمات</a>
           </nav>
         </header>
 
@@ -160,21 +215,21 @@ export default function DownloadPage() {
                 <button className="primary-btn" onClick={handleInstallApp}>
                    تحميل التطبيق ↓
                 </button>
-                <a className="secondary-btn" href="https://star26.vercel.app" target="_blank" rel="noopener">
-                   <span>▶</span> فتح نسخة الويب
+                <a className="secondary-btn" href="https://star26.vercel.app" target="_blank" rel="noopener" style={{ textAlign: 'center' }}>
+                   فتح نسخة الويب
                 </a>
               </div>
 
-              <div style={{ marginTop: '30px', display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <div style={{ marginTop: '40px', display: 'flex', alignItems: 'center', gap: '15px' }}>
                 <div style={{ display: 'flex', direction: 'ltr' }}>
-                    <div className="avatar" style={{ background: '#B32C4C' }}>س</div>
-                    <div className="avatar" style={{ background: '#0048ad' }}>ح</div>
-                    <div className="avatar" style={{ background: '#FECC4F' }}>م</div>
-                    <div className="avatar" style={{ background: '#122d5b', fontSize: '8px' }}>+10K</div>
+                    <div className="avatar" style={{ background: '#0048ad', zIndex: 3 }}>م</div>
+                    <div className="avatar" style={{ background: '#B32C4C', zIndex: 2 }}>ح</div>
+                    <div className="avatar" style={{ background: '#FECC4F', zIndex: 1 }}>س</div>
+                    <div className="avatar" style={{ background: '#122d5b', fontSize: '10px', zIndex: 0 }}>+10K</div>
                 </div>
                 <div>
-                    <div style={{ color: '#ffad35', fontSize: '14px' }}>★★★★★ <b>4.9</b></div>
-                    <small style={{ color: '#71809a', fontSize: '10px' }}>تقييم المستخدمين</small>
+                    <div style={{ color: '#ffad35', fontSize: '16px' }}>★★★★★ <b>4.9</b></div>
+                    <small style={{ color: '#71809a', fontSize: '11px', fontWeight: 'bold' }}>تقييم المستخدمين</small>
                 </div>
               </div>
             </div>
@@ -199,9 +254,9 @@ export default function DownloadPage() {
           </section>
 
           <section className="services-section container" id="services">
-            <div style={{ marginBottom: '40px', textAlign: 'center' }}>
-                <h2 style={{ fontSize: '32px', color: '#122d5b', fontWeight: '900' }}>كل خدماتك في مكان واحد</h2>
-                <p style={{ color: '#71809a', fontSize: '14px', marginTop: '10px' }}>من شحن الرصيد إلى دفع الألعاب، ستار موبايل يجعل كل شيء أسرع وأسهل.</p>
+            <div style={{ marginBottom: '45px', textAlign: 'center' }}>
+                <h2 style={{ fontSize: '34px', color: '#122d5b', fontWeight: '900' }}>كل خدماتك في مكان واحد</h2>
+                <p style={{ color: '#71809a', fontSize: '15px', marginTop: '12px', fontWeight: 'bold' }}>من شحن الرصيد إلى دفع الألعاب، ستار موبايل يجعل كل شيء أسرع وأسهل.</p>
             </div>
             
             <div className="service-cards">
@@ -226,9 +281,9 @@ export default function DownloadPage() {
         </main>
 
         <footer className="footer container">
-          <img src="/Untitled-1.png" alt="Star Mobile" style={{ width: '80px', margin: '0 auto', borderRadius: '12px' }} />
-          <p style={{ fontSize: '12px', color: '#71809a' }}>خدماتك كلها، بلمسة ستار.</p>
-          <span style={{ fontSize: '10px', color: '#71809a', opacity: 0.5 }}>© 2026 ستار موبايل</span>
+          <img src="/Untitled-1.png" alt="Star Mobile" className="footer-logo" />
+          <p style={{ fontSize: '14px', color: '#122d5b', fontWeight: '900' }}>خدماتك كلها، بلمسة ستار.</p>
+          <span style={{ fontSize: '11px', color: '#71809a', opacity: 0.6, fontWeight: 'bold' }}>© 2026 ستار موبايل - جميع الحقوق محفوظة</span>
         </footer>
       </div>
       <Toaster />
