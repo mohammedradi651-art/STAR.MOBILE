@@ -11,14 +11,9 @@ import {
     Wallet, 
     CheckCircle2,
     Loader2,
-    Smartphone,
     CheckCircle,
     Zap,
-    Calendar,
-    Clock,
-    ShieldCheck,
-    CreditCard,
-    Sparkles
+    Smartphone
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -27,8 +22,6 @@ import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
-import { ar } from 'date-fns/locale';
 import Lottie from 'lottie-react';
 
 export const dynamic = 'force-dynamic';
@@ -49,7 +42,7 @@ type UserProfile = {
 };
 
 /**
- * مكون التحميل بالشعار المتحرك المعتمد مع ضباب أسود خفيف جداً لرؤية الصفحة خلفه
+ * مكون التحميل بالشعار المتحرك المعتمد
  */
 const TopUpMovingLoader = () => {
   const [animationData, setAnimationData] = useState<any>(null);
@@ -278,7 +271,6 @@ export default function TopUpPage() {
 
     return (
         <div className="flex flex-col h-full bg-[#F8FAFC] dark:bg-slate-950">
-            <audio ref={audioRef} src="/ashar.mp3" preload="auto" />
             <SimpleHeader title="تغذية الحساب" />
             
             {isVerifyingBank && <TopUpMovingLoader />}
