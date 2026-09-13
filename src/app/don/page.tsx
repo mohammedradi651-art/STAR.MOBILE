@@ -5,8 +5,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 
 /**
- * @fileOverview صفحة التحميل التعريفية النهائية
- * استخدام الصور المحلية المحددة ورفع التذييل قليلاً مع الحفاظ على تنسيق الخدمات (2 في سطر).
+ * @fileOverview صفحة التحميل التعريفية النهائية المحدثة
+ * تطبيق طلبات المدير: شعار منحني، دوائر تقييم ملونة، وشعار عائم مصغر ومرتفع لظهور الجوال كاملاً.
  */
 export default function DownloadPage() {
   const { toast } = useToast();
@@ -66,7 +66,7 @@ export default function DownloadPage() {
         }
         .container { width: min(1160px, calc(100% - 48px)); margin: 0 auto; }
         .topbar { height: 82px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(190,205,223,.55); }
-        .brand-logo { width: 126px; height: 52px; object-fit: contain; }
+        .brand-logo { width: 126px; height: 52px; object-fit: contain; border-radius: 16px; margin-right: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
         .hero { display: grid; grid-template-columns: 1.02fr .98fr; gap: 72px; padding-top: 40px; min-height: 620px; align-items: center; }
         .eyebrow { color: #0758ae; font-size: 10px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
         .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #0758ae; box-shadow: 0 0 0 5px rgba(7,88,174,.1); }
@@ -86,7 +86,7 @@ export default function DownloadPage() {
             border: 2px solid #0758ae; color: #0758ae; background: #fff; font-weight: 800; font-size: 14px; transition: all 0.3s;
         }
         .secondary-btn:active { background: #f0f7ff; transform: scale(0.95); }
-        .hero-visual { position: relative; height: 550px; display: flex; align-items: center; justify-content: center; }
+        .hero-visual { position: relative; height: 600px; display: flex; align-items: center; justify-content: center; margin-top: 20px; }
         .phone { 
             width: 275px; height: 530px; background: #1a234d; border-radius: 34px; padding: 8px; 
             transform: rotate(2.5deg); box-shadow: 0 28px 50px rgba(26,65,113,.22); 
@@ -95,17 +95,17 @@ export default function DownloadPage() {
         .phone-screen { height: 100%; border-radius: 28px; background: #dfe6ef; overflow: hidden; position: relative; }
         .phone-preview-image { width: 100%; height: 100%; object-fit: cover; }
         .hero-brand { 
-            position: absolute; left: -20px; top: 35px; z-index: 4; width: 110px; height: 110px; 
-            padding: 10px; background: #fff; border-radius: 27px; box-shadow: 0 18px 32px rgba(28,62,102,.14);
+            position: absolute; left: -10px; top: -10px; z-index: 4; width: 85px; height: 85px; 
+            padding: 8px; background: #fff; border-radius: 22px; box-shadow: 0 18px 32px rgba(28,62,102,.14);
             transform: rotate(-7deg); display: flex; align-items: center; justify-content: center;
         }
-        .hero-brand img { width: 100%; height: 100%; object-fit: contain; border-radius: 18px; }
+        .hero-brand img { width: 100%; height: 100%; object-fit: contain; border-radius: 16px; }
         .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; background: #fff; border: 1px solid #dfe7f1; border-radius: 14px; margin-top: 20px; }
         .stats > div { padding: 22px 10px; border-left: 1px solid #dfe7f1; text-align: center; }
         .stats > div:last-child { border-left: none; }
         .stats strong { display: block; font-size: 25px; color: #0758ae; font-family: 'Manrope', sans-serif; }
         .stats small { color: #71809a; font-size: 9px; }
-        .services-section { padding: 80px 0 40px; } /* تم تقليل الـ bottom padding */
+        .services-section { padding: 80px 0 40px; }
         .service-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
         .feature-card { 
             min-height: 220px; padding: 20px; border-radius: 24px; background: linear-gradient(145deg, #0b4d9f, #0965bd); 
@@ -114,8 +114,14 @@ export default function DownloadPage() {
         }
         .feature-card h3 { font-size: 16px; font-weight: 800; margin-bottom: 10px; color: #fff; }
         .feature-card p { font-size: 11px; opacity: 0.9; lineHeight: 1.8; color: #fff; }
-        .footer { padding: 20px 0 40px; border-top: 1px solid #dfe7f1; text-align: center; display: flex; flex-direction: column; gap: 8px; } /* تم رفع الفوتر بتقليل الـ padding و الـ gap */
+        .footer { padding: 20px 0 40px; border-top: 1px solid #dfe7f1; text-align: center; display: flex; flex-direction: column; gap: 8px; }
         
+        .avatar {
+            width: 32px; height: 32px; border-radius: 50%; border: 2px solid #fff; 
+            margin-left: -10px; display: flex; align-items: center; justify-content: center; 
+            font-size: 11px; font-weight: 900; color: #fff; box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
         @media(max-width: 650px) {
             .hero { grid-template-columns: 1fr; gap: 40px; text-align: center; padding-top: 20px; }
             .hero-copy { display: flex; flex-direction: column; align-items: center; }
@@ -128,13 +134,14 @@ export default function DownloadPage() {
             .feature-card { min-height: 200px; padding: 15px; }
             .feature-card h3 { font-size: 14px; }
             .feature-card p { font-size: 10px; }
+            .hero-brand { width: 70px; height: 70px; top: -15px; left: calc(50% - 145px); }
         }
       ` }} />
 
       <div className="don-page-root site-shell">
         <header className="topbar container">
           <div className="brand">
-            <img src="/Untitled-1.png" alt="Star Mobile" className="brand-logo" style={{ borderRadius: '12px' }} />
+            <img src="/Untitled-1.png" alt="Star Mobile" className="brand-logo" />
           </div>
           <nav className="desktop-nav" style={{ display: 'flex', gap: '30px' }}>
             <a href="#home" style={{ fontSize: '13px', fontWeight: 'bold', color: '#122d5b', textDecoration: 'none' }}>الرئيسية</a>
@@ -160,7 +167,10 @@ export default function DownloadPage() {
 
               <div style={{ marginTop: '30px', display: 'flex', alignItems: 'center', gap: '15px' }}>
                 <div style={{ display: 'flex', direction: 'ltr' }}>
-                    {[1,2,3].map(i => <span key={i} style={{ width: '30px', height: '30px', borderRadius: '50%', border: '2px solid #fff', background: '#e2e8f0', marginLeft: '-8px' }}></span>)}
+                    <div className="avatar" style={{ background: '#B32C4C' }}>س</div>
+                    <div className="avatar" style={{ background: '#0048ad' }}>ح</div>
+                    <div className="avatar" style={{ background: '#FECC4F' }}>م</div>
+                    <div className="avatar" style={{ background: '#122d5b', fontSize: '8px' }}>+10K</div>
                 </div>
                 <div>
                     <div style={{ color: '#ffad35', fontSize: '14px' }}>★★★★★ <b>4.9</b></div>
