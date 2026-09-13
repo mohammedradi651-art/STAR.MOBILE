@@ -58,12 +58,21 @@ function AppContent({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Global PWA Install Prompt Listener
   useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      (window as any).deferredPrompt = e;
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js?v=' + APP_VERSION, {
         updateViaCache: 'none'
       }).catch(() => {});
     }
+
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
   const userDocRef = useMemoFirebase(
@@ -72,7 +81,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
   );
   const { data: userProfile } = useDoc<UserProfile>(userDocRef);
 
-  // تم إضافة /transactions هنا لضمان بقاء شريط التنقل
   const isNavVisiblePage = [
     '/login', 
     '/renewal-requests', 
