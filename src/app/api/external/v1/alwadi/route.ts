@@ -3,11 +3,10 @@ import { initializeServerFirebase } from '@/firebase/server-init';
 import { collection, query, where, getDocs, doc, writeBatch, increment } from 'firebase/firestore';
 
 /**
- * @fileOverview نقطة نهاية منظومة الوادي v1.7.2 (نسخة الحماية المالية النهائية)
- * - تمنع التجديد بدون Subscriber ID نهائياً.
- * - تطبق خصم 2.5% للربط البرمجي (Master & Client API).
- * - تعمل تماماً كغلاف للمسارات الداخلية الشغالة في التطبيق.
- * - تدعم وضع التجديد التجريبي (test_renew).
+ * @fileOverview نقطة نهاية منظومة الوادي v1.7.5 (نسخة الربط السريع)
+ * - جعلت الـ subscriberId اختيارياً بناءً على طلب المدير.
+ * - تمنع التجديد بدون رقم الكرت (number) ورقم الباقة (packageId) نهائياً.
+ * - تطبق خصم 2.5% للربط البرمجي.
  */
 
 const corsHeaders = {
@@ -78,7 +77,7 @@ export async function POST(req: Request) {
                     expiryDate: result.data.expiry,
                     daysLeft: result.data.days_left,
                     cardNumber: result.data.cardNumber,
-                    subscriberId: result.data.id // هذا هو الرقم المطلوب للخطوة التالية
+                    subscriberId: result.data.id // اختياري للخطوة التالية
                 },
                 timestamp
             }, { headers: corsHeaders });
@@ -86,16 +85,29 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: false, code: 'SM_NOT_FOUND', message: result.message || 'Not found', timestamp }, { status: 404, headers: corsHeaders });
     }
 
-    // أسعار الباقات مع خصم 2.5% (مثال: 3000 تصبح 2925)
+    // أسعار الباقات مع خصم 2.5%
     const originalPrices: Record<string, number> = { "1": 3000, "3": 6000, "7": 9000, "9": 15000 };
     const discountedPrices: Record<string, number> = { "1": 2925, "3": 5850, "7": 8775, "9": 14625 };
     
     const price = discountedPrices[packageId];
+
+    // حماية: منع أي عملية سداد بدون رقم الكرت ورقم الباقة
+    if (!number || !packageId) {
+        if (action === 'renew' || action === 'test_renew') {
+            return NextResponse.json({ 
+                success: false, 
+                code: 'SM_VALIDATION_ERROR', 
+                message: 'Card number and packageId are required', 
+                timestamp 
+            }, { status: 400, headers: corsHeaders });
+        }
+    }
+
     if (!price && (action === 'renew' || action === 'test_renew')) {
         return NextResponse.json({ success: false, code: 'SM_VALIDATION_ERROR', message: 'Invalid packageId. Use (1, 3, 7, 9)', timestamp }, { status: 400, headers: corsHeaders });
     }
 
-    // ب. التجديد التجريبي (Test Renew) - خصم وهمي واسترجاع فوري
+    // ب. التجديد التجريبي (Test Renew)
     if (action === 'test_renew') {
         if ((userData.balance || 0) < price) {
             return NextResponse.json({ success: false, code: 'SM_INSUFFICIENT_BALANCE', message: 'Insufficient balance for test', timestamp }, { status: 400, headers: corsHeaders });
@@ -104,7 +116,6 @@ export async function POST(req: Request) {
         const batch = writeBatch(firestore);
         const txRef = doc(collection(firestore, `users/${userId}/transactions`));
         
-        // تسجيل عملية تجريبية
         batch.set(txRef, {
             userId, transactionDate: timestamp, amount: price,
             transactionType: 'تجديد تجريبي (API)', notes: `تجربة كرت: ${number} - تم الاسترجاع فوراً`,
@@ -116,30 +127,20 @@ export async function POST(req: Request) {
         return NextResponse.json({
             success: true,
             code: 'SM_SUCCESS',
-            message: 'Test renewal successful (Balance simulated)',
+            message: 'Test renewal successful (Simulated)',
             transactionId: `TEST-${Date.now()}`,
-            data: { cardNumber: number, amount: price, mode: 'demo', client: userData.displayName },
+            data: { cardNumber: number, amount: price, mode: 'demo' },
             timestamp
         }, { headers: corsHeaders });
     }
 
     // ج. التجديد الفعلي (Renew)
     if (action === 'renew') {
-        // حماية حاسمة: منع الإرسال بدون معرف المشترك نهائياً
-        if (!subscriberId) {
-            return NextResponse.json({ 
-                success: false, 
-                code: 'SM_VALIDATION_ERROR', 
-                message: 'CRITICAL ERROR: subscriberId is missing. You must perform lookup first.', 
-                timestamp 
-            }, { status: 400, headers: corsHeaders });
-        }
-
         if ((userData.balance || 0) < price) {
             return NextResponse.json({ success: false, code: 'SM_INSUFFICIENT_BALANCE', message: 'Insufficient balance', timestamp }, { status: 400, headers: corsHeaders });
         }
 
-        // استدعاء المسار الداخلي الشغال في التطبيق (نفس منطق تطبيقك)
+        // استدعاء المسار الداخلي
         const response = await fetch(`${origin}/api/alwadi/renew`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -148,14 +149,11 @@ export async function POST(req: Request) {
         const result = await response.json();
 
         if (result.success) {
-            // تنفيذ الخصم الحقيقي مع نسبة الـ 2.5%
             const batch = writeBatch(firestore);
             const userRef = doc(firestore, 'users', userId);
             
-            // خصم المبلغ الصافي بعد خصم الـ 2.5%
             batch.update(userRef, { balance: increment(-price) });
 
-            // تسجيل العملية في سجل العميل
             const txRef = doc(collection(firestore, `users/${userId}/transactions`));
             batch.set(txRef, {
                 userId,
@@ -171,7 +169,7 @@ export async function POST(req: Request) {
             return NextResponse.json({
                 success: true,
                 code: 'SM_SUCCESS',
-                message: 'Renewal successful with 2.5% discount applied',
+                message: 'Renewal successful',
                 transactionId: `ALW-API-${Date.now()}`,
                 data: { cardNumber: number, amount: price, client: userData.displayName },
                 timestamp
@@ -181,7 +179,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ 
             success: false, 
             code: 'SM_PROVIDER_ERROR', 
-            message: result.message || 'The provider refused the request', 
+            message: result.message || 'Provider error', 
             timestamp 
         }, { status: 400, headers: corsHeaders });
     }
@@ -189,7 +187,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ 
         success: false, 
         code: 'SM_VALIDATION_ERROR', 
-        message: 'Action not found. Valid: lookup, renew, test_renew', 
+        message: 'Action not found', 
         timestamp 
     }, { status: 400, headers: corsHeaders });
 
@@ -197,7 +195,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ 
         success: false, 
         code: 'SM_INTERNAL_ERROR', 
-        message: 'Internal server error: ' + error.message, 
+        message: 'Server error: ' + error.message, 
         timestamp 
     }, { status: 500, headers: corsHeaders });
   }
