@@ -3,10 +3,10 @@ import { initializeServerFirebase } from '@/firebase/server-init';
 import { collection, query, where, getDocs, doc, writeBatch, increment } from 'firebase/firestore';
 
 /**
- * @fileOverview نقطة نهاية منظومة الوادي v1.7.5 (نسخة الحماية القصوى)
- * - جعل الـ subscriberId إلزامياً تماماً لمنع الخسائر المالية.
- * - تعريب كافة رسائل الخطأ لسهولة التتبع.
- * - تطبيق خصم 2.5% للربط البرمجي.
+ * @fileOverview نقطة نهاية منظومة الوادي v1.7.5 (نسخة الذكاء والحماية القصوى)
+ * - مطابقة ذكية: التأكد من أن المعرف يخص رقم الكرت فعلياً.
+ * - حماية الفئات: قبول الباقات الرسمية فقط.
+ * - تعريب كامل لرسائل الخطأ.
  */
 
 const corsHeaders = {
@@ -56,9 +56,7 @@ export async function POST(req: Request) {
     const { action, number, packageId, subscriberId } = body;
     const origin = new URL(req.url).origin;
 
-    // --- العمليات المتاحة ---
-
-    // أ. الاستعلام (Lookup)
+    // --- 1. عملية الاستعلام (Lookup) ---
     if (action === 'lookup') {
         const response = await fetch(`${origin}/api/alwadi/lookup`, {
             method: 'POST',
@@ -77,7 +75,7 @@ export async function POST(req: Request) {
                     expiryDate: result.data.expiry,
                     daysLeft: result.data.days_left,
                     cardNumber: result.data.cardNumber,
-                    subscriberId: result.data.id // هذا هو المعرف المطلوب للخطوة التالية
+                    subscriberId: result.data.id
                 },
                 timestamp
             }, { headers: corsHeaders });
@@ -85,13 +83,15 @@ export async function POST(req: Request) {
         return NextResponse.json({ 
             success: false, 
             code: 'SM_NOT_FOUND', 
-            message: result.message || 'رقم الكرت غير موجود في المنظومة', 
+            message: 'رقم الكرت غير موجود في المنظومة', 
             timestamp 
         }, { status: 404, headers: corsHeaders });
     }
 
-    // حماية حاسمة: منع السداد بدون رقم الكرت، رقم الباقة، ومعرف المشترك
+    // --- 2. عمليات التجديد (Renew / Test_Renew) ---
     if (action === 'renew' || action === 'test_renew') {
+        
+        // أ. التحقق من وجود البيانات الأساسية
         if (!number || !packageId) {
             return NextResponse.json({ 
                 success: false, 
@@ -109,67 +109,81 @@ export async function POST(req: Request) {
                 timestamp 
             }, { status: 400, headers: corsHeaders });
         }
-    }
 
-    // أسعار الباقات مع خصم 2.5% المعتمد للربط
-    const originalPrices: Record<string, number> = { "1": 3000, "3": 6000, "7": 9000, "9": 15000 };
-    const discountedPrices: Record<string, number> = { "1": 2925, "3": 5850, "7": 8775, "9": 14625 };
-    
-    const price = discountedPrices[packageId];
-
-    if (!price && (action === 'renew' || action === 'test_renew')) {
-        return NextResponse.json({ 
-            success: false, 
-            code: 'SM_VALIDATION_ERROR', 
-            message: 'رقم الباقة غير صحيح (استخدم 1، 3، 7، أو 9)', 
-            timestamp 
-        }, { status: 400, headers: corsHeaders });
-    }
-
-    // ب. التجديد التجريبي (Test Renew)
-    if (action === 'test_renew') {
-        if ((userData.balance || 0) < price) {
-            return NextResponse.json({ 
-                success: false, 
-                code: 'SM_INSUFFICIENT_BALANCE', 
-                message: 'رصيدك الحالي لا يكفي لإتمام عملية التجربة', 
-                timestamp 
-            }, { status: 400, headers: corsHeaders });
-        }
-
-        const batch = writeBatch(firestore);
-        const txRef = doc(collection(firestore, `users/${userId}/transactions`));
+        // ب. التحقق من صحة رقم الباقة (حماية الفئات)
+        const discountedPrices: Record<string, number> = { "1": 2925, "3": 5850, "7": 8775, "9": 14625 };
+        const originalPrices: Record<string, number> = { "1": 3000, "3": 6000, "7": 9000, "9": 15000 };
         
-        batch.set(txRef, {
-            userId, transactionDate: timestamp, amount: price,
-            transactionType: 'تجديد تجريبي (API)', notes: `تجربة ربط للكرت: ${number} - تم الاسترجاع فوراً`,
-            status: 'success'
-        });
-
-        await batch.commit();
-
-        return NextResponse.json({
-            success: true,
-            code: 'SM_SUCCESS',
-            message: 'نجحت محاكاة التجديد (وضع التجربة)',
-            transactionId: `TEST-${Date.now()}`,
-            data: { cardNumber: number, subscriberId: subscriberId, amount: price, mode: 'demo' },
-            timestamp
-        }, { headers: corsHeaders });
-    }
-
-    // ج. التجديد الفعلي (Renew)
-    if (action === 'renew') {
-        if ((userData.balance || 0) < price) {
+        const price = discountedPrices[packageId];
+        if (!price) {
             return NextResponse.json({ 
                 success: false, 
-                code: 'SM_INSUFFICIENT_BALANCE', 
-                message: 'رصيدك الحالي في ستار موبايل غير كافٍ', 
+                code: 'SM_VALIDATION_ERROR', 
+                message: 'الباقة غير موجودة', 
                 timestamp 
             }, { status: 400, headers: corsHeaders });
         }
 
-        // استدعاء المسار الداخلي الموثوق
+        // ج. المطابقة الذكية: التحقق من أن subscriberId المرسل يطابق رقم الكرت فعلياً
+        try {
+            const checkRes = await fetch(`${origin}/api/alwadi/lookup`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ number })
+            });
+            const checkData = await checkRes.json();
+            
+            if (!checkData.success || String(checkData.data.id) !== String(subscriberId)) {
+                return NextResponse.json({ 
+                    success: false, 
+                    code: 'SM_ID_MISMATCH', 
+                    message: 'رقم المعرف لا يطابق رقم الكرت', 
+                    timestamp 
+                }, { status: 400, headers: corsHeaders });
+            }
+        } catch (e) {
+            return NextResponse.json({ 
+                success: false, 
+                code: 'SM_LOOKUP_ERROR', 
+                message: 'فشلت عملية التحقق من بيانات الكرت، حاول مرة أخرى', 
+                timestamp 
+            }, { status: 500, headers: corsHeaders });
+        }
+
+        // د. التحقق من الرصيد الكافي
+        if ((userData.balance || 0) < price) {
+            return NextResponse.json({ 
+                success: false, 
+                code: 'SM_INSUFFICIENT_BALANCE', 
+                message: 'رصيدك الحالي في ستار موبايل لا يكفي', 
+                timestamp 
+            }, { status: 400, headers: corsHeaders });
+        }
+
+        // هـ. تنفيذ وضع التجربة (Test Renew)
+        if (action === 'test_renew') {
+            const batch = writeBatch(firestore);
+            const txRef = doc(collection(firestore, `users/${userId}/transactions`));
+            
+            batch.set(txRef, {
+                userId, transactionDate: timestamp, amount: price,
+                transactionType: 'تجديد تجريبي (API)', notes: `تجربة ربط للكرت: ${number} - تم الاسترجاع فوراً`,
+                status: 'success'
+            });
+
+            await batch.commit();
+
+            return NextResponse.json({
+                success: true,
+                code: 'SM_SUCCESS',
+                message: 'نجحت محاكاة التجديد (وضع التجربة)',
+                transactionId: `TEST-${Date.now()}`,
+                data: { cardNumber: number, subscriberId: subscriberId, amount: price, mode: 'demo' },
+                timestamp
+            }, { headers: corsHeaders });
+        }
+
+        // و. تنفيذ التجديد الفعلي (Renew)
         const response = await fetch(`${origin}/api/alwadi/renew`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -198,7 +212,7 @@ export async function POST(req: Request) {
             return NextResponse.json({
                 success: true,
                 code: 'SM_SUCCESS',
-                message: 'تم التجديد بنجاح وخصم المبلغ المخفض',
+                message: 'تم التجديد بنجاح وخصم المبلغ من رصيدك',
                 transactionId: `ALW-API-${Date.now()}`,
                 data: { cardNumber: number, subscriberId: subscriberId, amount: price, client: userData.displayName },
                 timestamp
