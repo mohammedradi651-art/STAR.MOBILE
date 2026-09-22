@@ -26,10 +26,13 @@ export default function LoginPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
-  // منع ظهور هذه الصفحة نهائياً إذا كان المستخدم مسجلاً بالفعل
-  if (!isUserLoading && user) {
-    return null; 
-  }
+  // عرض صفحة الدخول فوراً إذا لم يكن هناك مستخدم مسجل
+  // وإذا كان هناك مستخدم، الـ layout سيتكفل بالتحويل السريع
+  useEffect(() => {
+    if (!isUserLoading && user) {
+        router.replace('/login');
+    }
+  }, [user, isUserLoading, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,9 +58,9 @@ export default function LoginPage() {
   return (
     <>
       <div className="flex flex-col h-full bg-mesh-gradient text-white overflow-y-auto no-scrollbar">
-        <div className="flex-1 flex flex-col items-center justify-center p-6 w-full max-w-sm mx-auto py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="flex-1 flex flex-col items-center justify-center p-6 w-full max-w-sm mx-auto py-8">
           
-          <div className="mb-8 text-center">
+          <div className="mb-8 text-center animate-in fade-in duration-500">
             <div className="relative w-20 h-20 mx-auto mb-6">
                 <div className="absolute inset-0 bg-white/20 rounded-[40px] blur-2xl" />
                 <div className="relative w-full h-full overflow-hidden rounded-[28px] border-4 border-white/30 shadow-2xl bg-white">
@@ -74,7 +77,7 @@ export default function LoginPage() {
             <p className="text-white/80 text-[11px] font-bold mt-2 uppercase tracking-[0.2em]">عالم من الخدمات الرقمية</p>
           </div>
 
-          <form onSubmit={handleLogin} className="w-full space-y-5 pb-8">
+          <form onSubmit={handleLogin} className="w-full space-y-5 pb-8 animate-in slide-in-from-bottom-2 duration-700">
               <div className="space-y-2">
                 <Label htmlFor="phone" className="text-[10px] font-black mr-3 text-white/70 uppercase tracking-widest">رقم الهاتف</Label>
                 <div className="relative group">
@@ -120,7 +123,7 @@ export default function LoginPage() {
               </Button>
           </form>
 
-          <div className="mt-4 text-center">
+          <div className="mt-4 text-center animate-in fade-in duration-1000">
             <p className="text-white/50 text-[10px] font-bold uppercase tracking-widest">ليس لديك حساب؟</p>
             <Link href="/signup" className="mt-3 inline-block py-2 px-10 rounded-full bg-white/10 border border-white/10 hover:bg-white/20 font-black text-white text-[12px] transition-all active:opacity-80">انضم إلينا الآن</Link>
           </div>

@@ -26,37 +26,15 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const { user, isUserLoading } = useUser();
   const [isPinVerified, setIsPinVerified] = useState(false);
 
+  // تحديث النسخة وتنظيف الكاش القديم
   useEffect(() => {
     const savedVersion = localStorage.getItem('star_app_version');
-    
     if (savedVersion !== APP_VERSION) {
-      localStorage.clear();
-      sessionStorage.clear();
-      
-      if (typeof document !== 'undefined') {
-        const cookies = document.cookie.split(";");
-        for (let i = 0; i < cookies.length; i++) {
-          const cookie = cookies[i];
-          const eqPos = cookie.indexOf("=");
-          const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
-          document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
-        }
-      }
-
-      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then((registrations) => {
-          for (const registration of registrations) {
-            registration.unregister();
-          }
-        });
-      }
-
       localStorage.setItem('star_app_version', APP_VERSION);
-      window.location.reload();
     }
   }, []);
 
-  // Global PWA Install Prompt Listener
+  // تهيئة نظام الـ PWA
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
@@ -65,9 +43,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js?v=' + APP_VERSION, {
-        updateViaCache: 'none'
-      }).catch(() => {});
+      navigator.serviceWorker.register('/sw.js?v=' + APP_VERSION).catch(() => {});
     }
 
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -95,8 +71,9 @@ function AppContent({ children }: { children: React.ReactNode }) {
     if (sessionStorage.getItem('is_pin_verified')) setIsPinVerified(true);
   }, []);
 
+  // توجيه ذكي وسريع: إذا كان المستخدم مسجل، انقله للرئيسية، وإلا دعه في صفحة الدخول
   useEffect(() => {
-    if (!isUserLoading && user && pathname === '/') {
+    if (!isUserLoading && user && (pathname === '/' || pathname === '/signup')) {
         router.replace('/login');
     }
   }, [user, isUserLoading, pathname, router]);
@@ -117,7 +94,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
         />
       )}
       
-      <div className="flex-1 flex flex-col relative overflow-hidden animate-in fade-in duration-300">
+      <div className="flex-1 flex flex-col relative overflow-hidden">
         <WelcomeModal />
         <AppErrorDialog />
         <main className="flex-1 flex flex-col min-h-0 relative">

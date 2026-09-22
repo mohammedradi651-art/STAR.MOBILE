@@ -13,11 +13,12 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // السماح بتخزين الأيقونات والمانيفست لسرعة الفتح (PWA Optimization)
         source: '/manifest.json',
         headers: [
           {
             key: 'Cache-Control',
-            value: 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+            value: 'public, max-age=3600, must-revalidate',
           },
         ],
       },
@@ -26,12 +27,12 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: 'Cache-Control',
-            value: 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+            value: 'no-cache, no-store, must-revalidate',
           },
         ],
       },
       {
-        // تم استثناء الأيقونات والبانرات (icons|banners|banr) من منع التخزين لضمان بقائها في الذاكرة وظهورها الفوري
+        // تم استثناء الأيقونات والبانرات (icons|banners|banr) لضمان بقائها في الذاكرة وظهورها الفوري
         source: '/((?!icons|banners|banr|_next|static|favicon).*)',
         headers: [
           {
@@ -44,6 +45,16 @@ const nextConfig: NextConfig = {
           }
         ],
       },
+      {
+        // تخزين الصور بشكل عدواني لزيادة السرعة
+        source: '/icons/(.*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
     ];
   },
   images: {
@@ -51,54 +62,14 @@ const nextConfig: NextConfig = {
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'placehold.co',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'images.unsplash.com',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'picsum.photos',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'tse2.mm.bing.net',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https' ,
-        hostname: 'tse1.mm.bing.net',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'i.postimg.cc',
-        port: '',
-        pathname: '/**',
-      },
-       {
-        protocol: 'https',
-        hostname: 'i.ibb.co',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'firebasestorage.googleapis.com',
-        port: '',
-        pathname: '/**',
-      },
+      { protocol: 'https', hostname: 'placehold.co', pathname: '/**' },
+      { protocol: 'https', hostname: 'images.unsplash.com', pathname: '/**' },
+      { protocol: 'https', hostname: 'picsum.photos', pathname: '/**' },
+      { protocol: 'https', hostname: 'tse2.mm.bing.net', pathname: '/**' },
+      { protocol: 'https', hostname: 'tse1.mm.bing.net', pathname: '/**' },
+      { protocol: 'https', hostname: 'i.postimg.cc', pathname: '/**' },
+      { protocol: 'https', hostname: 'i.ibb.co', pathname: '/**' },
+      { protocol: 'https', hostname: 'firebasestorage.googleapis.com', pathname: '/**' },
     ],
   },
 };
