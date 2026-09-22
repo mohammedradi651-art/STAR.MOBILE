@@ -8,7 +8,6 @@ import { FirebaseProvider, useUser, useDoc, useFirestore, useMemoFirebase } from
 import { useEffect, useState } from 'react';
 import { WelcomeModal } from '@/components/dashboard/welcome-modal';
 import { AppErrorDialog } from '@/components/layout/app-error-dialog';
-import { SplashScreen } from '@/components/layout/splash-screen';
 import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -25,7 +24,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
-  const [showSplash, setShowSplash] = useState(true);
   const [isPinVerified, setIsPinVerified] = useState(false);
 
   useEffect(() => {
@@ -94,8 +92,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
   ].includes(pathname);
 
   useEffect(() => {
-    const hasSeenSplash = sessionStorage.getItem(`has_seen_splash_${APP_VERSION}`);
-    if (hasSeenSplash) setShowSplash(false);
     if (sessionStorage.getItem('is_pin_verified')) setIsPinVerified(true);
   }, []);
 
@@ -105,27 +101,15 @@ function AppContent({ children }: { children: React.ReactNode }) {
     }
   }, [user, isUserLoading, pathname, router]);
 
-  const handleSplashComplete = () => {
-    setShowSplash(false);
-    sessionStorage.setItem(`has_seen_splash_${APP_VERSION}`, 'true');
-  };
-
   const handlePinVerified = () => {
     setIsPinVerified(true);
     sessionStorage.setItem('is_pin_verified', 'true');
   };
 
-  const shouldShowPinLock = user && userProfile?.isPinEnabled && userProfile?.pinCode && !isPinVerified && !showSplash;
+  const shouldShowPinLock = user && userProfile?.isPinEnabled && userProfile?.pinCode && !isPinVerified;
 
   return (
     <div className="mx-auto max-w-[450px] bg-white h-[100dvh] flex flex-col shadow-2xl relative overflow-hidden">
-      {showSplash && (
-        <SplashScreen 
-          onComplete={handleSplashComplete} 
-          isAppReady={!isUserLoading} 
-        />
-      )}
-
       {shouldShowPinLock && (
         <PinOverlay 
             userPin={userProfile.pinCode!} 
@@ -133,16 +117,14 @@ function AppContent({ children }: { children: React.ReactNode }) {
         />
       )}
       
-      {!showSplash && (
-        <div className="flex-1 flex flex-col relative overflow-hidden animate-in fade-in duration-500">
-          <WelcomeModal />
-          <AppErrorDialog />
-          <main className="flex-1 flex flex-col min-h-0 relative">
-            {children}
-          </main>
-          {isNavVisiblePage && <BottomNav />}
-        </div>
-      )}
+      <div className="flex-1 flex flex-col relative overflow-hidden animate-in fade-in duration-300">
+        <WelcomeModal />
+        <AppErrorDialog />
+        <main className="flex-1 flex flex-col min-h-0 relative">
+          {children}
+        </main>
+        {isNavVisiblePage && <BottomNav />}
+      </div>
     </div>
   );
 }

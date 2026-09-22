@@ -55,7 +55,7 @@ export default function LoginPage() {
   return (
     <>
       <div className="flex flex-col h-full bg-mesh-gradient text-white overflow-y-auto no-scrollbar">
-        <div className="flex-1 flex flex-col items-center justify-center p-6 w-full max-w-sm mx-auto py-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
+        <div className="flex-1 flex flex-col items-center justify-center p-6 w-full max-w-sm mx-auto py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
           
           <div className="mb-8 text-center">
             <div className="relative w-20 h-20 mx-auto mb-6">
@@ -66,7 +66,7 @@ export default function LoginPage() {
                         alt="Star Mobile Logo" 
                         fill
                         className="object-cover"
-                        priority
+                        priority={true}
                     />
                 </div>
             </div>

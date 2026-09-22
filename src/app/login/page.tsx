@@ -53,8 +53,8 @@ const DashboardHero = () => {
                   alt={`بانر ${index + 1}`} 
                   fill 
                   className="object-contain" 
-                  priority={true} // تحميل مسبق لضمان الظهور الفوري
-                  unoptimized={true} // تجاوز معالجة الصور لضمان استخدام النسخة المخزنة في الكاش
+                  priority={true} 
+                  unoptimized={true} 
                 />
               </div>
             </CarouselItem>
