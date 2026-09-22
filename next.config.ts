@@ -10,6 +10,13 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  experimental: {
+    // السماح بنطاقات بيئة التطوير الخاصة بـ Firebase Studio لمنع أخطاء CORS وتسريع التحميل
+    allowedDevOrigins: [
+      '*.cloudworkstations.dev',
+      'localhost:9002'
+    ]
+  },
   async headers() {
     return [
       {
@@ -27,12 +34,12 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: 'Cache-Control',
-            value: 'no-cache, no-store, must-revalidate',
+            value: 'no-cache, no-store, must-revalidate, proxy-revalidate, max-age=0',
           },
         ],
       },
       {
-        // تم استثناء الأيقونات والبانرات (icons|banners|banr) لضمان بقائها في الذاكرة وظهورها الفوري
+        // تحسين رؤوس الحماية وتحسين سرعة الوصول للملفات البرمجية
         source: '/((?!icons|banners|banr|_next|static|favicon).*)',
         headers: [
           {
