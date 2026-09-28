@@ -8,6 +8,7 @@ import { FirebaseProvider, useUser, useDoc, useFirestore, useMemoFirebase } from
 import { useEffect, useState } from 'react';
 import { WelcomeModal } from '@/components/dashboard/welcome-modal';
 import { AppErrorDialog } from '@/components/layout/app-error-dialog';
+import { SplashScreen } from '@/components/layout/splash-screen';
 import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -24,17 +25,40 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
+  const [showSplash, setShowSplash] = useState(true);
   const [isPinVerified, setIsPinVerified] = useState(false);
 
-  // تحديث النسخة وتنظيف الكاش القديم
   useEffect(() => {
     const savedVersion = localStorage.getItem('star_app_version');
+    
     if (savedVersion !== APP_VERSION) {
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      if (typeof document !== 'undefined') {
+        const cookies = document.cookie.split(";");
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i];
+          const eqPos = cookie.indexOf("=");
+          const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+          document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+        }
+      }
+
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (const registration of registrations) {
+            registration.unregister();
+          }
+        });
+      }
+
       localStorage.setItem('star_app_version', APP_VERSION);
+      window.location.reload();
     }
   }, []);
 
-  // تهيئة نظام الـ PWA
+  // Global PWA Install Prompt Listener
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
@@ -43,7 +67,9 @@ function AppContent({ children }: { children: React.ReactNode }) {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js?v=' + APP_VERSION).catch(() => {});
+      navigator.serviceWorker.register('/sw.js?v=' + APP_VERSION, {
+        updateViaCache: 'none'
+      }).catch(() => {});
     }
 
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -68,25 +94,38 @@ function AppContent({ children }: { children: React.ReactNode }) {
   ].includes(pathname);
 
   useEffect(() => {
+    const hasSeenSplash = sessionStorage.getItem(`has_seen_splash_${APP_VERSION}`);
+    if (hasSeenSplash) setShowSplash(false);
     if (sessionStorage.getItem('is_pin_verified')) setIsPinVerified(true);
   }, []);
 
-  // توجيه ذكي وسريع: إذا كان المستخدم مسجل، انقله للرئيسية، وإلا دعه في صفحة الدخول
   useEffect(() => {
-    if (!isUserLoading && user && (pathname === '/' || pathname === '/signup')) {
+    if (!isUserLoading && user && pathname === '/') {
         router.replace('/login');
     }
   }, [user, isUserLoading, pathname, router]);
+
+  const handleSplashComplete = () => {
+    setShowSplash(false);
+    sessionStorage.setItem(`has_seen_splash_${APP_VERSION}`, 'true');
+  };
 
   const handlePinVerified = () => {
     setIsPinVerified(true);
     sessionStorage.setItem('is_pin_verified', 'true');
   };
 
-  const shouldShowPinLock = user && userProfile?.isPinEnabled && userProfile?.pinCode && !isPinVerified;
+  const shouldShowPinLock = user && userProfile?.isPinEnabled && userProfile?.pinCode && !isPinVerified && !showSplash;
 
   return (
     <div className="mx-auto max-w-[450px] bg-white h-[100dvh] flex flex-col shadow-2xl relative overflow-hidden">
+      {showSplash && (
+        <SplashScreen 
+          onComplete={handleSplashComplete} 
+          isAppReady={!isUserLoading} 
+        />
+      )}
+
       {shouldShowPinLock && (
         <PinOverlay 
             userPin={userProfile.pinCode!} 
@@ -94,14 +133,16 @@ function AppContent({ children }: { children: React.ReactNode }) {
         />
       )}
       
-      <div className="flex-1 flex flex-col relative overflow-hidden">
-        <WelcomeModal />
-        <AppErrorDialog />
-        <main className="flex-1 flex flex-col min-h-0 relative">
-          {children}
-        </main>
-        {isNavVisiblePage && <BottomNav />}
-      </div>
+      {!showSplash && (
+        <div className="flex-1 flex flex-col relative overflow-hidden animate-in fade-in duration-500">
+          <WelcomeModal />
+          <AppErrorDialog />
+          <main className="flex-1 flex flex-col min-h-0 relative">
+            {children}
+          </main>
+          {isNavVisiblePage && <BottomNav />}
+        </div>
+      )}
     </div>
   );
 }
