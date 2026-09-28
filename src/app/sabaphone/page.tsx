@@ -116,26 +116,26 @@ const POSTPAID_CATEGORIES = [
 
 const InstantOfferCard = ({ offer, onClick }: { offer: any, onClick: () => void }) => (
     <Card 
-        className="overflow-hidden rounded-[28px] border-none shadow-xl bg-white cursor-pointer hover:shadow-2xl transition-all active:scale-[0.95] group border border-primary/5"
+        className="overflow-hidden rounded-[24px] border-none shadow-lg bg-white cursor-pointer hover:shadow-xl transition-all active:scale-[0.95] group border border-primary/5"
         onClick={onClick}
     >
-        <div className="bg-[#0048ad] p-6 text-white relative overflow-hidden">
+        <div className="bg-[#0048ad] p-4 text-white relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent)]" />
-            <div className="flex justify-between items-center relative z-10 px-0.5">
-                <div className="bg-white/20 p-2 rounded-xl border border-white/20 backdrop-blur-md">
-                    <div className="relative w-4 h-4">
+            <div className="flex justify-center relative z-10">
+                <div className="bg-white/20 p-1.5 rounded-lg border border-white/20 backdrop-blur-md">
+                    <div className="relative w-3.5 h-3.5">
                         <Image src={LOGO_URL} alt="S" fill className="rounded-full object-contain" />
                     </div>
                 </div>
             </div>
-            <div className="text-center mt-6 mb-2 relative z-10">
-                <h3 className="text-4xl font-black text-white group-hover:scale-110 transition-transform tracking-tight drop-shadow-md">{offer.category}</h3>
+            <div className="text-center mt-3 mb-1 relative z-10">
+                <h3 className="text-3xl font-black text-white group-hover:scale-105 transition-transform tracking-tight drop-shadow-md">{offer.category}</h3>
             </div>
         </div>
-        <CardContent className="p-5 text-center space-y-3 bg-white">
-            <p className="text-lg font-black text-[#0048ad]">{offer.price.toLocaleString()}</p>
-            <div className="bg-[#0048ad]/5 py-2 rounded-2xl w-full border border-[#0048ad]/10">
-                <span className="text-[11px] font-black text-[#0048ad] whitespace-nowrap">{offer.validity}</span>
+        <CardContent className="p-3 text-center space-y-2 bg-white">
+            <p className="text-base font-black text-[#0048ad]">{offer.price.toLocaleString()}</p>
+            <div className="bg-[#0048ad]/5 py-1.5 rounded-xl w-full border border-[#0048ad]/10">
+                <span className="text-[10px] font-black text-[#0048ad] whitespace-nowrap">{offer.validity}</span>
             </div>
         </CardContent>
     </Card>
@@ -418,7 +418,7 @@ export default function SabaphonePage() {
                             </TabsContent>
 
                             <TabsContent value="instant" className="pt-2">
-                                <div className="grid grid-cols-3 gap-3 pb-20">
+                                <div className="grid grid-cols-3 gap-2.5 pb-20">
                                     {INSTANT_OFFERS.map((offer) => (
                                         <InstantOfferCard 
                                             key={offer.num} 
@@ -450,13 +450,13 @@ export default function SabaphonePage() {
 
                                 <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-[#0048ad]/5 text-center">
                                     <Label className="text-sm font-black text-muted-foreground block mb-4">ادخل عدد الوحدات</Label>
-                                    <div className="relative max-w-[240px] mx-auto">
+                                    <div className="relative max-w-[200px] mx-auto">
                                         <Input 
                                             type="number" 
                                             placeholder="عدد الوحدات" 
                                             value={amount} 
                                             onChange={(e) => setAmount(e.target.value)} 
-                                            className="text-center font-black text-3xl h-16 rounded-2xl bg-white border-2 border-solid border-[#0048ad]/40 text-[#0048ad] focus-visible:ring-[#0048ad]" 
+                                            className="text-center font-black text-2xl h-12 rounded-2xl bg-white border-2 border-solid border-[#0048ad]/40 text-[#0048ad] focus-visible:ring-[#0048ad]" 
                                         />
                                     </div>
                                     <div className="mt-4 p-4 bg-[#0048ad]/5 rounded-2xl border-2 border-dashed border-[#0048ad]/20">
