@@ -53,19 +53,23 @@ export async function POST(request: Request) {
         apiRequestParams.action = action;
     } else if (service === 'why') {
         endpoint = 'why';
-        apiRequestParams.action = action;
+        // بناءً على التوثيق المرفق، الأكشن دائماً هو bill لشحن الرصيد وتفعيل الباقات
+        apiRequestParams.action = 'bill';
         
-        // --- معالجة خاصة لشركة واي لضمان إرسال num ---
-        // إذا كان الطلب شحن رصيد (israsid)
         if (payload.israsid === '1') {
-            const amt = payload.amount || payload.num;
+            // حالة شحن الرصيد المباشر
+            const amt = String(payload.amount || payload.num || "");
             apiRequestParams.num = amt;
             apiRequestParams.rasid = amt;
         } else {
-            // إذا كان تفعيل باقة، التأكد من وجود num (القيمة الرقمية للباقة)
-            // الباقات ترسل num أصلاً في الـ payload من الصفحة
-            if (!apiRequestParams.num && apiRequestParams.amount) {
-                apiRequestParams.num = apiRequestParams.amount;
+            // حالة تفعيل الباقات
+            // يجب أن يحتوي payload على num (مثل 250) و packageid (مثل 91)
+            if (payload.num) apiRequestParams.num = String(payload.num);
+            if (payload.packageid) apiRequestParams.packageid = String(payload.packageid);
+            
+            // احتياطاً إذا لم يتوفر num واستخدم العميل amount
+            if (!apiRequestParams.num && payload.amount) {
+                apiRequestParams.num = String(payload.amount);
             }
         }
     } else if (service === 'you') {
@@ -81,9 +85,8 @@ export async function POST(request: Request) {
     } else if (service === 'yemen' || service === 'yem' || !service) {
         // Yemen Mobile Specific Handling
         if (action === 'billoffer') {
-            endpoint = 'offeryem'; // السداد والتفعيل الموحد بناءً على التوثيق
+            endpoint = 'offeryem';
             apiRequestParams.action = 'billoffer';
-            // استخدام مسمى offerkey بدلاً من offerid لطلبات التفعيل المباشر
             if (apiRequestParams.offerid) {
                 apiRequestParams.offerkey = apiRequestParams.offerid;
                 delete apiRequestParams.offerid;
