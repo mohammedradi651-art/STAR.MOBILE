@@ -54,9 +54,19 @@ export async function POST(request: Request) {
     } else if (service === 'why') {
         endpoint = 'why';
         apiRequestParams.action = action;
-        // التعامل مع رصيد واي الخاص
+        
+        // --- معالجة خاصة لشركة واي لضمان إرسال num ---
+        // إذا كان الطلب شحن رصيد (israsid)
         if (payload.israsid === '1') {
-            apiRequestParams.rasid = payload.num;
+            const amt = payload.amount || payload.num;
+            apiRequestParams.num = amt;
+            apiRequestParams.rasid = amt;
+        } else {
+            // إذا كان تفعيل باقة، التأكد من وجود num (القيمة الرقمية للباقة)
+            // الباقات ترسل num أصلاً في الـ payload من الصفحة
+            if (!apiRequestParams.num && apiRequestParams.amount) {
+                apiRequestParams.num = apiRequestParams.amount;
+            }
         }
     } else if (service === 'you') {
         if (action === 'billoffer' || action === 'queryoffer') {
