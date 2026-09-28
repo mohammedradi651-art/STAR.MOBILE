@@ -72,11 +72,12 @@ const WHY_OFFERS: Offer[] = [
 ];
 
 const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) => {
-    const finalPrice = Math.ceil(offer.price * 3.1);
+    // تحديث النسبة إلى 3.8
+    const finalPrice = Math.ceil(offer.price * 3.8);
 
     return (
         <div 
-          className="bg-[#f3f0ff] dark:bg-slate-900 rounded-3xl p-5 shadow-sm relative border border-primary/10 mb-3 text-center cursor-pointer hover:bg-primary/5 transition-all active:scale-[0.98] group"
+          className="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-sm relative border border-primary/10 mb-3 text-center cursor-pointer hover:bg-primary/5 transition-all active:scale-[0.98] group"
           onClick={onClick}
         >
           <div className="flex justify-center mb-3">
@@ -89,7 +90,6 @@ const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void
             <span className="text-2xl font-black text-foreground">
                 {finalPrice.toLocaleString('en-US')}
             </span>
-            <span className="text-[10px] font-bold text-muted-foreground mr-1">ر.ي</span>
           </div>
           
           <div className="grid grid-cols-4 gap-2 pt-3 mt-2 border-t border-primary/10 text-center">
@@ -141,6 +141,9 @@ export default function WhyPage() {
         setPhone(cleaned);
         if (cleaned.length === 9) {
             element.blur();
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                navigator.vibrate(50);
+            }
             if (!cleaned.startsWith('70') && !cleaned.startsWith('71')) {
                 toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'رقم شركة واي يجب أن يبدأ بـ 70 أو 71' });
             }
@@ -166,7 +169,8 @@ export default function WhyPage() {
     const handleProcessPayment = async (payAmount: number, typeLabel: string, extraPayload: any) => {
         if (!phone || !user || !userDocRef || !firestore) return;
         
-        const totalToDeduct = Math.ceil(payAmount * 3.1);
+        // تحديث النسبة إلى 3.8
+        const totalToDeduct = Math.ceil(payAmount * 3.8);
 
         if ((userProfile?.balance ?? 0) < totalToDeduct) {
             toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لإتمام هذه العملية.' });
@@ -184,7 +188,7 @@ export default function WhyPage() {
                     action: 'bill', 
                     service: 'why', 
                     transid: transid,
-                    amount: payAmount, // إرسال المبلغ الصافي قبل الضرب في 3.1
+                    amount: payAmount,
                     ...extraPayload 
                 })
             });
@@ -201,7 +205,7 @@ export default function WhyPage() {
                 transactionDate: new Date().toISOString(),
                 amount: totalToDeduct,
                 transactionType: `سداد واي (${typeLabel})`,
-                notes: `للرقم: ${phone}. (النسبة المعتمدة 3.1x)`,
+                notes: `للرقم: ${phone}`,
                 recipientPhoneNumber: phone,
                 transid: transid
             });
@@ -272,10 +276,10 @@ export default function WhyPage() {
                                         <div className="absolute left-4 top-1/2 -translate-y-1/2 text-primary/30 font-black text-sm">ر.ي</div>
                                     </div>
                                     <div className="mt-4 p-3 bg-primary/5 rounded-2xl border border-dashed border-primary/20">
-                                        <p className="text-[10px] font-black text-muted-foreground uppercase mb-1">إجمالي الخصم (النسبة 3.1x)</p>
-                                        <p className="text-lg font-black text-primary">{amount ? Math.ceil(parseFloat(amount) * 3.1).toLocaleString() : '0'} ريال</p>
+                                        <p className="text-[10px] font-black text-muted-foreground uppercase mb-1">المبلغ المطلوب</p>
+                                        <p className="text-lg font-black text-primary">{amount ? Math.ceil(parseFloat(amount) * 3.8).toLocaleString() : '0'} ريال</p>
                                     </div>
-                                    <Button className="w-full h-14 rounded-2xl text-lg font-black mt-6 shadow-lg text-white" onClick={() => setIsConfirmingBalance(true)} disabled={!amount} style={{ backgroundColor: WHY_PRIMARY }}>شحن رصيد</Button>
+                                    <Button className="w-full h-14 rounded-2xl text-lg font-black mt-8 shadow-lg text-white" onClick={() => setIsConfirmingBalance(true)} disabled={!amount} style={{ backgroundColor: WHY_PRIMARY }}>شحن رصيد</Button>
                                 </div>
                             </TabsContent>
                         </Tabs>
@@ -292,8 +296,7 @@ export default function WhyPage() {
                         <AlertDialogTitle className="text-center font-black">تأكيد تفعيل الباقة</AlertDialogTitle>
                         <div className="space-y-3 pt-4 text-right text-sm">
                             <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">اسم الباقة:</span><span className="font-bold">{selectedOffer?.offerName}</span></div>
-                            <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">نسبة التحويل:</span><span className="font-bold">3.1x</span></div>
-                            <div className="flex justify-between items-center py-3 bg-primary/10 rounded-xl px-2 mt-2"><span className="font-black text-primary">المبلغ المخصوم:</span><span className="font-black text-primary text-lg">{selectedOffer && Math.ceil(selectedOffer.price * 3.1).toLocaleString()} ريال</span></div>
+                            <div className="flex justify-between items-center py-3 bg-primary/10 rounded-xl px-2 mt-2"><span className="font-black text-primary">المبلغ المخصوم:</span><span className="font-black text-primary text-lg">{selectedOffer && Math.ceil(selectedOffer.price * 3.8).toLocaleString()} ريال</span></div>
                         </div>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-6 sm:space-x-0">
@@ -308,9 +311,9 @@ export default function WhyPage() {
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-center font-black">تأكيد شحن الرصيد</AlertDialogTitle>
                         <div className="space-y-3 pt-4 text-right text-sm">
+                            <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">رقم الهاتف:</span><span className="font-bold">{phone}</span></div>
                             <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">مبلغ الشحن:</span><span className="font-bold">{parseFloat(amount || '0').toLocaleString()} ريال</span></div>
-                            <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">نسبة التحويل:</span><span className="font-bold">3.1x</span></div>
-                            <div className="flex justify-between items-center py-3 bg-primary/10 rounded-xl px-2 mt-2"><span className="font-black text-primary">إجمالي الخصم:</span><span className="font-black text-primary text-lg">{Math.ceil(parseFloat(amount || '0') * 3.1).toLocaleString()} ريال</span></div>
+                            <div className="flex justify-between items-center py-3 bg-primary/10 rounded-xl px-2 mt-2"><span className="font-black text-primary">إجمالي الخصم:</span><span className="font-black text-primary text-lg">{Math.ceil(parseFloat(amount || '0') * 3.8).toLocaleString()} ريال</span></div>
                         </div>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-6 sm:space-x-0">
@@ -322,3 +325,4 @@ export default function WhyPage() {
         </div>
     );
 }
+
