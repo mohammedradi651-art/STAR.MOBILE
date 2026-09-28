@@ -101,8 +101,8 @@ export const PREPAID_CATEGORIES = [
       { offerId: 'm_monthly', offerName: 'مزايا الشهرية', price: 1300, data: '250 MB', sms: '350', minutes: '350', validity: '30 يوم', offertype: 'A38394' },
       { offerId: 'm_weekly', offerName: 'مزايا الاسبوعة', price: 485, data: '90 MB', sms: '30', minutes: '100', validity: '7 أيام', offertype: 'A64329' },
       { offerId: 'm_max', offerName: 'مزايا ماكس الشهرية', price: 2000, data: '600 MB', sms: '200', minutes: '500', validity: '30 يوم', offertype: 'A75328' },
-      { offerId: 'm_max', offerName: 'مزايا تواصل', price: 1500, data: '-', sms: '600', minutes: '600', validity: '30 يوم', offertype: 'A33881' },
-      { offerId: 'm_max', offerName: 'مزايا تواصل ماكس', price: 2000, data: '-', sms: '500', minutes: '1000', validity: '30 يوم', offertype: 'A33882' },
+      { offerId: 'm_twasol', offerName: 'مزايا تواصل', price: 1500, data: '-', sms: '600', minutes: '600', validity: '30 يوم', offertype: 'A33881' },
+      { offerId: 'm_twasol_max', offerName: 'مزايا تواصل ماكس', price: 2000, data: '-', sms: '500', minutes: '1000', validity: '30 يوم', offertype: 'A33882' },
     ]
   },
   {
@@ -407,6 +407,45 @@ export default function YemenMobilePage() {
     }
   };
 
+  const handleContactPick = async () => {
+    if (!('contacts' in navigator && 'ContactsManager' in window)) {
+        toast({
+            variant: "destructive",
+            title: "غير مدعوم",
+            description: "متصفحك لا يدعم الوصول لجهات الاتصال.",
+        });
+        return;
+    }
+
+    try {
+        const props = ['tel'];
+        const opts = { multiple: false };
+        const contacts = await (navigator as any).contacts.select(props, opts);
+        
+        if (contacts.length > 0 && contacts[0].tel && contacts[0].tel.length > 0) {
+            let selectedNumber = contacts[0].tel[0];
+            selectedNumber = selectedNumber.replace(/[\s\-\(\)]/g, '');
+            
+            // Clean common prefixes
+            if (selectedNumber.startsWith('+967')) selectedNumber = selectedNumber.substring(4);
+            if (selectedNumber.startsWith('00967')) selectedNumber = selectedNumber.substring(5);
+            if (selectedNumber.startsWith('0')) selectedNumber = selectedNumber.substring(1);
+            
+            const cleanedNum = selectedNumber.slice(0, 9);
+            setPhone(cleanedNum);
+            if (cleanedNum.length === 9) {
+                if (cleanedNum.startsWith('77') || cleanedNum.startsWith('78')) {
+                    handleSearch(cleanedNum);
+                } else {
+                    toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'يجب البدء بـ 77 أو 78' });
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Contacts selection failed:", err);
+    }
+  };
+
   const handlePayment = async () => {
     if (!phone || !amount || !user || !userDocRef) return;
     setIsProcessing(true);
@@ -448,6 +487,43 @@ export default function YemenMobilePage() {
     } catch (e: any) { toast({ variant: "destructive", title: "تنبيه", description: e.message }); }
     finally { setIsActivatingOffer(false); }
   };
+
+  const currentCategories = lineTypeTab === 'prepaid' ? PREPAID_CATEGORIES : POSTPAID_CATEGORIES;
+
+  if (showSuccess && lastTxDetails) {
+    return (
+        <div className="flex flex-col h-full bg-[#F4F7F9] dark:bg-slate-950">
+            <audio ref={audioRef} src="/sdad.mp3" autoPlay />
+            <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in-0">
+                <Card className="w-full max-sm text-center shadow-2xl rounded-[40px] overflow-hidden border-none bg-card">
+                    <div className="bg-green-500 p-8 flex justify-center">
+                        <div className="bg-white/20 p-4 rounded-full animate-bounce">
+                            <CheckCircle className="h-16 w-16 text-white" />
+                        </div>
+                    </div>
+                    <CardContent className="p-8 space-y-6">
+                        <h2 className="text-2xl font-black text-green-600">تمت العملية بنجاح</h2>
+                        <div className="w-full space-y-3 text-sm bg-muted/50 p-5 rounded-[24px] text-right border-2 border-dashed border-primary/10">
+                            <div className="flex justify-between items-center border-b border-muted pb-2">
+                                <span className="text-muted-foreground">رقم العملية:</span>
+                                <span className="font-mono font-black text-primary">{lastTxDetails.transid}</span>
+                            </div>
+                            <div className="flex justify-between items-center border-b border-muted pb-2">
+                                <span className="text-muted-foreground">نوع الخدمة:</span>
+                                <span className="font-bold">{lastTxDetails.type}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-muted-foreground">المبلغ المخصوم:</span>
+                                <span className="font-black text-primary text-base">{lastTxDetails.amount.toLocaleString()} ر.ي</span>
+                            </div>
+                        </div>
+                        <Button className="w-full h-14 rounded-2xl font-black" onClick={() => router.push('/login')}>الرئيسية</Button>
+                    </CardContent>
+                </Card>
+            </div>
+        </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-[#F4F7F9] dark:bg-slate-950">
