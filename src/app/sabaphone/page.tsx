@@ -17,15 +17,14 @@ import {
   Users,
   Hash,
   Zap,
-  MapPin,
-  Menu as MenuIcon
+  Loader2
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Accordion,
-  AccordionContent,
   AccordionItem,
   AccordionTrigger,
+  AccordionContent,
 } from "@/components/ui/accordion";
 import {
   AlertDialog,
@@ -66,7 +65,8 @@ const SABA_GRADIENT = {
 };
 
 const LOGO_URL = "https://i.postimg.cc/5NDY8cjk/unnamed.png";
-const NORTH_RATE = 3.8;
+// النسبة الجديدة: 100 وحدة بـ 4500 ريال => المعامل هو 45
+const NORTH_RATE = 45;
 
 const INSTANT_OFFERS = [
     { category: '600', price: 960, validity: '7 أيام', num: '600' },
@@ -117,74 +117,78 @@ const POSTPAID_CATEGORIES = [
 
 const InstantOfferCard = ({ offer, onClick }: { offer: any, onClick: () => void }) => (
     <Card 
-        className="overflow-hidden rounded-[16px] border-none shadow-md bg-white cursor-pointer hover:shadow-lg transition-all active:scale-[0.98]"
+        className="overflow-hidden rounded-[20px] border-none shadow-lg bg-white cursor-pointer hover:shadow-xl transition-all active:scale-[0.95] group"
         onClick={onClick}
     >
-        <div className="bg-[#0048ad] p-2 text-white">
+        <div className="bg-[#0048ad] p-3 text-white">
             <div className="flex justify-between items-center px-0.5">
                 <div className="flex flex-col gap-[2px] items-start">
-                   <div className="w-3 h-[1px] bg-white/60" />
-                   <div className="w-3 h-[1px] bg-white/60" />
+                   <div className="w-4 h-[1.5px] bg-white/60" />
+                   <div className="w-4 h-[1.5px] bg-white/60" />
                 </div>
-                <div className="flex items-center gap-1">
-                    <span className="text-[7px] font-bold">فئة</span>
-                    <div className="bg-white/20 p-0.5 rounded-full border border-white/20">
-                        <div className="relative w-2 h-2">
+                <div className="flex items-center gap-1.5">
+                    <span className="text-[8px] font-black uppercase">فئة</span>
+                    <div className="bg-white/20 p-1 rounded-full border border-white/20">
+                        <div className="relative w-3 h-3">
                             <Image src={LOGO_URL} alt="S" fill className="rounded-full object-contain" />
                         </div>
                     </div>
                 </div>
             </div>
-            <div className="text-center mt-1.5 mb-1">
-                <h3 className="text-lg font-black text-white">{offer.category}</h3>
+            <div className="text-center mt-2.5 mb-1.5">
+                <h3 className="text-2xl font-black text-white group-hover:scale-110 transition-transform">{offer.category}</h3>
             </div>
         </div>
-        <CardContent className="p-2 text-center space-y-1">
-            <p className="text-[9px] font-black text-[#0048ad]">{offer.price.toLocaleString()}</p>
-            <div className="bg-[#0048ad]/10 py-0.5 rounded-md w-full">
-                <span className="text-[7px] font-black text-[#0048ad] whitespace-nowrap">{offer.validity}</span>
+        <CardContent className="p-3 text-center space-y-2">
+            <p className="text-xs font-black text-[#0048ad]">{offer.price.toLocaleString()}</p>
+            <div className="bg-[#0048ad]/10 py-1 rounded-lg w-full">
+                <span className="text-[9px] font-black text-[#0048ad] whitespace-nowrap">{offer.validity}</span>
             </div>
         </CardContent>
     </Card>
 );
 
-const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) => (
-    <div 
-      className="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-sm relative border border-[#0048ad]/10 mb-3 text-center cursor-pointer hover:bg-[#0048ad]/5 transition-all active:scale-[0.98] group"
-      onClick={onClick}
-    >
-      <div className="flex justify-center mb-3">
-          <div className="relative w-12 h-12 rounded-2xl overflow-hidden border-2 border-white dark:border-slate-800 shadow-md">
-              <Image src={LOGO_URL} alt="Sabaphone" fill className="object-cover" />
+const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) => {
+    const finalPrice = Math.ceil(offer.price * NORTH_RATE);
+
+    return (
+        <div 
+          className="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-sm relative border border-[#0048ad]/10 mb-3 text-center cursor-pointer hover:bg-[#0048ad]/5 transition-all active:scale-[0.98] group"
+          onClick={onClick}
+        >
+          <div className="flex justify-center mb-3">
+              <div className="relative w-12 h-12 rounded-2xl overflow-hidden border-2 border-white dark:border-slate-800 shadow-md">
+                  <Image src={LOGO_URL} alt="Sabaphone" fill className="object-cover" />
+              </div>
           </div>
-      </div>
-      <h4 className="text-sm font-black text-[#0048ad] mb-1 group-hover:text-[#0048ad]/80 transition-colors">{offer.offerName}</h4>
-      <div className="flex items-baseline justify-center mb-4">
-        <span className="text-2xl font-black text-foreground">
-            {Math.ceil(offer.price * NORTH_RATE).toLocaleString('en-US')}
-        </span>
-      </div>
-      
-      <div className="grid grid-cols-4 gap-2 pt-3 mt-2 border-t border-[#0048ad]/10 text-center">
-        <div className="space-y-1.5">
-            <Globe className="w-5 h-5 mx-auto text-[#0048ad]" />
-            <p className="text-[11px] font-black text-foreground truncate">{offer.data || '-'}</p>
+          <h4 className="text-sm font-black text-[#0048ad] mb-1 group-hover:text-[#0048ad]/80 transition-colors">{offer.offerName}</h4>
+          <div className="flex items-baseline justify-center mb-4">
+            <span className="text-2xl font-black text-foreground">
+                {finalPrice.toLocaleString('en-US')}
+            </span>
+          </div>
+          
+          <div className="grid grid-cols-4 gap-2 pt-3 mt-2 border-t border-[#0048ad]/10 text-center">
+            <div className="space-y-1.5">
+                <Globe className="w-5 h-5 mx-auto text-[#0048ad]" />
+                <p className="text-[11px] font-black text-foreground truncate">{offer.data || '-'}</p>
+            </div>
+            <div className="space-y-1.5">
+                <Mail className="w-5 h-5 mx-auto text-[#0048ad]" />
+                <p className="text-[11px] font-black text-foreground truncate">{offer.sms || '-'}</p>
+            </div>
+            <div className="space-y-1.5">
+                <PhoneIcon className="w-5 h-5 mx-auto text-[#0048ad]" />
+                <p className="text-[11px] font-black text-foreground truncate">{offer.minutes || '-'}</p>
+            </div>
+            <div className="space-y-1.5">
+                <Clock className="w-5 h-5 mx-auto text-[#0048ad]" />
+                <p className="text-[11px] font-black text-foreground truncate">{offer.validity || '-'}</p>
+            </div>
+          </div>
         </div>
-        <div className="space-y-1.5">
-            <Mail className="w-5 h-5 mx-auto text-[#0048ad]" />
-            <p className="text-[11px] font-black text-foreground truncate">{offer.sms || '-'}</p>
-        </div>
-        <div className="space-y-1.5">
-            <PhoneIcon className="w-5 h-5 mx-auto text-[#0048ad]" />
-            <p className="text-[11px] font-black text-foreground truncate">{offer.minutes || '-'}</p>
-        </div>
-        <div className="space-y-1.5">
-            <Clock className="w-5 h-5 mx-auto text-[#0048ad]" />
-            <p className="text-[11px] font-black text-foreground truncate">{offer.validity || '-'}</p>
-        </div>
-      </div>
-    </div>
-);
+    );
+};
 
 export default function SabaphonePage() {
     const router = useRouter();
@@ -195,7 +199,6 @@ export default function SabaphonePage() {
     const [phone, setPhone] = useState('');
     const [activeTab, setActiveTab] = useState("packages");
     const [lineType, setLineType] = useState('prepaid');
-    const [region, setRegion] = useState<'south' | 'north'>('south');
     const [amount, setAmount] = useState('');
     const [selectedOffer, setSelectedOffer] = useState<any>(null);
     const [isConfirmingAction, setIsConfirmingAction] = useState(false);
@@ -373,7 +376,7 @@ export default function SabaphonePage() {
                     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                             <TabsList className="grid w-full grid-cols-3 bg-white dark:bg-slate-900 rounded-2xl h-14 p-1.5 shadow-sm border border-[#0048ad]/10">
-                                <TabsTrigger value="packages" className="rounded-xl font-bold text-xs data-[state=active]:bg-[#0048ad] data-[state=active]:text-white">باقات</TabsTrigger>
+                                <TabsTrigger value="packages" className="rounded-xl font-bold text-xs data-[state=active]:bg-[#0048ad] data-[state=active]:text-white">الباقات</TabsTrigger>
                                 <TabsTrigger value="instant" className="rounded-xl font-bold text-xs data-[state=active]:bg-[#0048ad] data-[state=active]:text-white">فوري</TabsTrigger>
                                 <TabsTrigger value="balance" className="rounded-xl font-bold text-xs data-[state=active]:bg-[#0048ad] data-[state=active]:text-white">رصيد</TabsTrigger>
                             </TabsList>
@@ -420,7 +423,7 @@ export default function SabaphonePage() {
                             </TabsContent>
 
                             <TabsContent value="instant" className="pt-2">
-                                <div className="grid grid-cols-3 gap-2 pb-20">
+                                <div className="grid grid-cols-3 gap-3 pb-20">
                                     {INSTANT_OFFERS.map((offer) => (
                                         <InstantOfferCard 
                                             key={offer.num} 
@@ -441,23 +444,13 @@ export default function SabaphonePage() {
                             </TabsContent>
 
                             <TabsContent value="balance" className="pt-2 space-y-4">
-                                <div className="flex flex-col gap-3">
-                                    <div className="flex justify-center">
-                                        <Tabs value={lineType} onValueChange={setLineType} className="max-w-[200px] w-full">
-                                            <TabsList className="grid w-full grid-cols-2 bg-muted/30 rounded-xl h-9">
-                                                <TabsTrigger value="prepaid" className="rounded-lg text-[10px]">مسبق الدفع</TabsTrigger>
-                                                <TabsTrigger value="postpaid" className="rounded-lg text-[10px]">فوترة</TabsTrigger>
-                                            </TabsList>
-                                        </Tabs>
-                                    </div>
-                                    <div className="flex justify-center">
-                                        <Tabs value={region} onValueChange={(v: any) => setRegion(v)} className="max-w-[200px] w-full">
-                                            <TabsList className="grid w-full grid-cols-2 bg-muted/30 rounded-xl h-9">
-                                                <TabsTrigger value="south" className="rounded-lg text-[10px]">جنوب</TabsTrigger>
-                                                <TabsTrigger value="north" className="rounded-lg text-[10px]">شمال</TabsTrigger>
-                                            </TabsList>
-                                        </Tabs>
-                                    </div>
+                                <div className="flex justify-center">
+                                    <Tabs value={lineType} onValueChange={setLineType} className="max-w-[200px] w-full">
+                                        <TabsList className="grid w-full grid-cols-2 bg-muted/30 rounded-xl h-9">
+                                            <TabsTrigger value="prepaid" className="rounded-lg text-[10px]">مسبق الدفع</TabsTrigger>
+                                            <TabsTrigger value="postpaid" className="rounded-lg text-[10px]">فوترة</TabsTrigger>
+                                        </TabsList>
+                                    </Tabs>
                                 </div>
 
                                 <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-[#0048ad]/5 text-center">
@@ -472,21 +465,23 @@ export default function SabaphonePage() {
                                         />
                                         <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#0048ad]/30 font-black text-sm">ر.ي</div>
                                     </div>
+                                    <div className="mt-4 p-4 bg-[#0048ad]/5 rounded-2xl border-2 border-dashed border-[#0048ad]/20">
+                                        <p className="text-[10px] font-black text-muted-foreground uppercase mb-1 tracking-widest">إجمالي المبلغ المطلوب</p>
+                                        <p className="text-2xl font-black text-[#0048ad]">
+                                            {amount ? (parseFloat(amount) * NORTH_RATE).toLocaleString() : '0'}
+                                        </p>
+                                    </div>
                                     <Button 
                                         className="w-full h-14 rounded-2xl text-lg font-black mt-8 shadow-lg text-white" 
                                         onClick={() => {
                                             const val = parseFloat(amount);
                                             if (isNaN(val) || val <= 0) return;
                                             
-                                            // منطق التسعيرة حسب المنطقة
-                                            const isNorth = region === 'north';
-                                            const finalPrice = isNorth ? Math.ceil(val * NORTH_RATE) : val;
-
                                             setSelectedOffer({
-                                                typeLabel: `شحن رصيد ${region === 'south' ? 'جنوب' : 'شمال'}`,
-                                                endpoint: region === 'south' ? 'sbay' : 'sabaphone',
+                                                typeLabel: `شحن رصيد (شمال)`,
+                                                endpoint: 'sabaphone',
                                                 num: val,
-                                                finalPrice: finalPrice,
+                                                finalPrice: Math.ceil(val * NORTH_RATE),
                                                 originalPrice: val
                                             });
                                             setIsConfirmingAction(true);
