@@ -419,14 +419,22 @@ export default function YemenMobilePage() {
               }));
           }
 
-          const searchIn = (obj: any) => JSON.stringify(obj).toLowerCase();
-          const combinedResults = searchIn(queryResult) + searchIn(offerResult) + searchIn(solfaResult);
-          
-          const isPostpaid = combinedResults.includes('فوترة') || 
-                             combinedResults.includes('postpaid') || 
-                             combinedResults.includes('post_paid') ||
-                             combinedResults.includes('باقة فوترة');
-                             
+          // --- تعديل منطق تحديد نوع الخط (Prepaid / Postpaid) بناءً على mobileType حصرياً ---
+          const mType = String(queryResult.mobileType || "").toLowerCase();
+          let isPostpaid = false;
+
+          // التحقق من القيم المسترجعة من الـ API
+          if (mType === 'postpaid' || mType.includes('post') || mType.includes('فوترة')) {
+              isPostpaid = true;
+          } else if (mType === 'prepaid' || mType.includes('pre') || mType.includes('مسبق')) {
+              isPostpaid = false;
+          } else {
+              // احتياطاً في حال كان الحقل مفقوداً، نتحقق من النص في الرد البرمجي فقط وليس البيانات المالية
+              const rawDesc = String(queryResult.resultDesc || "").toLowerCase();
+              isPostpaid = rawDesc.includes('postpaid') || rawDesc.includes('فوترة');
+          }
+          // --------------------------------------------------------------------------------
+
           const detectedTypeLabel = isPostpaid ? 'فوترة' : 'دفع مسبق';
           setLineTypeTab(isPostpaid ? 'postpaid' : 'prepaid');
 
