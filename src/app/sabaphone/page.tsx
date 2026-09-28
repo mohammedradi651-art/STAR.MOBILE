@@ -58,7 +58,6 @@ type Offer = {
     num: string;
 };
 
-// اللون الأزرق المعتمد لسبأفون
 const SABA_PRIMARY = '#0048ad';
 const SABA_GRADIENT = {
     backgroundColor: '#0048ad',
@@ -66,11 +65,8 @@ const SABA_GRADIENT = {
 };
 
 const LOGO_URL = "https://i.postimg.cc/5NDY8cjk/unnamed.png";
-
-// معامل التحويل للرصيد والباقات اليدوية
 const RATE = 3.8;
 
-// بيانات التبويب "فوري" من الصورة
 const INSTANT_OFFERS = [
     { category: '600', price: 960, validity: '7 أيام', num: '600' },
     { category: '1000', price: 1600, validity: '15 يوم', num: '1000' },
@@ -88,6 +84,7 @@ const PREPAID_CATEGORIES = [
       { num: '68', offerName: 'يابالش اليومية', price: 482, data: '100MB', validity: '24 ساعة' },
       { num: '69', offerName: 'يابالش الاسبوعية', price: 482, data: '300MB', validity: '7 أيام' },
       { num: '70', offerName: 'يابالش الشهرية', price: 1205, data: '1GB', validity: '30 يوم' },
+      { num: '71', offerName: 'يابالش 10 أيام', price: 723, data: '300MB', validity: '10 أيام' },
       { num: '72', offerName: 'يابالش سوبر بلس', price: 3615, data: '3GB', validity: '30 يوم' },
     ]
   },
@@ -117,38 +114,37 @@ const POSTPAID_CATEGORIES = [
   }
 ];
 
-// مكون كرت التبويب "فوري" (تصميم مطابق للصورة)
 const InstantOfferCard = ({ offer, onClick }: { offer: any, onClick: () => void }) => (
     <Card 
-        className="overflow-hidden rounded-[20px] border-none shadow-md bg-white cursor-pointer hover:shadow-lg transition-all active:scale-[0.98]"
+        className="overflow-hidden rounded-[16px] border-none shadow-md bg-white cursor-pointer hover:shadow-lg transition-all active:scale-[0.98]"
         onClick={onClick}
     >
-        <div className="bg-[#0048ad] p-3 text-white">
-            <div className="flex justify-between items-center px-1">
-                <div className="flex flex-col gap-[3px] items-start">
-                   <div className="w-5 h-[1.5px] bg-white/60" />
-                   <div className="w-5 h-[1.5px] bg-white/60" />
+        <div className="bg-[#0048ad] p-2 text-white">
+            <div className="flex justify-between items-center px-0.5">
+                <div className="flex flex-col gap-[2px] items-start">
+                   <div className="w-4 h-[1px] bg-white/60" />
+                   <div className="w-4 h-[1px] bg-white/60" />
                 </div>
-                <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold">فئة</span>
-                    <div className="bg-white/20 p-1 rounded-full border border-white/20">
-                        <div className="relative w-3.5 h-3.5">
+                <div className="flex items-center gap-1">
+                    <span className="text-[8px] font-bold">فئة</span>
+                    <div className="bg-white/20 p-0.5 rounded-full border border-white/20">
+                        <div className="relative w-2.5 h-2.5">
                             <Image src={LOGO_URL} alt="S" fill className="rounded-full object-contain" />
                         </div>
                     </div>
                 </div>
             </div>
-            <div className="text-center mt-3 mb-1">
-                <h3 className="text-3xl font-black">{offer.category}</h3>
+            <div className="text-center mt-2 mb-1">
+                <h3 className="text-xl font-black text-white">{offer.category}</h3>
             </div>
         </div>
-        <CardContent className="p-4 text-center space-y-4">
+        <CardContent className="p-2 text-center space-y-2">
             <div>
-                <p className="text-[10px] font-bold text-muted-foreground mb-1">السعر</p>
-                <p className="text-lg font-black text-[#0048ad]">{offer.price.toLocaleString()}.00 ريال</p>
+                <p className="text-[8px] font-bold text-muted-foreground mb-0.5">السعر</p>
+                <p className="text-xs font-black text-[#0048ad]">{offer.price.toLocaleString()}</p>
             </div>
-            <div className="bg-[#0048ad]/10 py-1.5 px-6 rounded-lg inline-block mx-auto">
-                <span className="text-[10px] font-bold text-[#0048ad]">{offer.validity}</span>
+            <div className="bg-[#0048ad]/10 py-1 px-1.5 rounded-md inline-block mx-auto w-full">
+                <span className="text-[8px] font-black text-[#0048ad] whitespace-nowrap">{offer.validity}</span>
             </div>
         </CardContent>
     </Card>
@@ -272,6 +268,7 @@ export default function SabaphonePage() {
                     action: 'bill', 
                     service: selectedOffer.endpoint, 
                     num: selectedOffer.num,
+                    amount: selectedOffer.endpoint === 'sabaunits' ? selectedOffer.num : undefined,
                     transid: transid 
                 })
             });
@@ -424,7 +421,7 @@ export default function SabaphonePage() {
                             </TabsContent>
 
                             <TabsContent value="instant" className="pt-2">
-                                <div className="grid grid-cols-2 gap-3 pb-20">
+                                <div className="grid grid-cols-3 gap-2 pb-20">
                                     {INSTANT_OFFERS.map((offer) => (
                                         <InstantOfferCard 
                                             key={offer.num} 
@@ -521,4 +518,3 @@ export default function SabaphonePage() {
         </div>
     );
 }
-
