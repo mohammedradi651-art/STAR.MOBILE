@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -72,12 +71,11 @@ const WHY_OFFERS: Offer[] = [
 ];
 
 const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) => {
-    // تحديث النسبة إلى 3.8
     const finalPrice = Math.ceil(offer.price * 3.8);
 
     return (
         <div 
-          className="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-sm relative border border-primary/10 mb-3 text-center cursor-pointer hover:bg-primary/5 transition-all active:scale-[0.98] group"
+          className="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-sm relative border border-[#7c3aed]/10 mb-3 text-center cursor-pointer hover:bg-[#7c3aed]/5 transition-all active:scale-[0.98] group"
           onClick={onClick}
         >
           <div className="flex justify-center mb-3">
@@ -85,28 +83,28 @@ const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void
                   <Image src={LOGO_URL} alt="Why Logo" fill className="object-cover" />
               </div>
           </div>
-          <h4 className="text-sm font-black text-primary mb-1 group-hover:text-primary/80 transition-colors">{offer.offerName}</h4>
+          <h4 className="text-sm font-black text-[#7c3aed] mb-1 group-hover:text-[#7c3aed]/80 transition-colors">{offer.offerName}</h4>
           <div className="flex items-baseline justify-center mb-4">
             <span className="text-2xl font-black text-foreground">
                 {finalPrice.toLocaleString('en-US')}
             </span>
           </div>
           
-          <div className="grid grid-cols-4 gap-2 pt-3 mt-2 border-t border-primary/10 text-center">
+          <div className="grid grid-cols-4 gap-2 pt-3 mt-2 border-t border-[#7c3aed]/10 text-center">
             <div className="space-y-1.5">
-                <Globe className="w-5 h-5 mx-auto text-primary" />
+                <Globe className="w-5 h-5 mx-auto text-[#7c3aed]" />
                 <p className="text-[11px] font-black text-foreground truncate">{offer.data || '-'}</p>
             </div>
             <div className="space-y-1.5">
-                <Mail className="w-5 h-5 mx-auto text-primary" />
+                <Mail className="w-5 h-5 mx-auto text-[#7c3aed]" />
                 <p className="text-[11px] font-black text-foreground truncate">{offer.sms || '-'}</p>
             </div>
             <div className="space-y-1.5">
-                <PhoneIcon className="w-5 h-5 mx-auto text-primary" />
+                <PhoneIcon className="w-5 h-5 mx-auto text-[#7c3aed]" />
                 <p className="text-[11px] font-black text-foreground truncate">{offer.minutes || '-'}</p>
             </div>
             <div className="space-y-1.5">
-                <Clock className="w-5 h-5 mx-auto text-primary" />
+                <Clock className="w-5 h-5 mx-auto text-[#7c3aed]" />
                 <p className="text-[11px] font-black text-foreground truncate">{offer.validity || '-'}</p>
             </div>
           </div>
@@ -126,6 +124,7 @@ export default function WhyPage() {
     const [selectedOffer, setSelectedOffer] = useState<Offer | null>(null);
     const [isConfirmingBalance, setIsConfirmingBalance] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isActivatingOffer, setIsActivatingOffer] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [lastTxDetails, setLastTxDetails] = useState<any>(null);
     const audioRef = useRef<HTMLAudioElement>(null);
@@ -169,10 +168,9 @@ export default function WhyPage() {
     const handleProcessPayment = async (payAmount: number, typeLabel: string, extraPayload: any) => {
         if (!phone || !user || !userDocRef || !firestore) return;
         
-        // تحديث النسبة إلى 3.8
-        const totalToDeduct = Math.ceil(payAmount * 3.8);
+        const finalToDeduct = Math.ceil(payAmount * 3.8);
 
-        if ((userProfile?.balance ?? 0) < totalToDeduct) {
+        if ((userProfile?.balance ?? 0) < finalToDeduct) {
             toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لإتمام هذه العملية.' });
             return;
         }
@@ -199,11 +197,11 @@ export default function WhyPage() {
             }
 
             const batch = writeBatch(firestore);
-            batch.update(userDocRef, { balance: increment(-totalToDeduct) });
+            batch.update(userDocRef, { balance: increment(-finalToDeduct) });
             batch.set(doc(firestoreCollection(firestore, 'users', user.uid, 'transactions')), {
                 userId: user.uid,
                 transactionDate: new Date().toISOString(),
-                amount: totalToDeduct,
+                amount: finalToDeduct,
                 transactionType: `سداد واي (${typeLabel})`,
                 notes: `للرقم: ${phone}`,
                 recipientPhoneNumber: phone,
@@ -211,7 +209,7 @@ export default function WhyPage() {
             });
             await batch.commit();
             
-            setLastTxDetails({ type: `سداد واي ${typeLabel}`, phone: phone, amount: totalToDeduct, transid: transid });
+            setLastTxDetails({ type: `سداد واي ${typeLabel}`, phone: phone, amount: finalToDeduct, transid: transid });
             setShowSuccess(true);
         } catch (error: any) {
             toast({ variant: "destructive", title: "خطأ", description: error.message });
@@ -238,7 +236,7 @@ export default function WhyPage() {
                     </CardContent>
                 </Card>
 
-                <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-sm border border-primary/5">
+                <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-sm border border-[#7c3aed]/10">
                     <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block mb-2 px-1">رقم الجوال</Label>
                     <div className="relative">
                         <Input
@@ -246,18 +244,18 @@ export default function WhyPage() {
                             placeholder="70xxxxxxx"
                             value={phone}
                             onChange={(e) => handlePhoneChange(e.target.value, e.target)}
-                            className="text-center font-bold text-lg h-12 rounded-2xl border-none bg-muted/20 focus-visible:ring-primary pr-12 pl-12"
+                            className="text-center font-bold text-lg h-12 rounded-2xl border-none bg-muted/20 focus-visible:ring-[#7c3aed] pr-12 pl-12"
                         />
-                        <button onClick={handleContactPick} className="absolute left-3 top-1/2 -translate-y-1/2 p-2 text-primary hover:bg-primary/10 rounded-xl transition-colors"><Users className="h-5 w-5" /></button>
+                        <button onClick={handleContactPick} className="absolute left-3 top-1/2 -translate-y-1/2 p-2 text-[#7c3aed] hover:bg-[#7c3aed]/10 rounded-xl transition-colors"><Users className="h-5 w-5" /></button>
                     </div>
                 </div>
 
                 {phone.length === 9 && (phone.startsWith('70') || phone.startsWith('71')) && (
                     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full" defaultValue="packages">
-                            <TabsList className="grid w-full grid-cols-2 bg-white dark:bg-slate-900 rounded-2xl h-14 p-1.5 shadow-sm border border-primary/10">
-                                <TabsTrigger value="packages" className="rounded-xl font-bold text-sm data-[state=active]:bg-primary data-[state=active]:text-white">باقات كرم</TabsTrigger>
-                                <TabsTrigger value="balance" className="rounded-xl font-bold text-sm data-[state=active]:bg-primary data-[state=active]:text-white">سداد رصيد</TabsTrigger>
+                            <TabsList className="grid w-full grid-cols-2 bg-white dark:bg-slate-900 rounded-2xl h-14 p-1.5 shadow-sm border border-[#7c3aed]/10">
+                                <TabsTrigger value="packages" className="rounded-xl font-bold text-sm data-[state=active]:bg-[#7c3aed] data-[state=active]:text-white">باقات كرم</TabsTrigger>
+                                <TabsTrigger value="balance" className="rounded-xl font-bold text-sm data-[state=active]:bg-[#7c3aed] data-[state=active]:text-white">سداد رصيد</TabsTrigger>
                             </TabsList>
 
                             <TabsContent value="packages" className="pt-2">
@@ -269,15 +267,15 @@ export default function WhyPage() {
                             </TabsContent>
 
                             <TabsContent value="balance" className="pt-2">
-                                <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-primary/5 text-center">
-                                    <Label className="text-sm font-black text-muted-foreground block mb-4">ادخل مبلغ الشحن</Label>
+                                <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-[#7c3aed]/5 text-center">
+                                    <Label className="text-sm font-black text-muted-foreground block mb-4">ادخل المبلغ</Label>
                                     <div className="relative max-w-[240px] mx-auto">
-                                        <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-center font-black text-3xl h-16 rounded-2xl bg-muted/20 border-none text-primary" />
-                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-primary/30 font-black text-sm">ر.ي</div>
+                                        <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-center font-black text-3xl h-16 rounded-2xl bg-muted/20 border-none text-[#7c3aed] focus-visible:ring-[#7c3aed]" />
+                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#7c3aed]/30 font-black text-sm">ر.ي</div>
                                     </div>
-                                    <div className="mt-4 p-3 bg-primary/5 rounded-2xl border border-dashed border-primary/20">
+                                    <div className="mt-4 p-3 bg-[#7c3aed]/5 rounded-2xl border border-dashed border-[#7c3aed]/20">
                                         <p className="text-[10px] font-black text-muted-foreground uppercase mb-1">المبلغ المطلوب</p>
-                                        <p className="text-lg font-black text-primary">{amount ? Math.ceil(parseFloat(amount) * 3.8).toLocaleString() : '0'} ريال</p>
+                                        <p className="text-lg font-black text-[#7c3aed]">{amount ? Math.ceil(parseFloat(amount) * 3.8).toLocaleString() : '0'}</p>
                                     </div>
                                     <Button className="w-full h-14 rounded-2xl text-lg font-black mt-8 shadow-lg text-white" onClick={() => setIsConfirmingBalance(true)} disabled={!amount} style={{ backgroundColor: WHY_PRIMARY }}>شحن رصيد</Button>
                                 </div>
@@ -296,7 +294,7 @@ export default function WhyPage() {
                         <AlertDialogTitle className="text-center font-black">تأكيد تفعيل الباقة</AlertDialogTitle>
                         <div className="space-y-3 pt-4 text-right text-sm">
                             <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">اسم الباقة:</span><span className="font-bold">{selectedOffer?.offerName}</span></div>
-                            <div className="flex justify-between items-center py-3 bg-primary/10 rounded-xl px-2 mt-2"><span className="font-black text-primary">المبلغ المخصوم:</span><span className="font-black text-primary text-lg">{selectedOffer && Math.ceil(selectedOffer.price * 3.8).toLocaleString()} ريال</span></div>
+                            <div className="flex justify-between items-center py-3 bg-[#7c3aed]/10 rounded-xl px-2 mt-2"><span className="font-black text-[#7c3aed]">المبلغ المخصوم:</span><span className="font-black text-[#7c3aed] text-lg">{selectedOffer && Math.ceil(selectedOffer.price * 3.8).toLocaleString()}</span></div>
                         </div>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-6 sm:space-x-0">
@@ -312,8 +310,8 @@ export default function WhyPage() {
                         <AlertDialogTitle className="text-center font-black">تأكيد شحن الرصيد</AlertDialogTitle>
                         <div className="space-y-3 pt-4 text-right text-sm">
                             <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">رقم الهاتف:</span><span className="font-bold">{phone}</span></div>
-                            <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">مبلغ الشحن:</span><span className="font-bold">{parseFloat(amount || '0').toLocaleString()} ريال</span></div>
-                            <div className="flex justify-between items-center py-3 bg-primary/10 rounded-xl px-2 mt-2"><span className="font-black text-primary">إجمالي الخصم:</span><span className="font-black text-primary text-lg">{Math.ceil(parseFloat(amount || '0') * 3.8).toLocaleString()} ريال</span></div>
+                            <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">مبلغ الشحن:</span><span className="font-bold">{parseFloat(amount || '0').toLocaleString('en-US')}</span></div>
+                            <div className="flex justify-between items-center py-3 bg-[#7c3aed]/10 rounded-xl px-2 mt-2"><span className="font-black text-[#7c3aed]">إجمالي الخصم:</span><span className="font-black text-[#7c3aed] text-lg">{Math.ceil(parseFloat(amount || '0') * 3.8).toLocaleString('en-US')}</span></div>
                         </div>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-6 sm:space-x-0">
@@ -325,4 +323,3 @@ export default function WhyPage() {
         </div>
     );
 }
-
