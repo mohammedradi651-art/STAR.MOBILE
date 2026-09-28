@@ -18,7 +18,8 @@ import {
   Hash,
   Zap,
   Star,
-  Database
+  Database,
+  ChevronLeft
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -59,61 +60,69 @@ type Offer = {
     num: string;
 };
 
-const SABA_PRIMARY = '#0056b3';
+// الثيم البنفسجي الموحد مع "واي"
+const SABA_PRIMARY = '#7c3aed';
 const SABA_GRADIENT = {
-    backgroundColor: '#0056b3',
-    backgroundImage: `radial-gradient(at 0% 0%, #007bff 0px, transparent 50%), radial-gradient(at 100% 100%, #003366 0px, transparent 50%)`
+    backgroundColor: '#7c3aed',
+    backgroundImage: `radial-gradient(at 0% 0%, #a78bfa 0px, transparent 50%), radial-gradient(at 100% 100%, #5b21b6 0px, transparent 50%)`
 };
 
 const LOGO_URL = "https://i.postimg.cc/5NDY8cjk/unnamed.png";
 
-const SABA_FAST_CREDIT = [
-    { num: '1', value: '150', price: 188, title: 'شحن 150 ريال' },
-    { num: '2', value: '400', price: 500, title: 'شحن 400 ريال' },
-    { num: '3', value: '600', price: 750, title: 'شحن 600 ريال' },
-    { num: '4', value: '830', price: 1038, title: 'شحن 830 ريال' },
-    { num: '5', value: '1250', price: 1563, title: 'شحن 1250 ريال' },
-    { num: '6', value: '2500', price: 3125, title: 'شحن 2500 ريال' },
-    { num: '7', value: '5000', price: 6250, title: 'شحن 5000 ريال' },
-    { num: '8', value: '10000', price: 12500, title: 'شحن 10000 ريال' },
-];
+// معامل التحويل المطلوب
+const RATE = 3.8;
 
+// جدول أسعار الجنوب فقط (SBAY)
 const SBAY_OFFERS = [
-    { num: '1506', value: '125', price: 8, title: 'SBAY 8 ر.ي' },
-    { num: '2518', value: '209', price: 9, title: 'SBAY 9 ر.ي' },
-    { num: '3615', value: '300', price: 10, title: 'SBAY 10 ر.ي' },
+    { num: '1506', value: 125, title: 'شحن 125' },
+    { num: '2518', value: 209, title: 'شحن 209' },
+    { num: '3615', value: 300, title: 'شحن 300' },
+    { num: '6085', value: 505, title: 'شحن 505' },
+    { num: '1205', value: 100, title: 'شحن 100' },
+    { num: '482', value: 40, title: 'شحن 40' },
+    { num: '15304', value: 1270, title: 'شحن 1270' },
+    { num: '542', value: 45, title: 'شحن 45' },
+    { num: '723', value: 60, title: 'شحن 60' },
+    { num: '1024', value: 85, title: 'شحن 85' },
+    { num: '271', value: 22, title: 'شحن 22' },
+    { num: '1808', value: 150, title: 'شحن 150' },
 ];
 
-const PREPAID_OFFERS = [
-    {
-        title: "باقات يابلاش",
-        offers: [
-            { num: '68', offerName: 'يابالش اليومية', price: 482, data: '100MB', validity: '24 ساعة' },
-            { num: '69', offerName: 'يابالش الاسبوعية', price: 482, data: '300MB', validity: '7 أيام' },
-            { num: '70', offerName: 'يابالش الشهرية', price: 1205, data: '1GB', validity: '30 يوم' },
-            { num: '72', offerName: 'يابالش سوبر بلس', price: 3615, data: '3GB', validity: '30 يوم' },
-        ]
-    },
-    {
-        title: "باقات النت",
-        offers: [
-            { num: '81', offerName: 'سوبرنت اليومية', price: 482, data: '200MB', validity: 'يوم' },
-            { num: '82', offerName: 'سوبرنت 250MB', price: 1205, data: '250MB', validity: '30 يوم' },
-            { num: '83', offerName: 'سوبرنت 500MB', price: 1808, data: '500MB', validity: '30 يوم' },
-            { num: '84', offerName: 'سوبرنت 1GB', price: 3013, data: '1GB', validity: '30 يوم' },
-        ]
-    }
+const PREPAID_CATEGORIES = [
+  {
+    id: 'yabalash',
+    title: 'باقات يابلاش',
+    offers: [
+      { num: '68', offerName: 'يابالش اليومية', price: 482, data: '100MB', validity: '24 ساعة' },
+      { num: '69', offerName: 'يابالش الاسبوعية', price: 482, data: '300MB', validity: '7 أيام' },
+      { num: '70', offerName: 'يابالش الشهرية', price: 1205, data: '1GB', validity: '30 يوم' },
+      { num: '72', offerName: 'يابالش سوبر بلس', price: 3615, data: '3GB', validity: '30 يوم' },
+    ]
+  },
+  {
+    id: 'supernet',
+    title: 'باقات سوبر نت',
+    offers: [
+      { num: '81', offerName: 'سوبرنت اليومية', price: 482, data: '200MB', validity: 'يوم' },
+      { num: '82', offerName: 'سوبرنت 250MB', price: 1205, data: '250MB', validity: '30 يوم' },
+      { num: '83', offerName: 'سوبرنت 500MB', price: 1808, data: '500MB', validity: '30 يوم' },
+      { num: '84', offerName: 'سوبرنت 1GB', price: 3013, data: '1GB', validity: '30 يوم' },
+      { num: '85', offerName: 'سوبرنت 4GB', price: 4820, data: '4GB', validity: '30 يوم' },
+    ]
+  }
 ];
 
-const POSTPAID_OFFERS = [
-    {
-        title: "باقات فوترة",
-        offers: [
-            { num: '88', offerName: 'يابالش الشهرية فوترة', price: 1205, data: '1GB', validity: 'شهر' },
-            { num: '91', offerName: 'يابالش سوبر بلس فوترة', price: 3615, data: '4GB', validity: 'شهر' },
-            { num: '98', offerName: 'سوبرنت فوترة اليومية', price: 482, data: '250MB', validity: 'يوم' },
-        ]
-    }
+const POSTPAID_CATEGORIES = [
+  {
+    id: 'post_yabalash',
+    title: 'يابالش فوترة',
+    offers: [
+      { num: '88', offerName: 'يابالش الشهرية', price: 1205, data: '1GB', validity: 'شهر' },
+      { num: '91', offerName: 'يابالش سوبر بلس', price: 3615, data: '4GB', validity: 'شهر' },
+      { num: '98', offerName: 'سوبرنت فوترة اليومية', price: 482, data: '250MB', validity: 'يوم' },
+      { num: '102', offerName: 'سوبرنت فوترة 4GB', price: 4820, data: '4GB', validity: 'شهر' },
+    ]
+  }
 ];
 
 export default function SabaphonePage() {
@@ -125,7 +134,6 @@ export default function SabaphonePage() {
     const [phone, setPhone] = useState('');
     const [activeTab, setActiveTab] = useState("packages");
     const [lineType, setLineType] = useState('prepaid');
-    const [units, setUnits] = useState('');
     const [selectedOffer, setSelectedOffer] = useState<Offer | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -138,6 +146,12 @@ export default function SabaphonePage() {
     );
     const { data: userProfile } = useDoc<any>(userDocRef);
 
+    useEffect(() => {
+        if (showSuccess && audioRef.current) {
+            audioRef.current.play().catch(e => console.error("Audio play failed", e));
+        }
+    }, [showSuccess]);
+
     const handlePhoneChange = (val: string, element: HTMLInputElement) => {
         const cleaned = val.replace(/\D/g, '').slice(0, 9);
         setPhone(cleaned);
@@ -146,16 +160,40 @@ export default function SabaphonePage() {
             if (typeof navigator !== 'undefined' && navigator.vibrate) {
                 navigator.vibrate(50);
             }
-            if (!cleaned.startsWith('71') && !cleaned.startsWith('70')) {
-                toast({ variant: 'destructive', title: 'تنبيه', description: 'رقم سبأفون يجب أن يبدأ بـ 71 أو 70' });
+            // تقييد الرقم بـ 71 فقط كما طلب المدير
+            if (!cleaned.startsWith('71')) {
+                toast({ variant: 'destructive', title: 'رقم غير مدعوم', description: 'يرجى إدخال رقم سبأفون جنوب يبدأ بـ 71' });
             }
         }
     };
 
-    const handleProcessAction = async (payAmount: number, typeLabel: string, endpoint: string, numCode: string) => {
-        if (!phone || !user || !userDocRef || !firestore) return;
+    const handleContactPick = async () => {
+        if (!('contacts' in navigator && 'ContactsManager' in window)) {
+            toast({ variant: "destructive", title: "غير مدعوم", description: "متصفحك لا يدعم الوصول لجهات الاتصال." });
+            return;
+        }
+        try {
+            const props = ['tel'];
+            const opts = { multiple: false };
+            const contacts = await (navigator as any).contacts.select(props, opts);
+            if (contacts.length > 0 && contacts[0].tel && contacts[0].tel.length > 0) {
+                let num = contacts[0].tel[0].replace(/[\s\-\(\)]/g, '').slice(-9);
+                if (num.startsWith('71')) {
+                    setPhone(num);
+                } else {
+                    toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'يرجى اختيار رقم يبدأ بـ 71' });
+                }
+            }
+        } catch (err) { console.error(err); }
+    };
 
-        if ((userProfile?.balance ?? 0) < payAmount) {
+    const handleProcessPayment = async (payAmount: number, typeLabel: string, endpoint: string, numCode: string) => {
+        if (!phone || !user || !userDocRef || !firestore) return;
+        
+        // الخصم بناءً على معامل التحويل 3.8
+        const finalToDeduct = Math.ceil(payAmount * RATE);
+
+        if ((userProfile?.balance ?? 0) < finalToDeduct) {
             toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لإتمام هذه العملية.' });
             return;
         }
@@ -181,11 +219,11 @@ export default function SabaphonePage() {
             }
 
             const batch = writeBatch(firestore);
-            batch.update(userDocRef, { balance: increment(-payAmount) });
+            batch.update(userDocRef, { balance: increment(-finalToDeduct) });
             batch.set(doc(firestoreCollection(firestore, 'users', user.uid, 'transactions')), {
                 userId: user.uid,
                 transactionDate: new Date().toISOString(),
-                amount: payAmount,
+                amount: finalToDeduct,
                 transactionType: `سداد سبأفون (${typeLabel})`,
                 notes: `رقم الهاتف: ${phone}`,
                 recipientPhoneNumber: phone,
@@ -193,17 +231,17 @@ export default function SabaphonePage() {
             });
             await batch.commit();
             
-            setLastTxDetails({ type: typeLabel, phone, amount: payAmount, transid });
+            setLastTxDetails({ type: typeLabel, phone, amount: finalToDeduct, transid });
             setShowSuccess(true);
         } catch (error: any) {
-            toast({ variant: "destructive", title: "خطأ", description: error.message });
+            toast({ variant: "destructive", title: "تنبيه", description: error.message });
         } finally {
             setIsProcessing(false);
             setSelectedOffer(null);
         }
     };
 
-    const currentOffers = lineType === 'prepaid' ? PREPAID_OFFERS : POSTPAID_OFFERS;
+    const currentCategories = lineType === 'prepaid' ? PREPAID_CATEGORIES : POSTPAID_CATEGORIES;
 
     if (showSuccess && lastTxDetails) {
         return (
@@ -217,7 +255,7 @@ export default function SabaphonePage() {
                             </div>
                         </div>
                         <CardContent className="p-8 space-y-6">
-                            <h2 className="text-2xl font-black text-green-600">تمت العملية بنجاح</h2>
+                            <h2 className="text-2xl font-black text-green-600">تم السداد بنجاح</h2>
                             <div className="w-full space-y-3 text-sm bg-muted/50 p-5 rounded-[24px] text-right border-2 border-dashed border-primary/10">
                                 <div className="flex justify-between items-center border-b border-muted pb-2">
                                     <span className="text-muted-foreground">رقم العملية:</span>
@@ -232,7 +270,7 @@ export default function SabaphonePage() {
                                     <span className="font-black text-primary text-base">{lastTxDetails.amount.toLocaleString()} ر.ي</span>
                                 </div>
                             </div>
-                            <Button className="w-full h-14 rounded-2xl font-black" onClick={() => router.push('/login')}>الرئيسية</Button>
+                            <Button className="w-full h-14 rounded-2xl font-black" onClick={() => router.push('/login')} style={{ backgroundColor: SABA_PRIMARY }}>الرئيسية</Button>
                         </CardContent>
                     </Card>
                 </div>
@@ -257,7 +295,7 @@ export default function SabaphonePage() {
                     </CardContent>
                 </Card>
 
-                <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-sm border border-primary/5">
+                <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-sm border border-[#7c3aed]/10">
                     <Label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block mb-2 px-1">رقم الجوال</Label>
                     <div className="relative">
                         <Input
@@ -265,20 +303,18 @@ export default function SabaphonePage() {
                             placeholder="71xxxxxxx"
                             value={phone}
                             onChange={(e) => handlePhoneChange(e.target.value, e.target)}
-                            className="text-center font-bold text-lg h-12 rounded-2xl border-none bg-muted/20 focus-visible:ring-primary pr-12 pl-12"
+                            className="text-center font-bold text-lg h-12 rounded-2xl border-none bg-muted/20 focus-visible:ring-[#7c3aed] pr-12 pl-12"
                         />
-                        <button onClick={() => {}} className="absolute left-3 top-1/2 -translate-y-1/2 p-2 text-primary hover:bg-primary/10 rounded-xl transition-colors"><Users className="h-5 w-5" /></button>
+                        <button onClick={handleContactPick} className="absolute left-3 top-1/2 -translate-y-1/2 p-2 text-[#7c3aed] hover:bg-[#7c3aed]/10 rounded-xl transition-colors"><Users className="h-5 w-5" /></button>
                     </div>
                 </div>
 
-                {phone.length === 9 && (phone.startsWith('71') || phone.startsWith('70')) && (
+                {phone.length === 9 && phone.startsWith('71') && (
                     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                            <TabsList className="grid w-full grid-cols-4 bg-white dark:bg-slate-900 rounded-2xl h-14 p-1.5 shadow-sm border border-primary/5">
-                                <TabsTrigger value="packages" className="rounded-xl font-bold text-[10px]">باقات</TabsTrigger>
-                                <TabsTrigger value="credit" className="rounded-xl font-bold text-[10px]">رصيد</TabsTrigger>
-                                <TabsTrigger value="south" className="rounded-xl font-bold text-[10px]">جنوب</TabsTrigger>
-                                <TabsTrigger value="units" className="rounded-xl font-bold text-[10px]">وحدات</TabsTrigger>
+                            <TabsList className="grid w-full grid-cols-2 bg-white dark:bg-slate-900 rounded-2xl h-14 p-1.5 shadow-sm border border-[#7c3aed]/10">
+                                <TabsTrigger value="packages" className="rounded-xl font-bold text-sm data-[state=active]:bg-[#7c3aed] data-[state=active]:text-white">باقات</TabsTrigger>
+                                <TabsTrigger value="south" className="rounded-xl font-bold text-sm data-[state=active]:bg-[#7c3aed] data-[state=active]:text-white">رصيد</TabsTrigger>
                             </TabsList>
 
                             <TabsContent value="packages" className="pt-2">
@@ -290,47 +326,42 @@ export default function SabaphonePage() {
                                         </TabsList>
                                     </Tabs>
                                 </div>
-                                <div className="space-y-3">
-                                    {currentOffers.map((cat, i) => (
-                                        <div key={i} className="space-y-2">
-                                            <h3 className="text-xs font-black text-muted-foreground uppercase mr-2">{cat.title}</h3>
-                                            {cat.offers.map((o) => (
-                                                <PackageItemCard key={o.num} offer={o} onClick={() => setSelectedOffer(o)} />
-                                            ))}
-                                        </div>
+                                <Accordion type="single" collapsible className="w-full space-y-3">
+                                    {currentCategories.map((cat) => (
+                                        <AccordionItem key={cat.id} value={cat.id} className="border-none">
+                                            <AccordionTrigger className="px-5 py-5 rounded-2xl text-white hover:no-underline shadow-md group data-[state=open]:rounded-b-none" style={{ backgroundColor: SABA_PRIMARY }}>
+                                                <div className="flex items-center gap-3 flex-1">
+                                                    <div className="bg-white/20 p-2 rounded-xl backdrop-blur-md">
+                                                        <Zap className="w-4 h-4 text-white" />
+                                                    </div>
+                                                    <span className="text-sm font-black flex-1 mr-4 text-right">{cat.title}</span>
+                                                </div>
+                                            </AccordionTrigger>
+                                            <AccordionContent className="p-4 bg-white dark:bg-slate-900 border-x border-b border-[#7c3aed]/10 rounded-b-2xl shadow-sm">
+                                                <div className="grid grid-cols-1 gap-1">
+                                                    {cat.offers.map((o) => (
+                                                        <PackageItemCard key={o.num} offer={o} onClick={() => setSelectedOffer(o)} />
+                                                    ))}
+                                                </div>
+                                            </AccordionContent>
+                                        </AccordionItem>
                                     ))}
-                                </div>
-                            </TabsContent>
-
-                            <TabsContent value="credit" className="pt-2">
-                                <div className="grid grid-cols-1 gap-2">
-                                    {SABA_FAST_CREDIT.map((opt) => (
-                                        <div key={opt.num} onClick={() => setSelectedOffer({ offerName: opt.title, price: opt.price, num: opt.num })} className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm flex justify-between items-center cursor-pointer hover:bg-primary/5 active:scale-95 transition-all">
-                                            <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-black">{opt.num}</div><span className="font-bold">{opt.title}</span></div>
-                                            <span className="font-black text-primary">{opt.price} ر.ي</span>
-                                        </div>
-                                    ))}
-                                </div>
+                                </Accordion>
                             </TabsContent>
 
                             <TabsContent value="south" className="pt-2">
                                 <div className="grid grid-cols-1 gap-2">
                                     {SBAY_OFFERS.map((opt) => (
-                                        <div key={opt.num} onClick={() => handleProcessAction(opt.price, opt.title, 'sbay', opt.num)} className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm flex justify-between items-center cursor-pointer hover:bg-primary/5 active:scale-95 transition-all border border-green-500/10">
-                                            <div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center text-green-600 font-black"><Zap className="w-5 h-5"/></div><span className="font-bold">{opt.title}</span></div>
-                                            <span className="font-black text-green-600">{opt.price} ر.ي</span>
+                                        <div key={opt.num} onClick={() => setSelectedOffer({ offerName: opt.title, price: opt.value, num: opt.num })} className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm flex justify-between items-center cursor-pointer hover:bg-primary/5 active:scale-95 transition-all border border-[#7c3aed]/10">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-[#7c3aed] font-black">
+                                                    <Smartphone className="w-5 h-5"/>
+                                                </div>
+                                                <span className="font-bold">{opt.title}</span>
+                                            </div>
+                                            <span className="font-black text-[#7c3aed]">{Math.ceil(opt.value * RATE).toLocaleString()} <span className="text-[10px]">ر.ي</span></span>
                                         </div>
                                     ))}
-                                </div>
-                            </TabsContent>
-
-                            <TabsContent value="units" className="pt-2">
-                                <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-primary/5 text-center">
-                                    <Label className="text-sm font-black text-muted-foreground block mb-4">ادخل عدد الوحدات</Label>
-                                    <div className="relative max-w-[240px] mx-auto">
-                                        <Input type="number" placeholder="0" value={units} onChange={(e) => setUnits(e.target.value)} className="text-center font-black text-3xl h-16 rounded-2xl bg-muted/20 border-none text-primary" />
-                                    </div>
-                                    <Button className="w-full h-14 rounded-2xl text-lg font-black mt-8 shadow-lg" onClick={() => handleProcessAction(parseInt(units), 'وحدات يدوية', 'sabaunits', units)} disabled={!units}>شحن الآن</Button>
                                 </div>
                             </TabsContent>
                         </Tabs>
@@ -339,17 +370,36 @@ export default function SabaphonePage() {
             </div>
 
             <Toaster />
+
             <AlertDialog open={!!selectedOffer} onOpenChange={() => setSelectedOffer(null)}>
-                <AlertDialogContent className="rounded-[32px]">
+                <AlertDialogContent className="rounded-[32px] max-sm">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-center font-black">تأكيد عملية السداد</AlertDialogTitle>
                         <div className="py-4 space-y-3 text-right text-sm">
-                            <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">الخدمة:</span><span className="font-bold">{selectedOffer?.offerName}</span></div>
-                            <div className="flex justify-between items-center py-3 bg-primary/5 rounded-xl px-2 mt-2"><span className="font-black">المبلغ المخصوم:</span><span className="font-black text-primary text-lg">{selectedOffer?.price.toLocaleString()} ريال</span></div>
+                            <div className="flex justify-between items-center py-2 border-b border-dashed">
+                                <span className="text-muted-foreground">الخدمة:</span>
+                                <span className="font-bold">{selectedOffer?.offerName}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-2 border-b border-dashed">
+                                <span className="text-muted-foreground">رقم الهاتف:</span>
+                                <span className="font-mono font-bold">{phone}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-3 bg-primary/5 rounded-xl px-2 mt-2">
+                                <span className="font-black">المبلغ المخصوم:</span>
+                                <span className="font-black text-[#7c3aed] text-lg">
+                                    {selectedOffer && Math.ceil(selectedOffer.price * RATE).toLocaleString()} ريال
+                                </span>
+                            </div>
                         </div>
                     </AlertDialogHeader>
-                    <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-4">
-                        <AlertDialogAction onClick={() => selectedOffer && handleProcessAction(selectedOffer.price, selectedOffer.offerName, activeTab === 'packages' ? 'sabaoffer' : 'sabaphone', selectedOffer.num)} className="w-full rounded-2xl h-12 font-bold">تأكيد</AlertDialogAction>
+                    <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-4 sm:space-x-0">
+                        <AlertDialogAction 
+                            onClick={() => selectedOffer && handleProcessPayment(selectedOffer.price, selectedOffer.offerName, activeTab === 'packages' ? 'sabaoffer' : 'sbay', selectedOffer.num)} 
+                            className="w-full rounded-2xl h-12 font-black"
+                            style={{ backgroundColor: SABA_PRIMARY }}
+                        >
+                            تأكيد
+                        </AlertDialogAction>
                         <AlertDialogCancel className="w-full rounded-2xl h-12 mt-0">إلغاء</AlertDialogCancel>
                     </AlertDialogFooter>
                 </AlertDialogContent>
@@ -358,15 +408,45 @@ export default function SabaphonePage() {
     );
 }
 
-const PackageItemCard = ({ offer, onClick }: { offer: any, onClick: () => void }) => (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 shadow-sm border border-primary/5 mb-2 cursor-pointer hover:bg-primary/5 transition-all flex items-center justify-between group" onClick={onClick}>
-        <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary"><Database className="w-5 h-5"/></div>
-            <div className="text-right">
-                <p className="text-xs font-black group-hover:text-primary transition-colors">{offer.offerName}</p>
-                <p className="text-[9px] font-bold text-muted-foreground">{offer.validity} - {offer.data}</p>
-            </div>
+const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) => (
+    <div 
+      className="bg-[#eeeaff] rounded-3xl p-5 shadow-sm relative border border-[#7c3aed]/10 mb-3 text-center cursor-pointer hover:bg-[#7c3aed]/10 transition-all active:scale-[0.98] group"
+      onClick={onClick}
+    >
+      <div className="flex justify-center mb-3">
+          <div className="relative w-12 h-12 rounded-2xl overflow-hidden border-2 border-white dark:border-slate-800 shadow-md">
+              <Image 
+                  src={LOGO_URL} 
+                  alt="Sabaphone" 
+                  fill 
+                  className="object-cover"
+              />
+          </div>
+      </div>
+      <h4 className="text-sm font-black text-[#7c3aed] mb-1 group-hover:text-[#7c3aed]/80 transition-colors">{offer.offerName}</h4>
+      <div className="flex items-baseline justify-center mb-4">
+        <span className="text-2xl font-black text-foreground">
+            {Math.ceil(offer.price * RATE).toLocaleString('en-US')}
+        </span>
+      </div>
+      
+      <div className="grid grid-cols-4 gap-2 pt-3 mt-2 border-t border-[#7c3aed]/10 text-center">
+        <div className="space-y-1.5">
+            <Globe className="w-5 h-5 mx-auto text-[#7c3aed]" />
+            <p className="text-[11px] font-black text-foreground truncate">{offer.data || '-'}</p>
         </div>
-        <span className="text-sm font-black text-primary">{offer.price} ر.ي</span>
+        <div className="space-y-1.5">
+            <Mail className="w-5 h-5 mx-auto text-[#7c3aed]" />
+            <p className="text-[11px] font-black text-foreground truncate">{offer.sms || '-'}</p>
+        </div>
+        <div className="space-y-1.5">
+            <PhoneIcon className="w-5 h-5 mx-auto text-[#7c3aed]" />
+            <p className="text-[11px] font-black text-foreground truncate">{offer.minutes || '-'}</p>
+        </div>
+        <div className="space-y-1.5">
+            <Clock className="w-5 h-5 mx-auto text-[#7c3aed]" />
+            <p className="text-[11px] font-black text-foreground truncate">{offer.validity || '-'}</p>
+        </div>
+      </div>
     </div>
 );

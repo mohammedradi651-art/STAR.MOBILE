@@ -36,8 +36,8 @@ const telecomServices = [
     logo: 'https://i.postimg.cc/5NDY8cjk/unnamed.png',
     href: '/sabaphone',
     description: 'سداد باقات يابالش، رصيد، ووحدات فورية',
-    color: '#0056b3',
-    accent: 'bg-[#0056b3]/5'
+    color: '#7c3aed',
+    accent: 'bg-[#7c3aed]/5'
   },
   {
     name: 'واي',
