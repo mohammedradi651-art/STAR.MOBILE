@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import CryptoJS from 'crypto-js';
 
@@ -51,22 +50,26 @@ export async function POST(request: Request) {
     } else if (service === 'adenet') {
         endpoint = 'adenet';
         apiRequestParams.action = action;
+    } else if (service === 'sabaphone') {
+        endpoint = 'sabaphone';
+        apiRequestParams.action = 'bill';
+    } else if (service === 'sabaoffer') {
+        endpoint = 'sabaoffer';
+        delete apiRequestParams.action;
+    } else if (service === 'sbay') {
+        endpoint = 'sbay';
+        apiRequestParams.action = 'bill';
+    } else if (service === 'sabaunits') {
+        endpoint = 'sabaunits';
+        delete apiRequestParams.action;
     } else if (service === 'why') {
         endpoint = 'why';
-        // بناءً على التوثيق، الأكشن دائماً هو bill
         apiRequestParams.action = 'bill';
-        
-        // --- إصلاح حاسم لحقل num ---
-        // السيرفر الخارجي يطلب num كقيمة عددية إلزامية
-        // نأخذ القيمة من num المرسل من الباقات، أو من amount المرسل من الرصيد
         const finalNum = String(payload.num || payload.amount || "");
         apiRequestParams.num = finalNum;
-
         if (payload.israsid === '1') {
-            // حالة شحن الرصيد المباشر: يطلب rasid و num بنفس القيمة
             apiRequestParams.rasid = finalNum;
         } else {
-            // حالة تفعيل الباقات: يطلب num و packageid
             if (payload.packageid) {
                 apiRequestParams.packageid = String(payload.packageid).trim();
             }
@@ -82,7 +85,6 @@ export async function POST(request: Request) {
     } else if (service === 'games') {
         endpoint = 'gameswcards';
     } else if (service === 'yemen' || service === 'yem' || !service) {
-        // Yemen Mobile Specific Handling
         if (action === 'billoffer') {
             endpoint = 'offeryem';
             apiRequestParams.action = 'billoffer';
@@ -110,7 +112,6 @@ export async function POST(request: Request) {
     }
 
     delete apiRequestParams.service;
-    // التأكد من أن كافة القيم نصوص قبل الإرسال
     const params = new URLSearchParams();
     Object.keys(apiRequestParams).forEach(key => {
         if (apiRequestParams[key] !== undefined && apiRequestParams[key] !== null) {
@@ -144,7 +145,6 @@ export async function POST(request: Request) {
         try {
             data = JSON.parse(responseText);
         } catch (e) {
-            // محاولة جلب الرصيد من الرد النصي في حال فشل الـ JSON
             const balanceMatch = responseText.match(/Your balance:?\s*([\d.]+)/i);
             if (balanceMatch) {
                 return NextResponse.json({ 

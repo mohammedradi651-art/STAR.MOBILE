@@ -32,6 +32,14 @@ const telecomServices = [
     accent: 'bg-[#FECC4F]/10'
   },
   {
+    name: 'سبأفون',
+    logo: 'https://i.postimg.cc/5NDY8cjk/unnamed.png',
+    href: '/sabaphone',
+    description: 'سداد باقات يابالش، رصيد، ووحدات فورية',
+    color: '#0056b3',
+    accent: 'bg-[#0056b3]/5'
+  },
+  {
     name: 'واي',
     logo: 'https://i.postimg.cc/kgWR7jwV/images-(8).jpg',
     href: '/why',
@@ -109,10 +117,10 @@ export default function TelecomServicesPage() {
                     </div>
 
                     <div className="flex-1 text-right overflow-hidden">
-                        <h4 className="font-black text-base text-foreground group-hover:text-primary transition-colors mb-0.5">
+                        <h4 className={cn("font-black text-base transition-colors mb-0.5", "text-foreground group-hover:text-primary")}>
                             {service.name}
                         </h4>
-                        <p className="text-[10px] text-muted-foreground font-bold leading-relaxed line-clamp-1 opacity-80">
+                        <p className={cn("text-[10px] text-muted-foreground font-bold leading-relaxed line-clamp-1 opacity-80")}>
                             {service.description}
                         </p>
                     </div>
