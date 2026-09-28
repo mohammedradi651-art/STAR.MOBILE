@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -23,6 +22,12 @@ import {
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -46,28 +51,78 @@ export const dynamic = 'force-dynamic';
 
 type Offer = {
     offerName: string;
-    price: number;
+    price: number; // المبلغ الأصلي قبل الضرب في 3.1
     data: string;
     validity: string;
     packageid: string;
     num: string;
+    sms?: string;
+    minutes?: string;
 };
 
-const WHY_PRIMARY = '#FE8B19';
+// --- الثيم البنفسجي الجديد ---
+const WHY_PRIMARY = '#7c3aed'; 
 const WHY_GRADIENT = {
-    backgroundColor: '#FE8B19',
+    backgroundColor: '#7c3aed',
     backgroundImage: `
-        radial-gradient(at 0% 0%, #FFA84D 0px, transparent 50%),
-        radial-gradient(at 100% 100%, #D47100 0px, transparent 50%)
+        radial-gradient(at 0% 0%, #a78bfa 0px, transparent 50%),
+        radial-gradient(at 100% 100%, #5b21b6 0px, transparent 50%)
     `
 };
 
+const LOGO_URL = "https://i.postimg.cc/kgWR7jwV/images-(8).jpg";
+
 const WHY_OFFERS: Offer[] = [
-    { offerName: 'شحن باقة كرم 250', price: 250, data: '100MB', validity: '7 أيام', packageid: '91', num: '250' },
-    { offerName: 'شحن باقة كرم 500', price: 500, data: '250MB', validity: '30 يوم', packageid: '92', num: '500' },
-    { offerName: 'شحن باقة كرم 900', price: 900, data: '500MB', validity: '45 يوم', packageid: '93', num: '900' },
-    { offerName: 'شحن باقة كرم 2000', price: 2000, data: '1GB', validity: '60 يوم', packageid: '94', num: '2000' },
+    { offerName: 'باقة كرم 250', price: 250, data: '100MB', validity: '7 أيام', packageid: '91', num: '250', sms: '10', minutes: '20' },
+    { offerName: 'باقة كرم 500', price: 500, data: '250MB', validity: '30 يوم', packageid: '92', num: '500', sms: '50', minutes: '50' },
+    { offerName: 'باقة كرم 900', price: 900, data: '500MB', validity: '45 يوم', packageid: '93', num: '900', sms: '100', minutes: '100' },
+    { offerName: 'باقة كرم 2000', price: 2000, data: '1GB', validity: '60 يوم', packageid: '94', num: '2000', sms: '500', minutes: '200' },
 ];
+
+// --- مكون الباقة بنفس نمط يمن موبايل ---
+const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) => {
+    // السعر النهائي = السعر الأصلي * 3.1
+    const finalPrice = Math.ceil(offer.price * 3.1);
+
+    return (
+        <div 
+          className="bg-[#f3f0ff] dark:bg-slate-900 rounded-3xl p-5 shadow-sm relative border border-primary/10 mb-3 text-center cursor-pointer hover:bg-primary/5 transition-all active:scale-[0.98] group"
+          onClick={onClick}
+        >
+          <div className="flex justify-center mb-3">
+              <div className="relative w-12 h-12 rounded-2xl overflow-hidden border-2 border-white dark:border-slate-800 shadow-md">
+                  <Image src={LOGO_URL} alt="Why Logo" fill className="object-cover" />
+              </div>
+          </div>
+          <h4 className="text-sm font-black text-primary mb-1 group-hover:text-primary/80 transition-colors">{offer.offerName}</h4>
+          <div className="flex items-baseline justify-center mb-4">
+            <span className="text-2xl font-black text-foreground">
+                {finalPrice.toLocaleString('en-US')}
+            </span>
+            <span className="text-[10px] font-bold text-muted-foreground mr-1">ر.ي</span>
+          </div>
+          
+          <div className="grid grid-cols-4 gap-2 pt-3 mt-2 border-t border-primary/10 text-center">
+            <div className="space-y-1.5">
+                <Globe className="w-5 h-5 mx-auto text-primary" />
+                <p className="text-[11px] font-black text-foreground truncate">{offer.data || '-'}</p>
+            </div>
+            <div className="space-y-1.5">
+                <Mail className="w-5 h-5 mx-auto text-primary" />
+                <p className="text-[11px] font-black text-foreground truncate">{offer.sms || '-'}</p>
+            </div>
+            <div className="space-y-1.5">
+                <PhoneIcon className="w-5 h-5 mx-auto text-primary" />
+                <p className="text-[11px] font-black text-foreground truncate">{offer.minutes || '-'}</p>
+            </div>
+            <div className="space-y-1.5">
+                <Clock className="w-5 h-5 mx-auto text-primary" />
+                <p className="text-[11px] font-black text-foreground truncate">{offer.validity || '-'}</p>
+            </div>
+          </div>
+        </div>
+    );
+};
 
 export default function WhyPage() {
     const router = useRouter();
@@ -121,11 +176,11 @@ export default function WhyPage() {
     const handleProcessPayment = async (payAmount: number, typeLabel: string, payload: any) => {
         if (!phone || !user || !userDocRef || !firestore) return;
         
-        const commission = typeLabel === 'رصيد' ? Math.ceil(payAmount * 0.05) : 0;
-        const totalToDeduct = payAmount + commission;
+        // --- الحسبة الجديدة: المبلغ المخصوم = المبلغ المدخل * 3.1 ---
+        const totalToDeduct = Math.ceil(payAmount * 3.1);
 
         if ((userProfile?.balance ?? 0) < totalToDeduct) {
-            toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك لا يكفي لإتمام هذه العملية.' });
+            toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لإتمام هذه العملية.' });
             return;
         }
 
@@ -156,7 +211,7 @@ export default function WhyPage() {
                 transactionDate: new Date().toISOString(),
                 amount: totalToDeduct,
                 transactionType: `سداد واي (${typeLabel})`,
-                notes: `للرقم: ${phone}. ${typeLabel === 'رصيد' ? `مبلغ: ${payAmount} + عمولة: ${commission}` : ''}`,
+                notes: `للرقم: ${phone}. (النسبة المعتمدة 3.1x)`,
                 recipientPhoneNumber: phone,
                 transid: transid
             });
@@ -173,33 +228,10 @@ export default function WhyPage() {
         }
     };
 
-    if (showSuccess && lastTxDetails) {
-        return (
-            <div className="flex flex-col h-full bg-[#FFF9F0]">
-                <audio ref={audioRef} src="/sdad.mp3" autoPlay />
-                <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                    <Card className="w-full max-sm text-center shadow-2xl rounded-[40px] overflow-hidden border-none bg-card">
-                        <div className="bg-green-500 p-10 flex justify-center"><CheckCircle className="h-16 w-16 text-white animate-bounce" /></div>
-                        <CardContent className="p-8 space-y-6">
-                            <div><h2 className="text-2xl font-black text-green-600">تم السداد بنجاح</h2><p className="text-sm text-muted-foreground mt-1">تم تنفيذ طلب السداد بنجاح</p></div>
-                            <div className="w-full space-y-3 text-sm bg-muted/50 p-5 rounded-[24px] text-right border-2 border-dashed border-[#FE8B19]/20">
-                                <div className="flex justify-between items-center border-b border-muted pb-2"><span className="text-muted-foreground flex items-center gap-2"><HashIcon className="w-3.5 h-3.5" /> رقم العملية:</span><span className="font-mono font-black text-[#FE8B19]">{lastTxDetails.transid}</span></div>
-                                <div className="flex justify-between items-center border-b border-muted pb-2"><span className="text-muted-foreground flex items-center gap-2"><PhoneIcon className="w-3.5 h-3.5" /> رقم الجوال:</span><span className="font-mono font-bold tracking-widest">{lastTxDetails.phone}</span></div>
-                                <div className="flex justify-between items-center border-b border-muted pb-2"><span className="text-muted-foreground flex items-center gap-2"><Wallet className="w-3.5 h-3.5" /> المبلغ المخصوم:</span><span className="font-black text-[#FE8B19]">{lastTxDetails.amount.toLocaleString('en-US')} ريال</span></div>
-                                <div className="flex justify-between items-center pt-1"><span className="text-muted-foreground flex items-center gap-2"><Calendar className="w-3.5 h-3.5" /> التاريخ:</span><span className="text-[10px] font-bold">{format(new Date(), 'Pp', { locale: ar })}</span></div>
-                            </div>
-                            <Button className="w-full h-14 rounded-2xl font-bold text-lg text-white" style={{ backgroundColor: '#FE8B19' }} onClick={() => setShowSuccess(false)}>إغلاق</Button>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="flex flex-col h-full bg-[#F4F7F9] dark:bg-slate-950">
             {isProcessing && <ProcessingOverlay />}
-            <SimpleHeader title="خدمات واي (Way)" />
+            <SimpleHeader title="واي" />
             <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
                 
                 <Card className="overflow-hidden rounded-[28px] shadow-lg text-white border-none mb-4" style={WHY_GRADIENT}>
@@ -220,46 +252,40 @@ export default function WhyPage() {
                             placeholder="70xxxxxxx"
                             value={phone}
                             onChange={(e) => handlePhoneChange(e.target.value, e.target)}
-                            className="text-center font-bold text-lg h-12 rounded-2xl border-none bg-muted/20 focus-visible:ring-[#FE8B19] pr-12 pl-12"
+                            className="text-center font-bold text-lg h-12 rounded-2xl border-none bg-muted/20 focus-visible:ring-primary pr-12 pl-12"
                         />
-                        <button onClick={handleContactPick} className="absolute left-3 top-1/2 -translate-y-1/2 p-2 text-[#FE8B19] hover:bg-[#FE8B19]/10 rounded-xl transition-colors"><Users className="h-5 w-5" /></button>
+                        <button onClick={handleContactPick} className="absolute left-3 top-1/2 -translate-y-1/2 p-2 text-primary hover:bg-primary/10 rounded-xl transition-colors"><Users className="h-5 w-5" /></button>
                     </div>
                 </div>
 
                 {phone.length === 9 && (phone.startsWith('70') || phone.startsWith('71')) && (
                     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full" defaultValue="packages">
-                            <TabsList className="grid w-full grid-cols-2 bg-white dark:bg-slate-900 rounded-2xl h-14 p-1.5 shadow-sm border border-[#FE8B19]/10">
-                                <TabsTrigger value="packages" className="rounded-xl font-bold text-sm data-[state=active]:bg-[#FE8B19] data-[state=active]:text-white">باقات كرم</TabsTrigger>
-                                <TabsTrigger value="balance" className="rounded-xl font-bold text-sm data-[state=active]:bg-[#FE8B19] data-[state=active]:text-white">سداد رصيد</TabsTrigger>
+                            <TabsList className="grid w-full grid-cols-2 bg-white dark:bg-slate-900 rounded-2xl h-14 p-1.5 shadow-sm border border-primary/10">
+                                <TabsTrigger value="packages" className="rounded-xl font-bold text-sm data-[state=active]:bg-primary data-[state=active]:text-white">باقات كرم</TabsTrigger>
+                                <TabsTrigger value="balance" className="rounded-xl font-bold text-sm data-[state=active]:bg-primary data-[state=active]:text-white">سداد رصيد</TabsTrigger>
                             </TabsList>
 
-                            <TabsContent value="packages" className="pt-2 space-y-3">
-                                {WHY_OFFERS.map((offer) => (
-                                    <div key={offer.packageid} onClick={() => setSelectedOffer(offer)} className="bg-white dark:bg-slate-900 rounded-[24px] p-4 flex items-center justify-between border border-[#FE8B19]/10 cursor-pointer hover:bg-[#FE8B19]/5 active:scale-[0.98] transition-all">
-                                        <div className="flex items-center gap-4">
-                                            <div className="p-3 bg-[#FE8B19]/10 rounded-xl"><Zap className="w-5 h-5 text-[#FE8B19]" /></div>
-                                            <div className="text-right">
-                                                <h4 className="font-black text-sm">{offer.offerName}</h4>
-                                                <div className="flex gap-3 mt-1">
-                                                    <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1"><Globe className="w-3 h-3"/> {offer.data}</span>
-                                                    <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3"/> {offer.validity}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="text-left font-black text-[#FE8B19] text-base">{offer.price} ر.ي</div>
-                                    </div>
-                                ))}
+                            <TabsContent value="packages" className="pt-2">
+                                <div className="grid grid-cols-1 gap-1">
+                                    {WHY_OFFERS.map((offer) => (
+                                        <PackageItemCard key={offer.packageid} offer={offer} onClick={() => setSelectedOffer(offer)} />
+                                    ))}
+                                </div>
                             </TabsContent>
 
                             <TabsContent value="balance" className="pt-2">
-                                <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-[#FE8B19]/5 text-center">
+                                <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-primary/5 text-center">
                                     <Label className="text-sm font-black text-muted-foreground block mb-4">ادخل مبلغ الشحن</Label>
                                     <div className="relative max-w-[240px] mx-auto">
-                                        <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-center font-black text-3xl h-16 rounded-2xl bg-muted/20 border-none text-[#FE8B19]" />
-                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#FE8B19]/30 font-black text-sm">ر.ي</div>
+                                        <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-center font-black text-3xl h-16 rounded-2xl bg-muted/20 border-none text-primary" />
+                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-primary/30 font-black text-sm">ر.ي</div>
                                     </div>
-                                    <Button className="w-full h-14 rounded-2xl text-lg font-black mt-8 shadow-lg text-white" onClick={() => setIsConfirmingBalance(true)} disabled={!amount} style={{ backgroundColor: '#FE8B19' }}>شحن رصيد</Button>
+                                    <div className="mt-4 p-3 bg-primary/5 rounded-2xl border border-dashed border-primary/20">
+                                        <p className="text-[10px] font-black text-muted-foreground uppercase mb-1">إجمالي الخصم (النسبة 3.1x)</p>
+                                        <p className="text-lg font-black text-primary">{amount ? Math.ceil(parseFloat(amount) * 3.1).toLocaleString() : '0'} ريال</p>
+                                    </div>
+                                    <Button className="w-full h-14 rounded-2xl text-lg font-black mt-6 shadow-lg text-white" onClick={() => setIsConfirmingBalance(true)} disabled={!amount} style={{ backgroundColor: WHY_PRIMARY }}>شحن رصيد</Button>
                                 </div>
                             </TabsContent>
                         </Tabs>
@@ -267,17 +293,21 @@ export default function WhyPage() {
                 )}
             </div>
 
+            <Toaster />
+            <audio ref={audioRef} src="/sdad.mp3" preload="auto" />
+
             <AlertDialog open={!!selectedOffer} onOpenChange={() => setSelectedOffer(null)}>
                 <AlertDialogContent className="rounded-[32px]">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-center font-black">تأكيد تفعيل الباقة</AlertDialogTitle>
                         <div className="space-y-3 pt-4 text-right text-sm">
                             <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">اسم الباقة:</span><span className="font-bold">{selectedOffer?.offerName}</span></div>
-                            <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">المبلغ المخصوم:</span><span className="font-black text-[#FE8B19] text-lg">{selectedOffer?.price.toLocaleString()} ريال</span></div>
+                            <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">نسبة التحويل:</span><span className="font-bold">3.1x</span></div>
+                            <div className="flex justify-between items-center py-3 bg-primary/10 rounded-xl px-2 mt-2"><span className="font-black text-primary">المبلغ المخصوم:</span><span className="font-black text-primary text-lg">{selectedOffer && Math.ceil(selectedOffer.price * 3.1).toLocaleString()} ريال</span></div>
                         </div>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-6 sm:space-x-0">
-                        <AlertDialogAction className="w-full rounded-2xl h-12 font-bold text-white" style={{ backgroundColor: '#FE8B19' }} onClick={() => selectedOffer && handleProcessPayment(selectedOffer.price, 'تفعيل باقة', { num: selectedOffer.num, packageid: selectedOffer.packageid })}>تأكيد</AlertDialogAction>
+                        <AlertDialogAction className="w-full rounded-2xl h-12 font-bold text-white" style={{ backgroundColor: WHY_PRIMARY }} onClick={() => selectedOffer && handleProcessPayment(selectedOffer.price, 'تفعيل باقة', { num: selectedOffer.num, packageid: selectedOffer.packageid })}>تأكيد</AlertDialogAction>
                         <AlertDialogCancel className="w-full rounded-2xl h-12 mt-0">إلغاء</AlertDialogCancel>
                     </AlertDialogFooter>
                 </AlertDialogContent>
@@ -289,18 +319,16 @@ export default function WhyPage() {
                         <AlertDialogTitle className="text-center font-black">تأكيد شحن الرصيد</AlertDialogTitle>
                         <div className="space-y-3 pt-4 text-right text-sm">
                             <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">مبلغ الشحن:</span><span className="font-bold">{parseFloat(amount || '0').toLocaleString()} ريال</span></div>
-                            <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">العمولة (5%):</span><span className="font-bold text-orange-600">{Math.ceil(parseFloat(amount || '0') * 0.05).toLocaleString()} ريال</span></div>
-                            <div className="flex justify-between items-center py-3 bg-muted/50 rounded-xl px-2 mt-2"><span className="font-black">إجمالي الخصم:</span><span className="font-black text-[#FE8B19] text-lg">{(parseFloat(amount || '0') + Math.ceil(parseFloat(amount || '0') * 0.05)).toLocaleString()} ريال</span></div>
+                            <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">نسبة التحويل:</span><span className="font-bold">3.1x</span></div>
+                            <div className="flex justify-between items-center py-3 bg-primary/10 rounded-xl px-2 mt-2"><span className="font-black text-primary">إجمالي الخصم:</span><span className="font-black text-primary text-lg">{Math.ceil(parseFloat(amount || '0') * 3.1).toLocaleString()} ريال</span></div>
                         </div>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-6 sm:space-x-0">
-                        <AlertDialogAction className="w-full rounded-2xl h-12 font-bold text-white" style={{ backgroundColor: '#FE8B19' }} onClick={() => handleProcessPayment(parseFloat(amount), 'رصيد', { israsid: '1' })}>تأكيد الشحن</AlertDialogAction>
+                        <AlertDialogAction className="w-full rounded-2xl h-12 font-bold text-white" style={{ backgroundColor: WHY_PRIMARY }} onClick={() => handleProcessPayment(parseFloat(amount), 'رصيد', { israsid: '1' })}>تأكيد الشحن</AlertDialogAction>
                         <AlertDialogCancel className="w-full rounded-2xl h-12 mt-0">إلغاء</AlertDialogCancel>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-
-            <Toaster />
         </div>
     );
 }
