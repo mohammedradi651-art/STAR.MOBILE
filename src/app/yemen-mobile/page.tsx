@@ -68,6 +68,7 @@ type ActiveOffer = {
     offerName: string;
     startDate: string;
     expireDate: string;
+    offertype?: string; // كود الباقة المسترجع من الاستعلام
 };
 
 type Offer = {
@@ -415,7 +416,8 @@ export default function YemenMobilePage() {
               mappedOffers = offerResult.offers.map((off: any) => ({
                   offerName: off.offerName || off.offer_name || '...',
                   startDate: off.offerStartDate || off.start_date || off.startDate || '...',
-                  expireDate: off.offerEndDate || off.expire_date || off.expireDate || '...'
+                  expireDate: off.offerEndDate || off.expire_date || off.expireDate || '...',
+                  offertype: off.offertype || off.packageid || off.id || '' // استخراج كود الباقة بدقة
               }));
           }
 
@@ -657,7 +659,18 @@ export default function YemenMobilePage() {
     }
   }, [showSuccess]);
 
-  const findMatchedOffer = (name: string) => {
+  const findMatchedOffer = (name: string, code?: string) => {
+    const activeCategories = lineTypeTab === 'prepaid' ? PREPAID_CATEGORIES : POSTPAID_CATEGORIES;
+
+    // الأولوية 1: المطابقة عبر كود الباقة (الأكثر دقة)
+    if (code) {
+        for (const cat of activeCategories) {
+            const found = (cat as any).offers.find((o: Offer) => o.offertype === code);
+            if (found) return found;
+        }
+    }
+
+    // الأولوية 2: المطابقة عبر الاسم (في حال عدم وجود كود)
     const normalize = (str: string) => 
         str.replace(/[أإآ]/g, 'ا')
            .replace(/ة/g, 'ه')
@@ -666,7 +679,6 @@ export default function YemenMobilePage() {
            .trim();
 
     const normalizedInput = normalize(name);
-    const activeCategories = lineTypeTab === 'prepaid' ? PREPAID_CATEGORIES : POSTPAID_CATEGORIES;
 
     for (const cat of activeCategories) {
         const found = (cat as any).offers.find((o: Offer) => {
@@ -839,14 +851,15 @@ export default function YemenMobilePage() {
                                     <div className="p-4 space-y-3">
                                         {activeOffers.length > 0 ? (
                                             activeOffers.map((off, idx) => {
-                                                const matched = findMatchedOffer(off.offerName);
+                                                const matched = findMatchedOffer(off.offerName, off.offertype);
                                                 const isRenewable = matched && matched.price >= 100;
+                                                const finalDisplayName = matched ? matched.offerName : off.offerName;
                                                 
                                                 return (
                                                     <div key={idx} className="flex gap-4 items-center p-4 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-muted/50 mb-2 text-right animate-in fade-in-0 slide-in-from-bottom-2">
                                                         <div className="flex-1 text-right overflow-hidden">
                                                             <h4 className="text-[13px] font-black text-[#003366] dark:text-blue-400 leading-tight mb-1 text-right">
-                                                                {off.offerName}
+                                                                {finalDisplayName}
                                                             </h4>
                                                             <div className="flex flex-col gap-0.5">
                                                                 <div className="flex items-center justify-end gap-1.5">
