@@ -242,7 +242,7 @@ export default function SabaphonePage() {
         } catch (err) { console.error(err); }
     };
 
-    const handleProcessPayment = async () => {
+    const handleProcessPayment = async (payAmount: number, typeLabel: string, extraPayload: any) => {
         if (!phone || !user || !userDocRef || !firestore || !selectedOffer) return;
         
         const finalToDeduct = selectedOffer.finalPrice;
@@ -453,12 +453,11 @@ export default function SabaphonePage() {
                                     <div className="relative max-w-[240px] mx-auto">
                                         <Input 
                                             type="number" 
-                                            placeholder="0.00" 
+                                            placeholder="عدد الوحدات" 
                                             value={amount} 
                                             onChange={(e) => setAmount(e.target.value)} 
-                                            className="text-center font-black text-3xl h-16 rounded-2xl bg-muted/20 border-none text-[#0048ad] focus-visible:ring-[#0048ad]" 
+                                            className="text-center font-black text-3xl h-16 rounded-2xl bg-white border-2 border-solid border-[#0048ad]/40 text-[#0048ad] focus-visible:ring-[#0048ad]" 
                                         />
-                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#0048ad]/30 font-black text-sm">ر.ي</div>
                                     </div>
                                     <div className="mt-4 p-4 bg-[#0048ad]/5 rounded-2xl border-2 border-dashed border-[#0048ad]/20">
                                         <p className="text-[10px] font-black text-muted-foreground uppercase mb-1 tracking-widest">إجمالي المبلغ المطلوب</p>
