@@ -17,6 +17,7 @@ import {
   Users,
   Hash,
   Zap,
+  MapPin,
   Menu as MenuIcon
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -65,7 +66,7 @@ const SABA_GRADIENT = {
 };
 
 const LOGO_URL = "https://i.postimg.cc/5NDY8cjk/unnamed.png";
-const RATE = 3.8;
+const NORTH_RATE = 3.8;
 
 const INSTANT_OFFERS = [
     { category: '600', price: 960, validity: '7 أيام', num: '600' },
@@ -122,29 +123,26 @@ const InstantOfferCard = ({ offer, onClick }: { offer: any, onClick: () => void 
         <div className="bg-[#0048ad] p-2 text-white">
             <div className="flex justify-between items-center px-0.5">
                 <div className="flex flex-col gap-[2px] items-start">
-                   <div className="w-4 h-[1px] bg-white/60" />
-                   <div className="w-4 h-[1px] bg-white/60" />
+                   <div className="w-3 h-[1px] bg-white/60" />
+                   <div className="w-3 h-[1px] bg-white/60" />
                 </div>
                 <div className="flex items-center gap-1">
-                    <span className="text-[8px] font-bold">فئة</span>
+                    <span className="text-[7px] font-bold">فئة</span>
                     <div className="bg-white/20 p-0.5 rounded-full border border-white/20">
-                        <div className="relative w-2.5 h-2.5">
+                        <div className="relative w-2 h-2">
                             <Image src={LOGO_URL} alt="S" fill className="rounded-full object-contain" />
                         </div>
                     </div>
                 </div>
             </div>
-            <div className="text-center mt-2 mb-1">
-                <h3 className="text-xl font-black text-white">{offer.category}</h3>
+            <div className="text-center mt-1.5 mb-1">
+                <h3 className="text-lg font-black text-white">{offer.category}</h3>
             </div>
         </div>
-        <CardContent className="p-2 text-center space-y-2">
-            <div>
-                <p className="text-[8px] font-bold text-muted-foreground mb-0.5">السعر</p>
-                <p className="text-xs font-black text-[#0048ad]">{offer.price.toLocaleString()}</p>
-            </div>
-            <div className="bg-[#0048ad]/10 py-1 px-1.5 rounded-md inline-block mx-auto w-full">
-                <span className="text-[8px] font-black text-[#0048ad] whitespace-nowrap">{offer.validity}</span>
+        <CardContent className="p-2 text-center space-y-1">
+            <p className="text-[9px] font-black text-[#0048ad]">{offer.price.toLocaleString()}</p>
+            <div className="bg-[#0048ad]/10 py-0.5 rounded-md w-full">
+                <span className="text-[7px] font-black text-[#0048ad] whitespace-nowrap">{offer.validity}</span>
             </div>
         </CardContent>
     </Card>
@@ -163,7 +161,7 @@ const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void
       <h4 className="text-sm font-black text-[#0048ad] mb-1 group-hover:text-[#0048ad]/80 transition-colors">{offer.offerName}</h4>
       <div className="flex items-baseline justify-center mb-4">
         <span className="text-2xl font-black text-foreground">
-            {Math.ceil(offer.price * RATE).toLocaleString('en-US')}
+            {Math.ceil(offer.price * NORTH_RATE).toLocaleString('en-US')}
         </span>
       </div>
       
@@ -197,6 +195,7 @@ export default function SabaphonePage() {
     const [phone, setPhone] = useState('');
     const [activeTab, setActiveTab] = useState("packages");
     const [lineType, setLineType] = useState('prepaid');
+    const [region, setRegion] = useState<'south' | 'north'>('south');
     const [amount, setAmount] = useState('');
     const [selectedOffer, setSelectedOffer] = useState<any>(null);
     const [isConfirmingAction, setIsConfirmingAction] = useState(false);
@@ -291,7 +290,7 @@ export default function SabaphonePage() {
             });
             await batch.commit();
             
-            setLastTxDetails({ type: selectedOffer.typeLabel, phone, amount: finalToDeduct, transid });
+            setLastTxDetails({ type: selectedOffer.typeLabel, phone, amount: finalToDeduct, transid: transid });
             setShowSuccess(true);
         } catch (error: any) {
             toast({ variant: "destructive", title: "تنبيه", description: error.message });
@@ -407,7 +406,7 @@ export default function SabaphonePage() {
                                                                 typeLabel: o.offerName,
                                                                 endpoint: 'sabaoffer',
                                                                 num: o.num,
-                                                                finalPrice: Math.ceil(o.price * RATE),
+                                                                finalPrice: Math.ceil(o.price * NORTH_RATE),
                                                                 originalPrice: o.price
                                                             });
                                                             setIsConfirmingAction(true);
@@ -428,7 +427,7 @@ export default function SabaphonePage() {
                                             offer={offer} 
                                             onClick={() => {
                                                 setSelectedOffer({
-                                                    typeLabel: `فئة ${offer.category}`,
+                                                    typeLabel: `فئة ${offer.category} (جنوب)`,
                                                     endpoint: 'sbay',
                                                     num: offer.num,
                                                     finalPrice: offer.price,
@@ -441,7 +440,26 @@ export default function SabaphonePage() {
                                 </div>
                             </TabsContent>
 
-                            <TabsContent value="balance" className="pt-2">
+                            <TabsContent value="balance" className="pt-2 space-y-4">
+                                <div className="flex flex-col gap-3">
+                                    <div className="flex justify-center">
+                                        <Tabs value={lineType} onValueChange={setLineType} className="max-w-[200px] w-full">
+                                            <TabsList className="grid w-full grid-cols-2 bg-muted/30 rounded-xl h-9">
+                                                <TabsTrigger value="prepaid" className="rounded-lg text-[10px]">مسبق الدفع</TabsTrigger>
+                                                <TabsTrigger value="postpaid" className="rounded-lg text-[10px]">فوترة</TabsTrigger>
+                                            </TabsList>
+                                        </Tabs>
+                                    </div>
+                                    <div className="flex justify-center">
+                                        <Tabs value={region} onValueChange={(v: any) => setRegion(v)} className="max-w-[200px] w-full">
+                                            <TabsList className="grid w-full grid-cols-2 bg-muted/30 rounded-xl h-9">
+                                                <TabsTrigger value="south" className="rounded-lg text-[10px]">جنوب</TabsTrigger>
+                                                <TabsTrigger value="north" className="rounded-lg text-[10px]">شمال</TabsTrigger>
+                                            </TabsList>
+                                        </Tabs>
+                                    </div>
+                                </div>
+
                                 <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-[#0048ad]/5 text-center">
                                     <Label className="text-sm font-black text-muted-foreground block mb-4">ادخل المبلغ المراد شحنه</Label>
                                     <div className="relative max-w-[240px] mx-auto">
@@ -459,11 +477,16 @@ export default function SabaphonePage() {
                                         onClick={() => {
                                             const val = parseFloat(amount);
                                             if (isNaN(val) || val <= 0) return;
+                                            
+                                            // منطق التسعيرة حسب المنطقة
+                                            const isNorth = region === 'north';
+                                            const finalPrice = isNorth ? Math.ceil(val * NORTH_RATE) : val;
+
                                             setSelectedOffer({
-                                                typeLabel: 'شحن رصيد يدوي',
-                                                endpoint: 'sabaunits',
+                                                typeLabel: `شحن رصيد ${region === 'south' ? 'جنوب' : 'شمال'}`,
+                                                endpoint: region === 'south' ? 'sbay' : 'sabaphone',
                                                 num: val,
-                                                finalPrice: Math.ceil(val * RATE),
+                                                finalPrice: finalPrice,
                                                 originalPrice: val
                                             });
                                             setIsConfirmingAction(true);
