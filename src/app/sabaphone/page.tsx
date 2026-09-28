@@ -117,32 +117,33 @@ const POSTPAID_CATEGORIES = [
 
 const InstantOfferCard = ({ offer, onClick }: { offer: any, onClick: () => void }) => (
     <Card 
-        className="overflow-hidden rounded-[20px] border-none shadow-lg bg-white cursor-pointer hover:shadow-xl transition-all active:scale-[0.95] group"
+        className="overflow-hidden rounded-[24px] border-none shadow-xl bg-white cursor-pointer hover:shadow-2xl transition-all active:scale-[0.95] group"
         onClick={onClick}
     >
-        <div className="bg-[#0048ad] p-3 text-white">
-            <div className="flex justify-between items-center px-0.5">
+        <div className="bg-[#0048ad] p-4 text-white relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.1),transparent)]" />
+            <div className="flex justify-between items-center relative z-10 px-0.5">
                 <div className="flex flex-col gap-[2px] items-start">
-                   <div className="w-4 h-[1.5px] bg-white/60" />
-                   <div className="w-4 h-[1.5px] bg-white/60" />
+                   <div className="w-5 h-[1.5px] bg-white/60" />
+                   <div className="w-5 h-[1.5px] bg-white/60" />
                 </div>
                 <div className="flex items-center gap-1.5">
-                    <span className="text-[8px] font-black uppercase">فئة</span>
-                    <div className="bg-white/20 p-1 rounded-full border border-white/20">
-                        <div className="relative w-3 h-3">
+                    <span className="text-[9px] font-black uppercase opacity-80">فئة</span>
+                    <div className="bg-white/20 p-1.5 rounded-full border border-white/20 backdrop-blur-md">
+                        <div className="relative w-3.5 h-3.5">
                             <Image src={LOGO_URL} alt="S" fill className="rounded-full object-contain" />
                         </div>
                     </div>
                 </div>
             </div>
-            <div className="text-center mt-2.5 mb-1.5">
-                <h3 className="text-2xl font-black text-white group-hover:scale-110 transition-transform">{offer.category}</h3>
+            <div className="text-center mt-4 mb-2 relative z-10">
+                <h3 className="text-3xl font-black text-white group-hover:scale-110 transition-transform tracking-tight">{offer.category}</h3>
             </div>
         </div>
-        <CardContent className="p-3 text-center space-y-2">
-            <p className="text-xs font-black text-[#0048ad]">{offer.price.toLocaleString()}</p>
-            <div className="bg-[#0048ad]/10 py-1 rounded-lg w-full">
-                <span className="text-[9px] font-black text-[#0048ad] whitespace-nowrap">{offer.validity}</span>
+        <CardContent className="p-4 text-center space-y-3 bg-white">
+            <p className="text-sm font-black text-[#0048ad]">{offer.price.toLocaleString()}</p>
+            <div className="bg-[#0048ad]/10 py-1.5 rounded-xl w-full">
+                <span className="text-[10px] font-black text-[#0048ad] whitespace-nowrap">{offer.validity}</span>
             </div>
         </CardContent>
     </Card>
@@ -395,8 +396,10 @@ export default function SabaphonePage() {
                                         <AccordionItem key={cat.id} value={cat.id} className="border-none">
                                             <AccordionTrigger className="px-5 py-5 rounded-2xl text-white hover:no-underline shadow-md group data-[state=open]:rounded-b-none" style={{ backgroundColor: SABA_PRIMARY }}>
                                                 <div className="flex items-center gap-3 flex-1">
-                                                    <div className="bg-white/20 p-2 rounded-xl backdrop-blur-md">
-                                                        <Zap className="h-4 w-4 text-white" />
+                                                    <div className="bg-white/20 p-1.5 rounded-xl backdrop-blur-md border border-white/20">
+                                                        <div className="relative w-5 h-5">
+                                                            <Image src={LOGO_URL} alt="Sabaphone" fill className="object-contain rounded-lg" />
+                                                        </div>
                                                     </div>
                                                     <span className="text-sm font-black flex-1 mr-4 text-right">{cat.title}</span>
                                                 </div>
@@ -430,7 +433,7 @@ export default function SabaphonePage() {
                                             offer={offer} 
                                             onClick={() => {
                                                 setSelectedOffer({
-                                                    typeLabel: `فئة ${offer.category} (جنوب)`,
+                                                    typeLabel: `فئة ${offer.category} (شمال)`,
                                                     endpoint: 'sbay',
                                                     num: offer.num,
                                                     finalPrice: offer.price,
