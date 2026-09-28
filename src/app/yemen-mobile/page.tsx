@@ -415,7 +415,7 @@ export default function YemenMobilePage() {
                   offerName: off.offerName || off.offer_name || '...',
                   startDate: off.offerStartDate || off.start_date || off.startDate || '...',
                   expireDate: off.offerEndDate || off.expire_date || off.expireDate || '...',
-                  offertype: off.offertype || off.packageid || off.id || ''
+                  offertype: off.offertype || off.packageid || off.offerId || off.id || ''
               }));
           }
 
