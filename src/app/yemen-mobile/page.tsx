@@ -32,7 +32,7 @@ import {
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@/components/accordion";
+} from "@/components/ui/accordion";
 import {
   AlertDialog,
   AlertDialogAction,

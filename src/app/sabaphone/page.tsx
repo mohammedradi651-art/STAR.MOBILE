@@ -26,7 +26,7 @@ import {
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@/components/accordion";
+} from "@/components/ui/accordion";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -143,6 +143,9 @@ export default function SabaphonePage() {
         setPhone(cleaned);
         if (cleaned.length === 9) {
             element.blur();
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                navigator.vibrate(50);
+            }
             if (!cleaned.startsWith('71') && !cleaned.startsWith('70')) {
                 toast({ variant: 'destructive', title: 'تنبيه', description: 'رقم سبأفون يجب أن يبدأ بـ 71 أو 70' });
             }
@@ -153,7 +156,7 @@ export default function SabaphonePage() {
         if (!phone || !user || !userDocRef || !firestore) return;
 
         if ((userProfile?.balance ?? 0) < payAmount) {
-            toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لإتمام العملية.' });
+            toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لإتمام هذه العملية.' });
             return;
         }
 
