@@ -32,7 +32,7 @@ import {
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@/components/ui/accordion";
+} from "@/components/accordion";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -180,49 +180,6 @@ export const PREPAID_CATEGORIES = [
   }
 ];
 
-const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) => (
-    <div 
-      className="bg-[#fad9b2] rounded-3xl p-5 shadow-sm relative border border-[#B32C4C]/10 mb-3 text-center cursor-pointer hover:bg-[#B32C4C]/5 transition-all active:scale-[0.98] group"
-      onClick={onClick}
-    >
-      <div className="flex justify-center mb-3">
-          <div className="relative w-12 h-12 rounded-2xl overflow-hidden border-2 border-white dark:border-slate-800 shadow-md">
-              <Image 
-                  src="https://i.postimg.cc/tTXzYWY3/1200x630wa.jpg" 
-                  alt="Yemen Mobile" 
-                  fill 
-                  className="object-cover"
-              />
-          </div>
-      </div>
-      <h4 className="text-sm font-black text-[#B32C4C] mb-1 group-hover:text-[#B32C4C]/80 transition-colors">{offer.offerName}</h4>
-      <div className="flex items-baseline justify-center mb-4">
-        <span className="text-2xl font-black text-foreground">
-            {offer.price.toLocaleString('en-US')}
-        </span>
-      </div>
-      
-      <div className="grid grid-cols-4 gap-2 pt-3 mt-2 border-t border-[#B32C4C]/10 text-center">
-        <div className="space-y-1.5">
-            <Globe className="w-5 h-5 mx-auto text-[#B32C4C]" />
-            <p className="text-[11px] font-black text-foreground truncate">{offer.data || '-'}</p>
-        </div>
-        <div className="space-y-1.5">
-            <Mail className="w-5 h-5 mx-auto text-[#B32C4C]" />
-            <p className="text-[11px] font-black text-foreground truncate">{offer.sms || '-'}</p>
-        </div>
-        <div className="space-y-1.5">
-            <PhoneIcon className="w-5 h-5 mx-auto text-[#B32C4C]" />
-            <p className="text-[11px] font-black text-foreground truncate">{offer.minutes || '-'}</p>
-        </div>
-        <div className="space-y-1.5">
-            <Clock className="w-5 h-5 mx-auto text-[#B32C4C]" />
-            <p className="text-[11px] font-black text-foreground truncate">{offer.validity || '-'}</p>
-        </div>
-      </div>
-    </div>
-);
-
 export const POSTPAID_CATEGORIES = [
   {
     id: 'mazaya',
@@ -315,6 +272,49 @@ export const POSTPAID_CATEGORIES = [
     ]
   }
 ];
+
+const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) => (
+    <div 
+      className="bg-[#fad9b2] rounded-3xl p-5 shadow-sm relative border border-[#B32C4C]/10 mb-3 text-center cursor-pointer hover:bg-[#B32C4C]/5 transition-all active:scale-[0.98] group"
+      onClick={onClick}
+    >
+      <div className="flex justify-center mb-3">
+          <div className="relative w-12 h-12 rounded-2xl overflow-hidden border-2 border-white dark:border-slate-800 shadow-md">
+              <Image 
+                  src="https://i.postimg.cc/tTXzYWY3/1200x630wa.jpg" 
+                  alt="Yemen Mobile" 
+                  fill 
+                  className="object-cover"
+              />
+          </div>
+      </div>
+      <h4 className="text-sm font-black text-[#B32C4C] mb-1 group-hover:text-[#B32C4C]/80 transition-colors">{offer.offerName}</h4>
+      <div className="flex items-baseline justify-center mb-4">
+        <span className="text-2xl font-black text-foreground">
+            {offer.price.toLocaleString('en-US')}
+        </span>
+      </div>
+      
+      <div className="grid grid-cols-4 gap-2 pt-3 mt-2 border-t border-[#B32C4C]/10 text-center">
+        <div className="space-y-1.5">
+            <Globe className="w-5 h-5 mx-auto text-[#B32C4C]" />
+            <p className="text-[11px] font-black text-foreground truncate">{offer.data || '-'}</p>
+        </div>
+        <div className="space-y-1.5">
+            <Mail className="w-5 h-5 mx-auto text-[#B32C4C]" />
+            <p className="text-[11px] font-black text-foreground truncate">{offer.sms || '-'}</p>
+        </div>
+        <div className="space-y-1.5">
+            <PhoneIcon className="w-5 h-5 mx-auto text-[#B32C4C]" />
+            <p className="text-[11px] font-black text-foreground truncate">{offer.minutes || '-'}</p>
+        </div>
+        <div className="space-y-1.5">
+            <Clock className="w-5 h-5 mx-auto text-[#B32C4C]" />
+            <p className="text-[11px] font-black text-foreground truncate">{offer.validity || '-'}</p>
+        </div>
+      </div>
+    </div>
+);
 
 export default function YemenMobilePage() {
   const router = useRouter();
@@ -419,9 +419,6 @@ export default function YemenMobilePage() {
               }));
           }
 
-          // --- تعديل حاسم: تحديد نوع الرقم بناءً على mobileType المسترجع من الـ API ---
-          // 1 تعني Postpaid (فاتورة)
-          // 2 تعني Prepaid (دفع مسبق)
           const mTypeRaw = String(queryResult.mobileType || "");
           let isPostpaid = false;
 
@@ -430,7 +427,6 @@ export default function YemenMobilePage() {
           } else if (mTypeRaw === '2' || mTypeRaw.toLowerCase().includes('pre') || mTypeRaw.includes('مسبق')) {
               isPostpaid = false;
           } else {
-              // احتياطاً: التحقق من النص الوصفي للعملية
               const resDesc = String(queryResult.resultDesc || "").toLowerCase();
               isPostpaid = resDesc.includes('postpaid') || resDesc.includes('فوترة');
           }
@@ -513,37 +509,6 @@ export default function YemenMobilePage() {
         }
     } catch (err) {
         console.error("Contacts selection failed:", err);
-    }
-  };
-
-  const handleRenewOffer = (name: string) => {
-    const normalize = (str: string) => 
-        str.replace(/[أإآ]/g, 'ا')
-           .replace(/ة/g, 'ه')
-           .replace(/ى/g, 'ي')
-           .toLowerCase()
-           .trim();
-
-    const normalizedInput = normalize(name);
-    const activeCategories = lineTypeTab === 'prepaid' ? PREPAID_CATEGORIES : POSTPAID_CATEGORIES;
-
-    let foundOffer: Offer | undefined;
-    for (const cat of activeCategories) {
-        foundOffer = (cat as any).offers.find((o: Offer) => {
-            const normalizedOfferName = normalize(o.offerName);
-            return normalizedInput.includes(normalizedOfferName) || normalizedOfferName.includes(normalizedInput);
-        });
-        if (foundOffer) break;
-    }
-
-    if (foundOffer) {
-        setSelectedOffer(foundOffer);
-    } else {
-        toast({
-            variant: "destructive",
-            title: "عذراً",
-            description: "لم نتمكن من تحديد سعر التجديد تلقائياً. يرجى اختيار الباقة من القائمة.",
-        });
     }
   };
 
@@ -692,56 +657,26 @@ export default function YemenMobilePage() {
     }
   }, [showSuccess]);
 
-  if (showSuccess && lastTxDetails) {
-    return (
-        <div className="flex flex-col h-full bg-[#F4F7F9] dark:bg-slate-950">
-            <audio ref={audioRef} src="/sdad.mp3" preload="auto" />
-            <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-[100] flex items-center justify-center animate-in fade-in-0 p-4">
-                <Card className="w-full max-sm text-center shadow-2xl rounded-[40px] overflow-hidden border-none bg-card">
-                    <div className="bg-green-500 p-8 flex justify-center">
-                        <div className="bg-white/20 p-4 rounded-full animate-bounce">
-                            <CheckCircle className="h-16 w-16 text-white" />
-                        </div>
-                    </div>
-                    <CardContent className="p-8 space-y-6">
-                        <div>
-                            <h2 className="text-2xl font-black text-green-600">تم التسديد بنجاح</h2>
-                            <p className="text-sm text-muted-foreground mt-1">تم تنفيذ طلبك بنجاح</p>
-                        </div>
+  const findMatchedOffer = (name: string) => {
+    const normalize = (str: string) => 
+        str.replace(/[أإآ]/g, 'ا')
+           .replace(/ة/g, 'ه')
+           .replace(/ى/g, 'ي')
+           .toLowerCase()
+           .trim();
 
-                        <div className="w-full space-y-3 text-sm bg-muted/50 p-5 rounded-[24px] text-right border-2 border-dashed border-[#B32C4C]/10">
-                            <div className="flex justify-between items-center border-b border-muted pb-2">
-                                <span className="text-muted-foreground flex items-center gap-2"><Hash className="w-3.5 h-3.5" /> رقم العملية:</span>
-                                <span className="font-mono font-black text-[#B32C4C]">{lastTxDetails.transid}</span>
-                            </div>
-                            <div className="flex justify-between items-center border-b border-muted pb-2">
-                                <span className="text-muted-foreground flex items-center gap-2"><Smartphone className="w-3.5 h-3.5" /> رقم الجوال:</span>
-                                <span className="font-mono font-bold tracking-widest">{lastTxDetails.phone}</span>
-                            </div>
-                            <div className="flex justify-between items-center border-b border-muted pb-2">
-                                <span className="text-muted-foreground flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5" /> نوع العملية:</span>
-                                <span className="font-bold">{lastTxDetails.type}</span>
-                            </div>
-                            <div className="flex justify-between items-center border-b border-muted pb-2">
-                                <span className="text-muted-foreground flex items-center gap-2"><Wallet className="w-3.5 h-3.5" /> المبلغ:</span>
-                                <span className="font-black text-[#B32C4C]">{lastTxDetails.amount.toLocaleString('en-US')} ريال</span>
-                            </div>
-                            <div className="flex justify-between items-center pt-1">
-                                <span className="text-muted-foreground flex items-center gap-2"><Calendar className="w-3.5 h-3.5" /> التاريخ:</span>
-                                <span className="text-[10px] font-bold">{format(new Date(), 'Pp', { locale: ar })}</span>
-                            </div>
-                        </div>
+    const normalizedInput = normalize(name);
+    const activeCategories = lineTypeTab === 'prepaid' ? PREPAID_CATEGORIES : POSTPAID_CATEGORIES;
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <Button variant="outline" className="rounded-2xl h-14 font-black" onClick={() => router.push('/login')}>الرئيسية</Button>
-                            <Button className="rounded-2xl h-14 font-black text-white" onClick={() => { setShowSuccess(false); handleSearch(phone); }} style={{ backgroundColor: '#B32C4C' }}>تحديث</Button>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-        </div>
-    );
-  }
+    for (const cat of activeCategories) {
+        const found = (cat as any).offers.find((o: Offer) => {
+            const normalizedOfferName = normalize(o.offerName);
+            return normalizedInput.includes(normalizedOfferName) || normalizedOfferName.includes(normalizedInput);
+        });
+        if (found) return found;
+    }
+    return null;
+  };
 
   return (
     <div className="flex flex-col h-full bg-[#F4F7F9] dark:bg-slate-950">
@@ -903,34 +838,46 @@ export default function YemenMobilePage() {
                                     </div>
                                     <div className="p-4 space-y-3">
                                         {activeOffers.length > 0 ? (
-                                            activeOffers.map((off, idx) => (
-                                                <div key={idx} className="flex gap-4 items-center p-4 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-muted/50 mb-2 text-right animate-in fade-in-0 slide-in-from-bottom-2">
-                                                    <div className="flex-1 text-right overflow-hidden">
-                                                        <h4 className="text-[13px] font-black text-[#003366] dark:text-blue-400 leading-tight mb-1 text-right">
-                                                            {off.offerName}
-                                                        </h4>
-                                                        <div className="flex flex-col gap-0.5">
-                                                            <div className="flex items-center justify-end gap-1.5">
-                                                                <span className="text-[11px] font-black text-foreground" dir="ltr">{formatFullDateTime(off.startDate)}</span>
-                                                                <span className="text-[11px] font-black text-green-600">:الإشتراك</span>
-                                                            </div>
-                                                            <div className="flex items-center justify-end gap-1.5">
-                                                                <span className="text-[11px] font-black text-foreground" dir="ltr">{formatFullDateTime(off.expireDate)}</span>
-                                                                <span className="text-[11px] font-black text-red-600">:الانتهـــاء</span>
+                                            activeOffers.map((off, idx) => {
+                                                const matched = findMatchedOffer(off.offerName);
+                                                const isRenewable = matched && matched.price >= 100;
+                                                
+                                                return (
+                                                    <div key={idx} className="flex gap-4 items-center p-4 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-muted/50 mb-2 text-right animate-in fade-in-0 slide-in-from-bottom-2">
+                                                        <div className="flex-1 text-right overflow-hidden">
+                                                            <h4 className="text-[13px] font-black text-[#003366] dark:text-blue-400 leading-tight mb-1 text-right">
+                                                                {off.offerName}
+                                                            </h4>
+                                                            <div className="flex flex-col gap-0.5">
+                                                                <div className="flex items-center justify-end gap-1.5">
+                                                                    <span className="text-[11px] font-black text-foreground" dir="ltr">{formatFullDateTime(off.startDate)}</span>
+                                                                    <span className="text-[11px] font-black text-green-600">:الإشتراك</span>
+                                                                </div>
+                                                                <div className="flex items-center justify-end gap-1.5">
+                                                                    <span className="text-[11px] font-black text-foreground" dir="ltr">{formatFullDateTime(off.expireDate)}</span>
+                                                                    <span className="text-[11px] font-black text-red-600">:الانتهـــاء</span>
+                                                                </div>
                                                             </div>
                                                         </div>
+                                                        
+                                                        {isRenewable ? (
+                                                            <button 
+                                                                onClick={() => setSelectedOffer(matched)}
+                                                                className="w-16 h-16 rounded-xl flex flex-col items-center justify-center gap-1 shrink-0 active:scale-95 transition-all shadow-md"
+                                                                style={{ backgroundColor: YEMEN_MOBILE_PRIMARY }}
+                                                            >
+                                                                <RefreshCw className="w-5 h-5 text-white" />
+                                                                <span className="text-[10px] text-white font-black">تجديد</span>
+                                                            </button>
+                                                        ) : (
+                                                            <div className="w-16 h-16 rounded-xl flex flex-col items-center justify-center shrink-0 opacity-80 shadow-inner" style={{ backgroundColor: YEMEN_MOBILE_PRIMARY }}>
+                                                                <div className="h-[2px] w-7 bg-white mb-2 rounded-full opacity-60" />
+                                                                <Smartphone className="w-7 h-7 text-white" />
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                    
-                                                    <button 
-                                                        onClick={() => handleRenewOffer(off.offerName)}
-                                                        className="w-16 h-16 rounded-xl flex flex-col items-center justify-center gap-1 shrink-0 active:scale-95 transition-all shadow-md"
-                                                        style={{ backgroundColor: YEMEN_MOBILE_PRIMARY }}
-                                                    >
-                                                        <RefreshCw className="w-5 h-5 text-white" />
-                                                        <span className="text-[10px] text-white font-black">تجديد</span>
-                                                    </button>
-                                                </div>
-                                            ))
+                                                );
+                                            })
                                         ) : (
                                             <div className="text-center py-6">
                                                 <AlertCircle className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
