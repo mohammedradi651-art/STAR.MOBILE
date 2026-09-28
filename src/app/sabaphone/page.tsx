@@ -65,7 +65,6 @@ const SABA_GRADIENT = {
 };
 
 const LOGO_URL = "https://i.postimg.cc/5NDY8cjk/unnamed.png";
-// النسبة الجديدة: 100 وحدة بـ 4500 ريال => المعامل هو 45
 const NORTH_RATE = 45;
 
 const INSTANT_OFFERS = [
@@ -117,33 +116,26 @@ const POSTPAID_CATEGORIES = [
 
 const InstantOfferCard = ({ offer, onClick }: { offer: any, onClick: () => void }) => (
     <Card 
-        className="overflow-hidden rounded-[24px] border-none shadow-xl bg-white cursor-pointer hover:shadow-2xl transition-all active:scale-[0.95] group"
+        className="overflow-hidden rounded-[28px] border-none shadow-xl bg-white cursor-pointer hover:shadow-2xl transition-all active:scale-[0.95] group border border-primary/5"
         onClick={onClick}
     >
-        <div className="bg-[#0048ad] p-4 text-white relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.1),transparent)]" />
+        <div className="bg-[#0048ad] p-6 text-white relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent)]" />
             <div className="flex justify-between items-center relative z-10 px-0.5">
-                <div className="flex flex-col gap-[2px] items-start">
-                   <div className="w-5 h-[1.5px] bg-white/60" />
-                   <div className="w-5 h-[1.5px] bg-white/60" />
-                </div>
-                <div className="flex items-center gap-1.5">
-                    <span className="text-[9px] font-black uppercase opacity-80">فئة</span>
-                    <div className="bg-white/20 p-1.5 rounded-full border border-white/20 backdrop-blur-md">
-                        <div className="relative w-3.5 h-3.5">
-                            <Image src={LOGO_URL} alt="S" fill className="rounded-full object-contain" />
-                        </div>
+                <div className="bg-white/20 p-2 rounded-xl border border-white/20 backdrop-blur-md">
+                    <div className="relative w-4 h-4">
+                        <Image src={LOGO_URL} alt="S" fill className="rounded-full object-contain" />
                     </div>
                 </div>
             </div>
-            <div className="text-center mt-4 mb-2 relative z-10">
-                <h3 className="text-3xl font-black text-white group-hover:scale-110 transition-transform tracking-tight">{offer.category}</h3>
+            <div className="text-center mt-6 mb-2 relative z-10">
+                <h3 className="text-4xl font-black text-white group-hover:scale-110 transition-transform tracking-tight drop-shadow-md">{offer.category}</h3>
             </div>
         </div>
-        <CardContent className="p-4 text-center space-y-3 bg-white">
-            <p className="text-sm font-black text-[#0048ad]">{offer.price.toLocaleString()}</p>
-            <div className="bg-[#0048ad]/10 py-1.5 rounded-xl w-full">
-                <span className="text-[10px] font-black text-[#0048ad] whitespace-nowrap">{offer.validity}</span>
+        <CardContent className="p-5 text-center space-y-3 bg-white">
+            <p className="text-lg font-black text-[#0048ad]">{offer.price.toLocaleString()}</p>
+            <div className="bg-[#0048ad]/5 py-2 rounded-2xl w-full border border-[#0048ad]/10">
+                <span className="text-[11px] font-black text-[#0048ad] whitespace-nowrap">{offer.validity}</span>
             </div>
         </CardContent>
     </Card>
@@ -457,7 +449,7 @@ export default function SabaphonePage() {
                                 </div>
 
                                 <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-[#0048ad]/5 text-center">
-                                    <Label className="text-sm font-black text-muted-foreground block mb-4">ادخل المبلغ المراد شحنه</Label>
+                                    <Label className="text-sm font-black text-muted-foreground block mb-4">ادخل عدد الوحدات</Label>
                                     <div className="relative max-w-[240px] mx-auto">
                                         <Input 
                                             type="number" 
@@ -502,12 +494,13 @@ export default function SabaphonePage() {
             </div>
 
             <Toaster />
+            <audio ref={audioRef} src="/sdad.mp3" preload="auto" />
 
             <AlertDialog open={isConfirmingAction} onOpenChange={setIsConfirmingAction}>
                 <AlertDialogContent className="rounded-[32px] max-sm">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-center font-black">تأكيد عملية السداد</AlertDialogTitle>
-                        <div className="py-4 space-y-3 text-right text-sm">
+                        <div className="space-y-3 pt-4 text-right text-sm">
                             <div className="flex justify-between items-center py-2 border-b border-dashed">
                                 <span className="text-muted-foreground">نوع العملية:</span>
                                 <span className="font-bold">{selectedOffer?.typeLabel}</span>
