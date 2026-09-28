@@ -11,8 +11,6 @@ import {
   CheckCircle, 
   Loader2, 
   RefreshCw, 
-  Smile, 
-  Frown, 
   Zap, 
   ShieldCheck, 
   Database, 
@@ -51,6 +49,7 @@ import { Badge } from '@/components/ui/badge';
 import { format, parseISO } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
+import { cn } from '@/lib/utils';
 import Image from 'next/image';
 
 export const dynamic = 'force-dynamic';
@@ -317,7 +316,6 @@ export default function YemenMobilePage() {
   const findMatchedOffer = (name: string, code?: string) => {
     const activeCategories = lineTypeTab === 'prepaid' ? PREPAID_CATEGORIES : POSTPAID_CATEGORIES;
 
-    // أولوية قصوى: المطابقة عبر الكود (offertype)
     if (code) {
         for (const cat of activeCategories) {
             const found = cat.offers.find((o: any) => o.offertype === code);
@@ -325,7 +323,6 @@ export default function YemenMobilePage() {
         }
     }
 
-    // أولوية ثانية: المطابقة عبر الاسم (إذا لم يوجد كود)
     const normalize = (str: string) => 
         str.replace(/[أإآ]/g, 'ا')
            .replace(/ة/g, 'ه')
@@ -374,8 +371,8 @@ export default function YemenMobilePage() {
               }));
           }
 
-          const mTypeRaw = String(queryResult.mobileType || "");
-          const isPostpaid = mTypeRaw === '1' || mTypeRaw.toLowerCase().includes('post') || mTypeRaw.includes('فوترة');
+          const mType = String(queryResult.mobileType || "");
+          const isPostpaid = mType === '1' || mType.toLowerCase().includes('post') || mType.includes('فوترة');
           setLineTypeTab(isPostpaid ? 'postpaid' : 'prepaid');
 
           const isLoan = solfaResult.status === "1" || solfaResult.status === 1;
@@ -409,41 +406,26 @@ export default function YemenMobilePage() {
 
   const handleContactPick = async () => {
     if (!('contacts' in navigator && 'ContactsManager' in window)) {
-        toast({
-            variant: "destructive",
-            title: "غير مدعوم",
-            description: "متصفحك لا يدعم الوصول لجهات الاتصال.",
-        });
+        toast({ variant: "destructive", title: "غير مدعوم", description: "متصفحك لا يدعم الوصول لجهات الاتصال." });
         return;
     }
-
     try {
         const props = ['tel'];
         const opts = { multiple: false };
         const contacts = await (navigator as any).contacts.select(props, opts);
-        
         if (contacts.length > 0 && contacts[0].tel && contacts[0].tel.length > 0) {
-            let selectedNumber = contacts[0].tel[0];
-            selectedNumber = selectedNumber.replace(/[\s\-\(\)]/g, '');
-            
-            // Clean common prefixes
+            let selectedNumber = contacts[0].tel[0].replace(/[\s\-\(\)]/g, '');
             if (selectedNumber.startsWith('+967')) selectedNumber = selectedNumber.substring(4);
             if (selectedNumber.startsWith('00967')) selectedNumber = selectedNumber.substring(5);
             if (selectedNumber.startsWith('0')) selectedNumber = selectedNumber.substring(1);
-            
             const cleanedNum = selectedNumber.slice(0, 9);
             setPhone(cleanedNum);
             if (cleanedNum.length === 9) {
-                if (cleanedNum.startsWith('77') || cleanedNum.startsWith('78')) {
-                    handleSearch(cleanedNum);
-                } else {
-                    toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'يجب البدء بـ 77 أو 78' });
-                }
+                if (cleanedNum.startsWith('77') || cleanedNum.startsWith('78')) handleSearch(cleanedNum);
+                else toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'يجب البدء بـ 77 أو 78' });
             }
         }
-    } catch (err) {
-        console.error("Contacts selection failed:", err);
-    }
+    } catch (err) { console.error("Contacts selection failed:", err); }
   };
 
   const handlePayment = async () => {
@@ -473,7 +455,7 @@ export default function YemenMobilePage() {
         const total = selectedOffer.price + loanAmt;
         const transid = Date.now().toString().slice(-8);
         const res = await fetch('/api/telecom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mobile: phone, action: 'billoffer', service: 'yemen', offerid: selectedOffer.offertype, method: 'Renew', solfa: loanAmt > 0 ? 'Y' : 'N', amount: selectedOffer.price, transid }) });
-        const result = await res.json();
+        const result = await response.json();
         if (res.ok && (result.resultCode === "0" || result.resultCode === 0 || result.resultCode === "-2")) {
             const batch = writeBatch(firestore!);
             batch.update(userDocRef, { balance: increment(-total) });
@@ -584,7 +566,6 @@ export default function YemenMobilePage() {
                                 <div className="p-4 space-y-3">
                                     {activeOffers.length > 0 ? activeOffers.map((off, idx) => {
                                         const matched = findMatchedOffer(off.offerName, off.offertype);
-                                        // إذا وُجد الكود في القائمة وسعره >= 100 فهي باقة تجارية قابلة للتجديد
                                         const isRenewable = matched && matched.price >= 100;
                                         const finalDisplayName = matched ? matched.offerName : off.offerName;
                                         return (
@@ -599,7 +580,7 @@ export default function YemenMobilePage() {
                                                 {isRenewable ? (
                                                     <button onClick={() => setSelectedOffer(matched)} className="w-14 h-14 rounded-xl flex flex-col items-center justify-center gap-1 bg-[#B32C4C] text-white active:scale-95 transition-all shadow-md shrink-0"><RefreshCw className="w-4 h-4" /><span className="text-[9px] font-black">تجديد</span></button>
                                                 ) : (
-                                                    <div className="w-14 h-14 rounded-xl flex flex-col items-center justify-center bg-[#B32C4C] text-white opacity-80 shrink-0 shadow-inner"><div className="h-[2px] w-6 bg-white mb-2 rounded-full opacity-60" /><Smartphone className="w-6 h-6" /></div>
+                                                    <div className="w-14 h-14 rounded-xl flex flex-col items-center justify-center bg-[#B32C4C] text-white opacity-80 shrink-0 shadow-inner" title="باقة نظام/نشطة"><div className="h-[2px] w-6 bg-white mb-2 rounded-full opacity-60" /><Smartphone className="w-6 h-6" /></div>
                                                 )}
                                             </div>
                                         );
