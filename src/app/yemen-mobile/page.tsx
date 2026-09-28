@@ -180,6 +180,49 @@ export const PREPAID_CATEGORIES = [
   }
 ];
 
+const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) => (
+    <div 
+      className="bg-[#fad9b2] rounded-3xl p-5 shadow-sm relative border border-[#B32C4C]/10 mb-3 text-center cursor-pointer hover:bg-[#B32C4C]/5 transition-all active:scale-[0.98] group"
+      onClick={onClick}
+    >
+      <div className="flex justify-center mb-3">
+          <div className="relative w-12 h-12 rounded-2xl overflow-hidden border-2 border-white dark:border-slate-800 shadow-md">
+              <Image 
+                  src="https://i.postimg.cc/tTXzYWY3/1200x630wa.jpg" 
+                  alt="Yemen Mobile" 
+                  fill 
+                  className="object-cover"
+              />
+          </div>
+      </div>
+      <h4 className="text-sm font-black text-[#B32C4C] mb-1 group-hover:text-[#B32C4C]/80 transition-colors">{offer.offerName}</h4>
+      <div className="flex items-baseline justify-center mb-4">
+        <span className="text-2xl font-black text-foreground">
+            {offer.price.toLocaleString('en-US')}
+        </span>
+      </div>
+      
+      <div className="grid grid-cols-4 gap-2 pt-3 mt-2 border-t border-[#B32C4C]/10 text-center">
+        <div className="space-y-1.5">
+            <Globe className="w-5 h-5 mx-auto text-[#B32C4C]" />
+            <p className="text-[11px] font-black text-foreground truncate">{offer.data || '-'}</p>
+        </div>
+        <div className="space-y-1.5">
+            <Mail className="w-5 h-5 mx-auto text-[#B32C4C]" />
+            <p className="text-[11px] font-black text-foreground truncate">{offer.sms || '-'}</p>
+        </div>
+        <div className="space-y-1.5">
+            <PhoneIcon className="w-5 h-5 mx-auto text-[#B32C4C]" />
+            <p className="text-[11px] font-black text-foreground truncate">{offer.minutes || '-'}</p>
+        </div>
+        <div className="space-y-1.5">
+            <Clock className="w-5 h-5 mx-auto text-[#B32C4C]" />
+            <p className="text-[11px] font-black text-foreground truncate">{offer.validity || '-'}</p>
+        </div>
+      </div>
+    </div>
+);
+
 export const POSTPAID_CATEGORIES = [
   {
     id: 'mazaya',
@@ -272,49 +315,6 @@ export const POSTPAID_CATEGORIES = [
     ]
   }
 ];
-
-const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) => (
-    <div 
-      className="bg-[#fad9b2] rounded-3xl p-5 shadow-sm relative border border-[#B32C4C]/10 mb-3 text-center cursor-pointer hover:bg-[#B32C4C]/5 transition-all active:scale-[0.98] group"
-      onClick={onClick}
-    >
-      <div className="flex justify-center mb-3">
-          <div className="relative w-12 h-12 rounded-2xl overflow-hidden border-2 border-white dark:border-slate-800 shadow-md">
-              <Image 
-                  src="https://i.postimg.cc/tTXzYWY3/1200x630wa.jpg" 
-                  alt="Yemen Mobile" 
-                  fill 
-                  className="object-cover"
-              />
-          </div>
-      </div>
-      <h4 className="text-sm font-black text-[#B32C4C] mb-1 group-hover:text-[#B32C4C]/80 transition-colors">{offer.offerName}</h4>
-      <div className="flex items-baseline justify-center mb-4">
-        <span className="text-2xl font-black text-foreground">
-            {offer.price.toLocaleString('en-US')}
-        </span>
-      </div>
-      
-      <div className="grid grid-cols-4 gap-2 pt-3 mt-2 border-t border-[#B32C4C]/10 text-center">
-        <div className="space-y-1.5">
-            <Globe className="w-5 h-5 mx-auto text-[#B32C4C]" />
-            <p className="text-[11px] font-black text-foreground truncate">{offer.data || '-'}</p>
-        </div>
-        <div className="space-y-1.5">
-            <Mail className="w-5 h-5 mx-auto text-[#B32C4C]" />
-            <p className="text-[11px] font-black text-foreground truncate">{offer.sms || '-'}</p>
-        </div>
-        <div className="space-y-1.5">
-            <PhoneIcon className="w-5 h-5 mx-auto text-[#B32C4C]" />
-            <p className="text-[11px] font-black text-foreground truncate">{offer.minutes || '-'}</p>
-        </div>
-        <div className="space-y-1.5">
-            <Clock className="w-5 h-5 mx-auto text-[#B32C4C]" />
-            <p className="text-[11px] font-black text-foreground truncate">{offer.validity || '-'}</p>
-        </div>
-      </div>
-    </div>
-);
 
 export default function YemenMobilePage() {
   const router = useRouter();
@@ -419,24 +419,24 @@ export default function YemenMobilePage() {
               }));
           }
 
-          // --- تعديل منطق تحديد نوع الخط (Prepaid / Postpaid) بناءً على mobileType حصرياً ---
-          const mType = String(queryResult.mobileType || "").toLowerCase();
+          // --- تعديل حاسم: تحديد نوع الرقم بناءً على mobileType المسترجع من الـ API ---
+          // 1 تعني Postpaid (فاتورة)
+          // 2 تعني Prepaid (دفع مسبق)
+          const mTypeRaw = String(queryResult.mobileType || "");
           let isPostpaid = false;
 
-          // التحقق من القيم المسترجعة من الـ API
-          if (mType === 'postpaid' || mType.includes('post') || mType.includes('فوترة')) {
+          if (mTypeRaw === '1' || mTypeRaw.toLowerCase().includes('post') || mTypeRaw.includes('فوترة')) {
               isPostpaid = true;
-          } else if (mType === 'prepaid' || mType.includes('pre') || mType.includes('مسبق')) {
+          } else if (mTypeRaw === '2' || mTypeRaw.toLowerCase().includes('pre') || mTypeRaw.includes('مسبق')) {
               isPostpaid = false;
           } else {
-              // احتياطاً في حال كان الحقل مفقوداً، نتحقق من النص في الرد البرمجي فقط وليس البيانات المالية
-              const rawDesc = String(queryResult.resultDesc || "").toLowerCase();
-              isPostpaid = rawDesc.includes('postpaid') || rawDesc.includes('فوترة');
+              // احتياطاً: التحقق من النص الوصفي للعملية
+              const resDesc = String(queryResult.resultDesc || "").toLowerCase();
+              isPostpaid = resDesc.includes('postpaid') || resDesc.includes('فوترة');
           }
-          // --------------------------------------------------------------------------------
 
-          const detectedTypeLabel = isPostpaid ? 'فوترة' : 'دفع مسبق';
           setLineTypeTab(isPostpaid ? 'postpaid' : 'prepaid');
+          const detectedTypeLabel = isPostpaid ? 'فاتورة' : 'دفع مسبق';
 
           const isLoan = solfaResult.status === "1" || solfaResult.status === 1;
           const loanAmt = isLoan ? parseFloat(solfaResult.loan_amount || "0") : 0;
@@ -982,7 +982,7 @@ export default function YemenMobilePage() {
                     </div>
                     <div className="flex justify-between items-center py-2 border-b border-dashed">
                         <span className="text-muted-foreground">نوع الخط:</span>
-                        <span className="font-bold">{lineTypeTab === 'prepaid' ? 'دفع مسبق' : 'فوترة'}</span>
+                        <span className="font-bold">{lineTypeTab === 'prepaid' ? 'دفع مسبق' : 'فاتورة'}</span>
                     </div>
                     <div className="flex justify-between items-center py-2 border-b border-dashed">
                         <span className="text-muted-foreground">المبلغ:</span>
