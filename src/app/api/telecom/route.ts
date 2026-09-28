@@ -53,23 +53,22 @@ export async function POST(request: Request) {
         apiRequestParams.action = action;
     } else if (service === 'why') {
         endpoint = 'why';
-        // بناءً على التوثيق المرفق، الأكشن دائماً هو bill لشحن الرصيد وتفعيل الباقات
+        // بناءً على التوثيق، الأكشن دائماً هو bill
         apiRequestParams.action = 'bill';
         
+        // --- إصلاح حاسم لحقل num ---
+        // السيرفر الخارجي يطلب num كقيمة عددية إلزامية
+        // نأخذ القيمة من num المرسل من الباقات، أو من amount المرسل من الرصيد
+        const finalNum = String(payload.num || payload.amount || "");
+        apiRequestParams.num = finalNum;
+
         if (payload.israsid === '1') {
-            // حالة شحن الرصيد المباشر
-            const amt = String(payload.amount || payload.num || "");
-            apiRequestParams.num = amt;
-            apiRequestParams.rasid = amt;
+            // حالة شحن الرصيد المباشر: يطلب rasid و num بنفس القيمة
+            apiRequestParams.rasid = finalNum;
         } else {
-            // حالة تفعيل الباقات
-            // يجب أن يحتوي payload على num (مثل 250) و packageid (مثل 91)
-            if (payload.num) apiRequestParams.num = String(payload.num);
-            if (payload.packageid) apiRequestParams.packageid = String(payload.packageid);
-            
-            // احتياطاً إذا لم يتوفر num واستخدم العميل amount
-            if (!apiRequestParams.num && payload.amount) {
-                apiRequestParams.num = String(payload.amount);
+            // حالة تفعيل الباقات: يطلب num و packageid
+            if (payload.packageid) {
+                apiRequestParams.packageid = String(payload.packageid).trim();
             }
         }
     } else if (service === 'you') {
@@ -111,7 +110,14 @@ export async function POST(request: Request) {
     }
 
     delete apiRequestParams.service;
-    const params = new URLSearchParams(apiRequestParams);
+    // التأكد من أن كافة القيم نصوص قبل الإرسال
+    const params = new URLSearchParams();
+    Object.keys(apiRequestParams).forEach(key => {
+        if (apiRequestParams[key] !== undefined && apiRequestParams[key] !== null) {
+            params.append(key, String(apiRequestParams[key]));
+        }
+    });
+
     const fullUrl = `${API_BASE_URL}${endpoint}?${params.toString()}`;
 
     const controller = new AbortController();

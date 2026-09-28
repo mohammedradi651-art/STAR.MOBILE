@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -9,24 +10,16 @@ import { Button } from '@/components/ui/button';
 import { 
   Wallet, 
   CheckCircle, 
-  Hash as HashIcon,
-  Calendar,
-  Smartphone,
-  Globe,
-  Mail,
-  Phone as PhoneIcon,
-  Clock,
+  Smartphone, 
+  Globe, 
+  Mail, 
+  Phone as PhoneIcon, 
+  Clock, 
   Users,
-  Zap,
-  Loader2
+  Hash,
+  Calendar
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,7 +44,7 @@ export const dynamic = 'force-dynamic';
 
 type Offer = {
     offerName: string;
-    price: number; // المبلغ الأصلي قبل الضرب في 3.1
+    price: number; 
     data: string;
     validity: string;
     packageid: string;
@@ -60,7 +53,6 @@ type Offer = {
     minutes?: string;
 };
 
-// --- الثيم البنفسجي الجديد ---
 const WHY_PRIMARY = '#7c3aed'; 
 const WHY_GRADIENT = {
     backgroundColor: '#7c3aed',
@@ -79,9 +71,7 @@ const WHY_OFFERS: Offer[] = [
     { offerName: 'باقة كرم 2000', price: 2000, data: '1GB', validity: '60 يوم', packageid: '94', num: '2000', sms: '500', minutes: '200' },
 ];
 
-// --- مكون الباقة بنفس نمط يمن موبايل ---
 const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) => {
-    // السعر النهائي = السعر الأصلي * 3.1
     const finalPrice = Math.ceil(offer.price * 3.1);
 
     return (
@@ -167,16 +157,15 @@ export default function WhyPage() {
             const opts = { multiple: false };
             const contacts = await (navigator as any).contacts.select(props, opts);
             if (contacts.length > 0 && contacts[0].tel && contacts[0].tel.length > 0) {
-                let num = contacts[0].tel[0].replace(/\D/g, '').slice(-9);
+                let num = contacts[0].tel[0].replace(/[\s\-\(\)]/g, '').slice(-9);
                 setPhone(num);
             }
         } catch (err) { console.error(err); }
     };
 
-    const handleProcessPayment = async (payAmount: number, typeLabel: string, payload: any) => {
+    const handleProcessPayment = async (payAmount: number, typeLabel: string, extraPayload: any) => {
         if (!phone || !user || !userDocRef || !firestore) return;
         
-        // --- الحسبة الجديدة: المبلغ المخصوم = المبلغ المدخل * 3.1 ---
         const totalToDeduct = Math.ceil(payAmount * 3.1);
 
         if ((userProfile?.balance ?? 0) < totalToDeduct) {
@@ -195,7 +184,8 @@ export default function WhyPage() {
                     action: 'bill', 
                     service: 'why', 
                     transid: transid,
-                    ...payload 
+                    amount: payAmount, // إرسال المبلغ الصافي قبل الضرب في 3.1
+                    ...extraPayload 
                 })
             });
             const result = await response.json();
