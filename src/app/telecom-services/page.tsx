@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -30,6 +31,14 @@ const telecomServices = [
     description: 'سداد فواتير وباقات شركة YOU المباشرة',
     color: '#FECC4F',
     accent: 'bg-[#FECC4F]/10'
+  },
+  {
+    name: 'واي (Way)',
+    logo: 'https://i.postimg.cc/9F7V5h5T/WAY-LOGO.png',
+    href: '/why',
+    description: 'سداد رصيد وباقات كرم لشركة واي',
+    color: '#FE8B19',
+    accent: 'bg-[#FE8B19]/5'
   },
   {
     name: 'عدن نت',

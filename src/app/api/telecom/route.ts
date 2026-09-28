@@ -51,6 +51,13 @@ export async function POST(request: Request) {
     } else if (service === 'adenet') {
         endpoint = 'adenet';
         apiRequestParams.action = action;
+    } else if (service === 'why') {
+        endpoint = 'why';
+        apiRequestParams.action = action;
+        // التعامل مع رصيد واي الخاص
+        if (payload.israsid === '1') {
+            apiRequestParams.rasid = payload.num;
+        }
     } else if (service === 'you') {
         if (action === 'billoffer' || action === 'queryoffer') {
             endpoint = 'mtnoffer';
