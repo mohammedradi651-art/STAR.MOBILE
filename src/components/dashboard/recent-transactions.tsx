@@ -141,34 +141,6 @@ export function RecentTransactions() {
 
   const { data: transactions, isLoading } = useCollection<Transaction>(transactionsQuery);
 
-  // فحص ومزامنة تلقائية في الخلفية لأي عملية معلقة دون أي تدخل من العميل
-  React.useEffect(() => {
-    if (!transactions || transactions.length === 0) return;
-    const pendingTx = transactions.find(
-      (tx) => tx.status === 'pending' || tx.readiness === 'قيد الانتظار'
-    );
-    if (!pendingTx) return;
-
-    const timer = setTimeout(() => {
-      handleSyncStatus(pendingTx.id);
-    }, 2000);
-
-    const interval = setInterval(() => {
-      handleSyncStatus(pendingTx.id);
-    }, 10000);
-
-    return () => {
-      clearTimeout(timer);
-      clearInterval(interval);
-    };
-  }, [transactions]);
-
-  // فحص فوري عند فتح نافذة تفاصيل العملية إذا كانت معلقة
-  React.useEffect(() => {
-    if (isDialogOpen && selectedTx && (selectedTx.status === 'pending' || selectedTx.readiness === 'قيد الانتظار')) {
-      handleSyncStatus(selectedTx.id);
-    }
-  }, [isDialogOpen, selectedTx?.id]);
 
   const handleCopy = (text: string, label: string) => {
     if (!text) return;
