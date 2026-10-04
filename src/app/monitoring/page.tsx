@@ -26,8 +26,11 @@ import {
     ArrowUpRight,
     Zap,
     Banknote,
-    LayoutGrid
+    LayoutGrid,
+    Activity,
+    Tag
 } from 'lucide-react';
+import { isTelecomService, getReadinessDetails } from '@/lib/telecom-order';
 import { format, parseISO, isToday } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -246,6 +249,14 @@ export default function MonitoringPage() {
                                             {tx.recipientPhoneNumber && (
                                                 <p className="text-[9px] font-bold font-mono text-muted-foreground mt-0.5">{tx.recipientPhoneNumber}</p>
                                             )}
+                                            {isTelecomService(tx.transactionType) && (() => {
+                                                const readiness = getReadinessDetails(tx);
+                                                return (
+                                                    <span className={cn("text-[9px] font-black block mt-0.5", readiness.colorClass)}>
+                                                        {readiness.text}
+                                                    </span>
+                                                );
+                                            })()}
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -281,6 +292,17 @@ export default function MonitoringPage() {
                                 <span className="text-muted-foreground flex items-center gap-2"><Calendar className="w-4 h-4" /> التاريخ:</span>
                                 <span className="font-bold">{selectedTx.transactionDate ? format(parseISO(selectedTx.transactionDate), 'Pp', { locale: ar }) : '...'}</span>
                             </div>
+                            {isTelecomService(selectedTx.transactionType) && (() => {
+                                const readiness = getReadinessDetails(selectedTx);
+                                return (
+                                    <div className="flex justify-between items-center py-2 border-b border-dashed">
+                                        <span className="text-muted-foreground flex items-center gap-2"><Activity className="w-4 h-4 text-primary" /> الجاهزية:</span>
+                                        <span className={cn("font-black text-xs px-3 py-0.5 rounded-full border", readiness.bgClass)}>
+                                            {readiness.text}
+                                        </span>
+                                    </div>
+                                );
+                            })()}
                             {selectedTx.notes && (
                                 <div className="pt-2">
                                     <p className="text-[10px] font-black text-muted-foreground uppercase mb-1">ملاحظات:</p>

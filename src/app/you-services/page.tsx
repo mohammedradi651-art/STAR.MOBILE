@@ -44,6 +44,7 @@ import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 import { cn } from '@/lib/utils';
+import { initiateTelecomPayment, executeTelecomRequestWithTimeout } from '@/lib/telecom-order';
 
 export const dynamic = 'force-dynamic';
 
@@ -264,12 +265,10 @@ export default function YouServicesPage() {
 
         setIsProcessing(true);
         try {
-            const transid = Date.now().toString().slice(-8);
             const apiPayload: any = {
                 mobile: phone,
                 action: 'bill',
                 service: 'you',
-                transid: transid,
                 type: lineType,
             };
 
@@ -280,31 +279,29 @@ export default function YouServicesPage() {
                 apiPayload.num = numCode;
             }
 
-            const response = await fetch('/api/telecom', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(apiPayload)
-            });
-            const result = await response.json();
-            
-            if (!response.ok || (result.resultCode !== "0" && result.resultCode !== 0 && result.resultCode !== "-2" && result.resultCode !== -2)) {
-                throw new Error(result.message || 'فشل عملية السداد من المصدر.');
-            }
-            
-            const batch = writeBatch(firestore);
-            batch.update(userDocRef, { balance: increment(-finalToDeduct) });
-            batch.set(doc(firestoreCollection(firestore, 'users', user.uid, 'transactions')), {
+            // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
+            const { transid, backpass } = await initiateTelecomPayment({
+                firestore,
                 userId: user.uid,
-                transactionDate: new Date().toISOString(),
                 amount: finalToDeduct,
                 transactionType: `سداد YOU ${typeLabel}`,
-                notes: `إلى رقم: ${phone}`,
                 recipientPhoneNumber: phone,
-                transid: transid
+                notes: `إلى رقم: ${phone}`,
+                serviceCategory: 'يو'
             });
-            await batch.commit();
-            
+
             setLastTxDetails({ type: `سداد YOU ${typeLabel}`, phone: phone, amount: finalToDeduct, transid: transid });
+
+            // 2. إرسال الطلب للمزود مع مؤقت 10 ثوانٍ (إذا تأخر الرد تظهر نفس المنبثق تماماً)
+            await executeTelecomRequestWithTimeout({
+                firestore,
+                userId: user.uid,
+                transid,
+                amount: finalToDeduct,
+                telecomPayload: apiPayload,
+                backpass
+            });
+
             setShowSuccess(true);
         } catch (error: any) {
             toast({ variant: "destructive", title: "فشل السداد", description: error.message });
@@ -332,48 +329,41 @@ export default function YouServicesPage() {
 
         setIsActivatingOffer(true);
         try {
-            const transid = Date.now().toString().slice(-8);
-            const response = await fetch('/api/telecom', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    mobile: phone, 
-                    action: 'billoffer', 
-                    service: 'you', 
-                    num: selectedOffer.offertype, 
-                    amount: selectedOffer.price, 
-                    type: lineType,
-                    transid 
-                })
-            });
-            const result = await response.json();
-            
-            const isSuccess = result.resultCode === "0" || result.resultCode === 0;
-            const isPending = result.resultCode === "-2" || result.resultCode === -2;
-
-            if (!response.ok || (!isSuccess && !isPending)) {
-                throw new Error(result.message || 'فشل تفعيل الباقة من المصدر.');
-            }
-
-            const batch = writeBatch(firestore);
-            batch.update(userDocRef, { balance: increment(-totalToDeduct) });
-            batch.set(doc(firestoreCollection(firestore, 'users', user.uid, 'transactions')), {
-                userId: user.uid, 
-                transactionDate: new Date().toISOString(), 
+            // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
+            const { transid, backpass } = await initiateTelecomPayment({
+                firestore,
+                userId: user.uid,
                 amount: totalToDeduct,
-                transactionType: `تفعيل باقة YOU: ${selectedOffer.offerName}`, 
-                notes: `للرقم: ${phone}. الحالة: ${isPending ? 'قيد التنفيذ' : 'ناجحة'}`, 
+                transactionType: `تفعيل باقة YOU: ${selectedOffer.offerName}`,
                 recipientPhoneNumber: phone,
-                transid: transid
+                notes: `للرقم: ${phone}`,
+                serviceCategory: 'يو'
             });
-            await batch.commit();
-            
+
             setLastTxDetails({
                 type: `تفعيل ${selectedOffer.offerName}`,
                 phone: phone,
                 amount: totalToDeduct,
                 transid: transid
             });
+
+            // 2. إرسال الطلب للمزود مع مؤقت 10 ثوانٍ (إذا تأخر الرد تظهر نفس المنبثق تماماً)
+            await executeTelecomRequestWithTimeout({
+                firestore,
+                userId: user.uid,
+                transid,
+                amount: totalToDeduct,
+                telecomPayload: { 
+                    mobile: phone, 
+                    action: 'billoffer', 
+                    service: 'you', 
+                    num: selectedOffer.offertype, 
+                    amount: selectedOffer.price, 
+                    type: lineType
+                },
+                backpass
+            });
+
             setShowSuccess(true);
             setSelectedOffer(null);
         } catch (e: any) {
@@ -382,6 +372,7 @@ export default function YouServicesPage() {
             setIsActivatingOffer(false);
         }
     };
+
 
     if (showSuccess && lastTxDetails) {
         return (

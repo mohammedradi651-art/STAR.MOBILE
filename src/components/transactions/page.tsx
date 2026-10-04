@@ -7,9 +7,11 @@ import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebas
 import { collection, query, orderBy, doc, writeBatch } from 'firebase/firestore';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, ArrowRight, FileText, SatelliteDish, User as UserIcon, CreditCard, Trash2, Calendar, Clock, Archive, Tag, Banknote } from 'lucide-react';
+import { ArrowLeft, ArrowRight, FileText, SatelliteDish, User as UserIcon, CreditCard, Trash2, Calendar, Clock, Activity, Archive, Tag, Banknote } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ar } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
+import { isTelecomService, getReadinessDetails } from '@/lib/telecom-order';
 import {
   Dialog,
   DialogContent,
@@ -238,6 +240,17 @@ export default function TransactionsPage() {
                                 <span className="text-muted-foreground flex items-center gap-2"><Clock className="h-4 w-4 text-primary"/> الوقت:</span>
                                 <span className="font-semibold">{format(parseISO(selectedTx.transactionDate), 'h:mm:ss a', { locale: ar })}</span>
                             </div>
+                            {isTelecomService(selectedTx.transactionType) && (() => {
+                                const readiness = getReadinessDetails(selectedTx);
+                                return (
+                                    <div className="flex justify-between items-center py-2 border-b border-dashed">
+                                        <span className="text-muted-foreground flex items-center gap-2"><Activity className="h-4 w-4 text-primary"/> الجاهزية:</span>
+                                        <span className={cn("font-black text-xs px-3 py-0.5 rounded-full border", readiness.bgClass)}>
+                                            {readiness.text}
+                                        </span>
+                                    </div>
+                                );
+                            })()}
                             {selectedTx.subscriberName && (
                                 <div className="flex justify-between">
                                     <span className="text-muted-foreground flex items-center gap-2"><UserIcon className="h-4 w-4 text-primary"/> اسم المشترك:</span>

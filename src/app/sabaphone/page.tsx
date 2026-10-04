@@ -45,6 +45,7 @@ import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 import { cn } from '@/lib/utils';
+import { initiateTelecomPayment, executeTelecomRequestWithTimeout } from '@/lib/telecom-order';
 
 export const dynamic = 'force-dynamic';
 
@@ -247,39 +248,35 @@ export default function SabaphonePage() {
 
         setIsProcessing(true);
         try {
-            const transid = Date.now().toString().slice(-8);
-            const response = await fetch('/api/telecom', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
+            // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
+            const { transid, backpass } = await initiateTelecomPayment({
+                firestore,
+                userId: user.uid,
+                amount: finalToDeduct,
+                transactionType: `سداد سبأفون (${selectedOffer.typeLabel})`,
+                recipientPhoneNumber: phone,
+                notes: `رقم الهاتف: ${phone}`,
+                serviceCategory: 'سبافون'
+            });
+
+            setLastTxDetails({ type: selectedOffer.typeLabel, phone, amount: finalToDeduct, transid: transid });
+
+            // 2. إرسال الطلب للمزود مع مؤقت 10 ثوانٍ (إذا تأخر الرد تظهر نفس المنبثق تماماً)
+            await executeTelecomRequestWithTimeout({
+                firestore,
+                userId: user.uid,
+                transid,
+                amount: finalToDeduct,
+                telecomPayload: { 
                     mobile: phone, 
                     action: 'bill', 
                     service: selectedOffer.endpoint, 
                     num: selectedOffer.num,
-                    amount: selectedOffer.endpoint === 'sabaunits' ? selectedOffer.num : undefined,
-                    transid: transid 
-                })
+                    amount: selectedOffer.endpoint === 'sabaunits' ? selectedOffer.num : undefined
+                },
+                backpass
             });
-            const result = await response.json();
-            
-            if (!response.ok || (result.resultCode !== "0" && result.resultCode !== 0)) {
-                throw new Error(result.message || 'فشل تنفيذ العملية من المصدر.');
-            }
 
-            const batch = writeBatch(firestore);
-            batch.update(userDocRef, { balance: increment(-finalToDeduct) });
-            batch.set(doc(firestoreCollection(firestore, 'users', user.uid, 'transactions')), {
-                userId: user.uid,
-                transactionDate: new Date().toISOString(),
-                amount: finalToDeduct,
-                transactionType: `سداد سبأفون (${selectedOffer.typeLabel})`,
-                notes: `رقم الهاتف: ${phone}`,
-                recipientPhoneNumber: phone,
-                transid: transid
-            });
-            await batch.commit();
-            
-            setLastTxDetails({ type: selectedOffer.typeLabel, phone, amount: finalToDeduct, transid: transid });
             setShowSuccess(true);
         } catch (error: any) {
             toast({ variant: "destructive", title: "تنبيه", description: error.message });
@@ -289,6 +286,7 @@ export default function SabaphonePage() {
             setSelectedOffer(null);
         }
     };
+
 
     const currentCategories = lineType === 'prepaid' ? PREPAID_CATEGORIES : POSTPAID_CATEGORIES;
 

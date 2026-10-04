@@ -54,6 +54,7 @@ import { ar } from 'date-fns/locale';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { initiateTelecomPayment, executeTelecomRequestWithTimeout } from '@/lib/telecom-order';
 
 export const dynamic = 'force-dynamic';
 
@@ -512,30 +513,29 @@ export default function YemenMobilePage() {
     }
     setIsProcessing(true);
     try {
-        const transid = Date.now().toString().slice(-8);
-        const response = await fetch('/api/telecom', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mobile: phone, amount: val, action: 'bill', transid })
-        });
-        const result = await response.json();
-        if (!response.ok || (result.resultCode !== "0" && result.resultCode !== 0)) {
-            const providerError = result.resultDesc || result.message || 'فشل عملية السداد من المزود.';
-            throw new Error(getFriendlyErrorMessage(providerError));
-        }
-        const batch = writeBatch(firestore);
-        batch.update(userDocRef, { balance: increment(-val) });
-        batch.set(doc(firestoreCollection(firestore, 'users', user.uid, 'transactions')), {
-            userId: user.uid, 
-            transactionDate: new Date().toISOString(), 
+        // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
+        const { transid, backpass } = await initiateTelecomPayment({
+            firestore,
+            userId: user.uid,
             amount: val,
-            transactionType: 'سداد يمن موبايل (رصيد)', 
-            notes: `إلى رقم: ${phone}. مبلغ السداد: ${val}.`, 
+            transactionType: 'سداد يمن موبايل (رصيد)',
             recipientPhoneNumber: phone,
-            transid: transid
+            notes: `إلى رقم: ${phone}. مبلغ السداد: ${val}.`,
+            serviceCategory: 'يمن موبايل'
         });
-        await batch.commit();
+
         setLastTxDetails({ type: 'سداد رصيد يمن موبايل', phone: phone, amount: val, transid: transid });
+
+        // 2. إرسال الطلب للمزود مع مؤقت 10 ثوانٍ (إذا تأخر الرد تظهر نفس المنبثق تماماً)
+        await executeTelecomRequestWithTimeout({
+            firestore,
+            userId: user.uid,
+            transid,
+            amount: val,
+            telecomPayload: { mobile: phone, amount: val, action: 'bill' },
+            backpass
+        });
+
         setShowSuccess(true);
     } catch (e: any) {
         toast({ variant: "destructive", title: "تنبيه من المزود", description: e.message });
@@ -556,39 +556,37 @@ export default function YemenMobilePage() {
     }
     setIsActivatingOffer(true);
     try {
-        const transid = Date.now().toString().slice(-8);
-        const response = await fetch('/api/telecom', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
+        // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
+        const { transid, backpass } = await initiateTelecomPayment({
+            firestore,
+            userId: user.uid,
+            amount: totalToDeduct,
+            transactionType: `تفعيل ${selectedOffer.offerName}`,
+            recipientPhoneNumber: phone,
+            notes: `للرقم: ${phone}${hasLoan ? ` (شامل سداد سلفة: ${loanAmt})` : ''}`,
+            serviceCategory: 'يمن موبايل'
+        });
+
+        setLastTxDetails({ type: `تفعيل ${selectedOffer.offerName}`, phone: phone, amount: totalToDeduct, transid: transid });
+
+        // 2. إرسال الطلب للمزود مع مؤقت 10 ثوانٍ (إذا تأخر الرد تظهر نفس المنبثق تماماً)
+        await executeTelecomRequestWithTimeout({
+            firestore,
+            userId: user.uid,
+            transid,
+            amount: totalToDeduct,
+            telecomPayload: { 
                 mobile: phone, 
                 action: 'billoffer', 
                 service: 'yemen',
                 offerid: selectedOffer.offertype, 
                 method: 'Renew',
                 solfa: hasLoan ? 'Y' : 'N',
-                amount: selectedOffer.price, 
-                transid 
-            })
+                amount: selectedOffer.price
+            },
+            backpass
         });
-        const result = await response.json();
-        if (!response.ok || (result.resultCode !== "0" && result.resultCode !== 0 && result.resultCode !== "-2" && result.resultCode !== -2)) {
-            const providerError = result.resultDesc || result.message || 'فشل تفعيل الباقة من المزود.';
-            throw new Error(getFriendlyErrorMessage(providerError));
-        }
-        const batch = writeBatch(firestore);
-        batch.update(userDocRef, { balance: increment(-totalToDeduct) });
-        batch.set(doc(firestoreCollection(firestore, 'users', user.uid, 'transactions')), {
-            userId: user.uid, 
-            transactionDate: new Date().toISOString(), 
-            amount: totalToDeduct,
-            transactionType: `تفعيل ${selectedOffer.offerName}`, 
-            notes: `للرقم: ${phone}${hasLoan ? ` (شامل سداد سلفة: ${loanAmt})` : ''}`, 
-            recipientPhoneNumber: phone,
-            transid: transid
-        });
-        await batch.commit();
-        setLastTxDetails({ type: `تفعيل ${selectedOffer.offerName}`, phone: phone, amount: totalToDeduct, transid: transid });
+
         setShowSuccess(true);
         setSelectedOffer(null);
         handleSearch(phone);
@@ -598,6 +596,7 @@ export default function YemenMobilePage() {
         setIsActivatingOffer(false);
     }
   };
+
 
   const findMatchedOffer = (code?: string) => {
     if (!code) return null;
@@ -813,6 +812,54 @@ export default function YemenMobilePage() {
               </AlertDialogFooter>
           </AlertDialogContent>
       </AlertDialog>
+
+      {showSuccess && lastTxDetails && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in-0">
+            <audio ref={audioRef} src="/sdad.mp3" autoPlay />
+            <Card className="w-full max-w-sm text-center shadow-2xl rounded-[40px] overflow-hidden border-none bg-card">
+                <div className="bg-green-500 p-8 flex justify-center">
+                    <div className="bg-white/20 p-4 rounded-full animate-bounce">
+                        <CheckCircle className="h-16 w-16 text-white" />
+                    </div>
+                </div>
+                <CardContent className="p-8 space-y-6">
+                    <div>
+                        <h2 className="text-2xl font-black text-green-600">تم السداد بنجاح</h2>
+                        <p className="text-sm text-muted-foreground mt-1">تم تنفيذ العملية بنجاح لصالح المشترك</p>
+                    </div>
+
+                    <div className="w-full space-y-3 text-sm bg-muted/50 p-5 rounded-[24px] text-right border-2 border-dashed border-[#B32C4C]/20">
+                        <div className="flex justify-between items-center border-b border-muted pb-2">
+                            <span className="text-muted-foreground flex items-center gap-2"><Hash className="w-3.5 h-3.5" /> رقم العملية:</span>
+                            <span className="font-mono font-black text-[#B32C4C]">{lastTxDetails.transid}</span>
+                        </div>
+                        <div className="flex justify-between items-center border-b border-muted pb-2">
+                            <span className="text-muted-foreground flex items-center gap-2"><Smartphone className="w-3.5 h-3.5" /> رقم الهاتف:</span>
+                            <span className="font-mono font-bold tracking-widest">{lastTxDetails.phone}</span>
+                        </div>
+                        <div className="flex justify-between items-center border-b border-muted pb-2">
+                            <span className="text-muted-foreground flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5" /> الخدمة:</span>
+                            <span className="font-bold">{lastTxDetails.type}</span>
+                        </div>
+                        <div className="flex justify-between items-center border-b border-muted pb-2">
+                            <span className="text-muted-foreground flex items-center gap-2"><Wallet className="w-3.5 h-3.5" /> المبلغ المخصوم:</span>
+                            <span className="font-black text-[#B32C4C]">{lastTxDetails.amount.toLocaleString()} ريال</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-1">
+                            <span className="text-muted-foreground flex items-center gap-2"><Calendar className="w-3.5 h-3.5" /> التاريخ:</span>
+                            <span className="text-[10px] font-bold">{format(new Date(), 'Pp', { locale: ar })}</span>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <Button variant="outline" className="rounded-2xl h-14 font-black" onClick={() => router.push('/login')}>الرئيسية</Button>
+                        <Button className="rounded-2xl h-14 font-black text-white" onClick={() => { setShowSuccess(false); setAmount(''); }} style={{ backgroundColor: '#B32C4C' }}>سداد جديد</Button>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+      )}
     </div>
   );
 }
+

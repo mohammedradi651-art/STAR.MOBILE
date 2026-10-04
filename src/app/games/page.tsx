@@ -43,6 +43,7 @@ import Image from 'next/image';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { initiateTelecomPayment, executeTelecomRequestWithTimeout } from '@/lib/telecom-order';
 
 export const dynamic = 'force-dynamic';
 
@@ -121,48 +122,39 @@ export default function GamesPage() {
 
         setIsProcessing(true);
         try {
-            const transid = Date.now().toString().slice(-8);
+            const txType = `شحن ${activeGame === 'pubg' ? 'شدات' : 'جواهر'}: ${selectedOffer.amount}`;
+            const txNotes = `رقم اللاعب: ${playerId}. اللعبة: ${activeGame === 'pubg' ? 'ببجي' : 'فري فاير'}`;
+
+            // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
+            const { transid, backpass } = await initiateTelecomPayment({
+                firestore,
+                userId: user.uid,
+                amount: totalToDeduct,
+                transactionType: txType,
+                recipientPhoneNumber: playerId,
+                notes: txNotes,
+                serviceCategory: 'الالعاب'
+            });
+
             setLastTransid(transid);
             setLastTotalAmount(totalToDeduct);
-            
-            const response = await fetch('/api/telecom', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
+
+            // 2. إرسال الطلب للمزود مع مؤقت 10 ثوانٍ (إذا تأخر الرد تظهر نفس المنبثق تماماً)
+            await executeTelecomRequestWithTimeout({
+                firestore,
+                userId: user.uid,
+                transid,
+                amount: totalToDeduct,
+                telecomPayload: { 
                     service: 'games',
                     type: activeGame,
                     uniqcode: selectedOffer.code,
                     playerid: playerId,
-                    mobile: userProfile?.phoneNumber || '000',
-                    transid: transid 
-                })
+                    mobile: userProfile?.phoneNumber || '000'
+                },
+                backpass
             });
-            const result = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(result.message || result.resultDesc || 'فشل تنفيذ الطلب من المصدر.');
-            }
 
-            const isSuccess = result.resultCode === "0" || result.resultCode === 0;
-            const isPending = result.resultCode === "-2" || result.resultCode === -2;
-
-            if (!isSuccess && !isPending) {
-                throw new Error(result.resultDesc || 'تم رفض العملية من قبل مزود الخدمة.');
-            }
-
-            const batch = writeBatch(firestore);
-            batch.update(userDocRef, { balance: increment(-totalToDeduct) });
-            batch.set(doc(firestoreCollection(firestore, 'users', user.uid, 'transactions')), {
-                userId: user.uid, 
-                transactionDate: new Date().toISOString(), 
-                amount: totalToDeduct,
-                transactionType: `شحن ${activeGame === 'pubg' ? 'شدات' : 'جواهر'}: ${selectedOffer.amount}`, 
-                notes: `رقم اللاعب: ${playerId}. اللعبة: ${activeGame === 'pubg' ? 'ببجي' : 'فري فاير'}`, 
-                recipientPhoneNumber: playerId,
-                transid: transid
-            });
-            await batch.commit();
-            
             setShowSuccess(true);
         } catch (e: any) {
             toast({ 
@@ -174,6 +166,7 @@ export default function GamesPage() {
             setIsProcessing(false);
         }
     };
+
 
     if (showSuccess) {
         return (

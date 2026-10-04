@@ -49,6 +49,7 @@ import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import Image from 'next/image';
+import { initiateTelecomPayment, executeTelecomRequestWithTimeout } from '@/lib/telecom-order';
 
 export const dynamic = 'force-dynamic';
 
@@ -245,25 +246,38 @@ export default function LandlinePage() {
 
         setIsProcessing(true);
         try {
-            const transid = Date.now().toString().slice(-8);
             const serviceType = activeTab === 'internet' ? 'adsl' : 'line';
-            const response = await fetch('/api/telecom', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mobile: phone, amount: baseAmount, action: 'bill', service: 'post', type: serviceType, transid: transid })
-            });
-            const result = await response.json();
-            if (!response.ok || (result.resultCode !== "0" && result.resultCode !== 0)) throw new Error(result.message || 'فشل السداد.');
+            const txType = `سداد ${activeTab === 'internet' ? 'ADSL' : 'هاتف ثابت'}`;
 
-            const batch = writeBatch(firestore);
-            batch.update(userDocRef, { balance: increment(-totalToDeduct) });
-            batch.set(doc(firestoreCollection(firestore, 'users', user.uid, 'transactions')), {
-                userId: user.uid, transactionDate: new Date().toISOString(), amount: totalToDeduct,
-                transactionType: `سداد ${activeTab === 'internet' ? 'ADSL' : 'هاتف ثابت'}`,
-                notes: `رقم: ${phone}`, recipientPhoneNumber: phone, transid: transid
+            // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
+            const { transid, backpass } = await initiateTelecomPayment({
+                firestore,
+                userId: user.uid,
+                amount: totalToDeduct,
+                transactionType: txType,
+                recipientPhoneNumber: phone,
+                notes: `رقم: ${phone}`,
+                serviceCategory: 'الثابت والانترنت الارضي'
             });
-            await batch.commit();
+
             setLastTxDetails({ type: `سداد ${activeTab === 'internet' ? 'الإنترنت' : 'الثابت'}`, phone, amount: totalToDeduct, transid });
+
+            // 2. إرسال الطلب للمزود مع مؤقت 10 ثوانٍ (إذا تأخر الرد تظهر نفس المنبثق تماماً)
+            await executeTelecomRequestWithTimeout({
+                firestore,
+                userId: user.uid,
+                transid,
+                amount: totalToDeduct,
+                telecomPayload: { 
+                    mobile: phone, 
+                    amount: baseAmount, 
+                    action: 'bill', 
+                    service: 'post', 
+                    type: serviceType 
+                },
+                backpass
+            });
+
             setShowSuccess(true);
         } catch (error: any) {
             toast({ variant: "destructive", title: "خطأ", description: error.message });
@@ -272,6 +286,7 @@ export default function LandlinePage() {
             setIsConfirmingPayment(false);
         }
     };
+
 
     return (
         <div className="flex flex-col h-full bg-[#F4F7F9] dark:bg-slate-950">

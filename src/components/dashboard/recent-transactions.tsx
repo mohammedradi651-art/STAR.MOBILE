@@ -20,6 +20,7 @@ import {
   Tag,
   Calendar,
   Clock,
+  Activity,
   User as UserIcon,
   Copy,
   FileText
@@ -40,6 +41,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
+import { cn } from '@/lib/utils';
+import { isTelecomService, getReadinessDetails } from '@/lib/telecom-order';
 
 type Transaction = {
   id: string;
@@ -163,7 +166,16 @@ export function RecentTransactions() {
                                             <p className={`font-bold text-base ${isCredit ? 'text-green-600' : 'text-destructive'}`}>
                                                 {tx.amount.toLocaleString('en-US')} ر.ي
                                             </p>
-                                            <p className="text-[10px] text-muted-foreground mt-0.5">ناجحة</p>
+                                            {isTelecomService(tx.transactionType) ? (() => {
+                                                const readiness = getReadinessDetails(tx);
+                                                return (
+                                                    <p className={cn("text-[10px] font-black mt-0.5", readiness.colorClass)}>
+                                                        {readiness.text}
+                                                    </p>
+                                                );
+                                            })() : (
+                                                <p className="text-[10px] text-muted-foreground mt-0.5">ناجحة</p>
+                                            )}
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -210,6 +222,18 @@ export function RecentTransactions() {
                                                 {selectedTx.transactionDate ? format(parseISO(selectedTx.transactionDate), 'h:mm:ss a', { locale: ar }) : '...'}
                                             </span>
                                         </div>
+
+                                        {isTelecomService(selectedTx.transactionType) && (() => {
+                                            const readiness = getReadinessDetails(selectedTx);
+                                            return (
+                                                <div className="flex justify-between items-center py-2 border-b border-dashed">
+                                                    <span className="text-muted-foreground flex items-center gap-2"><Activity className="h-4 w-4 text-primary"/> الجاهزية:</span>
+                                                    <span className={cn("font-black text-xs px-3 py-0.5 rounded-full border", readiness.bgClass)}>
+                                                        {readiness.text}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })()}
 
                                         {selectedTx.subscriberName && (
                                             <div className="flex justify-between items-center py-2 border-b border-dashed">

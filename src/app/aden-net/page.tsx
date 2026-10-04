@@ -35,6 +35,7 @@ import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import Image from 'next/image';
+import { initiateTelecomPayment, executeTelecomRequestWithTimeout } from '@/lib/telecom-order';
 
 export const dynamic = 'force-dynamic';
 
@@ -191,44 +192,39 @@ export default function AdenNetPage() {
 
         setIsActivatingOffer(true);
         try {
-            const transid = Date.now().toString().slice(-8);
-            const response = await fetch('/api/telecom', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    mobile: phone, 
-                    action: 'bill', 
-                    service: 'adenet', 
-                    num: selectedOffer.num,
-                    transid: transid 
-                })
-            });
-            const result = await response.json();
-            
-            const isSuccess = result.resultCode === "0" || result.resultCode === 0;
-            if (!response.ok || !isSuccess) {
-                throw new Error(result.message || result.resultDesc || 'فشل تفعيل الباقة من المصدر.');
-            }
-
-            const batch = writeBatch(firestore);
-            batch.update(userDocRef, { balance: increment(-totalToDeduct) });
-            batch.set(doc(firestoreCollection(firestore, 'users', user.uid, 'transactions')), {
-                userId: user.uid, 
-                transactionDate: new Date().toISOString(), 
+            // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
+            const { transid, backpass } = await initiateTelecomPayment({
+                firestore,
+                userId: user.uid,
                 amount: totalToDeduct,
-                transactionType: `تفعيل ${selectedOffer.offerName}`, 
-                notes: `للرقم: ${phone}. سعر: ${basePrice} + عمولة: ${commission}.`, 
+                transactionType: `تفعيل ${selectedOffer.offerName}`,
                 recipientPhoneNumber: phone,
-                transid: transid
+                notes: `للرقم: ${phone}. سعر: ${basePrice} + عمولة: ${commission}.`,
+                serviceCategory: 'عدن نت'
             });
-            await batch.commit();
-            
+
             setLastTxDetails({
                 type: `تفعيل ${selectedOffer.offerName}`,
                 phone: phone,
                 amount: totalToDeduct,
                 transid: transid
             });
+
+            // 2. إرسال الطلب للمزود مع مؤقت 10 ثوانٍ (إذا تأخر الرد تظهر نفس المنبثق تماماً)
+            await executeTelecomRequestWithTimeout({
+                firestore,
+                userId: user.uid,
+                transid,
+                amount: totalToDeduct,
+                telecomPayload: { 
+                    mobile: phone, 
+                    action: 'bill', 
+                    service: 'adenet', 
+                    num: selectedOffer.num
+                },
+                backpass
+            });
+
             setShowSuccess(true);
             setSelectedOffer(null);
         } catch (e: any) {
@@ -237,6 +233,7 @@ export default function AdenNetPage() {
             setIsActivatingOffer(false);
         }
     };
+
 
     if (showSuccess && lastTxDetails) {
         return (

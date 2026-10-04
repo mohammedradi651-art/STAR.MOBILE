@@ -29,13 +29,19 @@ export async function POST(request: Request) {
     const transid = payload.transid || `${Date.now()}`.slice(-10);
     const token = generateToken(transid, identifier);
 
+    const BACKURL = 'https://star26.vercel.app/api/payment/webhook';
     let endpoint = '';
     let apiRequestParams: any = {
       userid: USERID,
       transid: transid,
       token: token,
+      backurl: BACKURL,
       ...payload
     };
+    if (payload.backpass) {
+      apiRequestParams.backpass = payload.backpass;
+    }
+
     
     // الأولوية لطلبات الاستعلام والحالة لتوجيهها لمسار info لضمان جلب رصيد الوكيل بدقة
     if (action === 'balance' || action === 'status') {

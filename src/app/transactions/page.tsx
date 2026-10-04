@@ -14,6 +14,7 @@ import {
   Trash2, 
   Calendar, 
   Clock, 
+  Activity,
   Archive, 
   Undo2, 
   Wifi, 
@@ -30,6 +31,7 @@ import {
 } from 'lucide-react';
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay, isValid } from 'date-fns';
 import { ar } from 'date-fns/locale';
+import { isTelecomService, getReadinessDetails } from '@/lib/telecom-order';
 import {
   Dialog,
   DialogContent,
@@ -289,6 +291,14 @@ export default function TransactionsPage() {
                                         </div>
                                         <div className="text-left">
                                             <p className={cn("font-black text-sm", isCredit ? 'text-green-600' : 'text-destructive')}>{tx.amount.toLocaleString()} ر.ي</p>
+                                            {isTelecomService(tx.transactionType) && (() => {
+                                                const readiness = getReadinessDetails(tx);
+                                                return (
+                                                    <span className={cn("text-[10px] font-black block mt-0.5", readiness.colorClass)}>
+                                                        {readiness.text}
+                                                    </span>
+                                                );
+                                            })()}
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -320,6 +330,21 @@ export default function TransactionsPage() {
                           <span className="text-muted-foreground flex items-center gap-2"><Calendar className="h-4 w-4 text-primary"/> التاريخ:</span>
                           <span className="font-bold">{safeFormatDate(selectedTx.transactionDate, 'eeee, d MMMM yyyy')}</span>
                       </div>
+                      <div className="flex justify-between items-center py-2 border-b border-dashed">
+                          <span className="text-muted-foreground flex items-center gap-2"><Clock className="h-4 w-4 text-primary"/> الوقت:</span>
+                          <span className="font-bold">{safeFormatDate(selectedTx.transactionDate, 'h:mm:ss a')}</span>
+                      </div>
+                      {isTelecomService(selectedTx.transactionType) && (() => {
+                          const readiness = getReadinessDetails(selectedTx);
+                          return (
+                              <div className="flex justify-between items-center py-2 border-b border-dashed">
+                                  <span className="text-muted-foreground flex items-center gap-2"><Activity className="h-4 w-4 text-primary"/> الجاهزية:</span>
+                                  <span className={cn("font-black text-xs px-3 py-0.5 rounded-full border", readiness.bgClass)}>
+                                      {readiness.text}
+                                  </span>
+                              </div>
+                          );
+                      })()}
                       {selectedTx.cardNumber && (
                           <div className="pt-4 bg-muted/30 p-4 rounded-2xl">
                               <h4 className="font-bold text-xs mb-3 flex items-center gap-2 text-primary"><CreditCard className="w-3.5 h-3.5"/> تفاصيل الكرت المستلم</h4>

@@ -5,7 +5,7 @@ import { FirebaseApp } from 'firebase/app';
 import { Firestore } from 'firebase/firestore';
 import { Auth, User, onAuthStateChanged } from 'firebase/auth';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
-import { app, auth, firestore } from './index';
+import { app, auth, firestore, getFirebaseInstances } from './config';
 
 interface UserAuthState {
   user: User | null;
@@ -32,9 +32,17 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
   });
 
   useEffect(() => {
+    const { auth: activeAuth } = getFirebaseInstances();
+
+    if (!activeAuth) {
+      console.warn("Firebase Auth is not initialized.");
+      setUserAuthState({ user: null, isUserLoading: false, userError: null });
+      return;
+    }
+
     // استخدام الـ auth المستقر
     const unsubscribe = onAuthStateChanged(
-      auth,
+      activeAuth,
       (firebaseUser) => {
         setUserAuthState({ user: firebaseUser, isUserLoading: false, userError: null });
       },
@@ -47,14 +55,17 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
     return () => unsubscribe();
   }, []);
 
-  const contextValue = useMemo((): FirebaseContextState => ({
-    firebaseApp: app,
-    firestore: firestore,
-    auth: auth,
-    user: userAuthState.user,
-    isUserLoading: userAuthState.isUserLoading,
-    userError: userAuthState.userError,
-  }), [userAuthState]);
+  const contextValue = useMemo((): FirebaseContextState => {
+    const { app: activeApp, firestore: activeFirestore, auth: activeAuth } = getFirebaseInstances();
+    return {
+      firebaseApp: (activeApp || app) as FirebaseApp,
+      firestore: (activeFirestore || firestore) as Firestore,
+      auth: (activeAuth || auth) as Auth,
+      user: userAuthState.user,
+      isUserLoading: userAuthState.isUserLoading,
+      userError: userAuthState.userError,
+    };
+  }, [userAuthState]);
 
   return (
     <FirebaseContext.Provider value={contextValue}>
@@ -67,13 +78,14 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
 export const useFirebase = (): FirebaseContextState => {
   const context = useContext(FirebaseContext);
   if (context === undefined) {
+    const { app: activeApp, firestore: activeFirestore, auth: activeAuth } = getFirebaseInstances();
     return {
-        firebaseApp: app,
-        firestore: firestore,
-        auth: auth,
-        user: null,
-        isUserLoading: false,
-        userError: null
+      firebaseApp: (activeApp || app) as FirebaseApp,
+      firestore: (activeFirestore || firestore) as Firestore,
+      auth: (activeAuth || auth) as Auth,
+      user: null,
+      isUserLoading: false,
+      userError: null
     };
   }
   return context;
