@@ -27,7 +27,8 @@ import {
   Search,
   Filter,
   Tag,
-  Copy
+  Copy,
+  RefreshCw
 } from 'lucide-react';
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay, isValid } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -75,6 +76,8 @@ type Transaction = {
   recipientName?: string;
   accountNumber?: string;
   recipientPhoneNumber?: string;
+  status?: string;
+  readiness?: string;
 };
 
 const getTransactionIcon = (type: string) => {
@@ -201,6 +204,41 @@ export default function TransactionsPage() {
     if (!text) return;
     navigator.clipboard.writeText(text);
     toast({ title: "تم النسخ" });
+  };
+
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSyncStatus = async (transid: string) => {
+    if (!transid || isSyncing) return;
+    setIsSyncing(true);
+    try {
+      const res = await fetch('/api/payment/sync-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transid })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast({
+          title: data.status === 'success' ? 'عملية جاهزة' : data.status === 'failed' ? 'عملية فاشلة' : 'تحديث الحالة',
+          description: data.message
+        });
+        if (selectedTx && selectedTx.id === transid) {
+          setSelectedTx(prev => prev ? {
+            ...prev,
+            status: data.status || prev.status,
+            readiness: data.readiness || prev.readiness,
+            notes: data.reason ? `${prev.notes || ''}\nالسبب من المزود: ${data.reason}` : prev.notes
+          } : null);
+        }
+      } else {
+        toast({ variant: 'destructive', title: 'تنبيه', description: data.message || 'تعذر التحديث حالياً' });
+      }
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'خطأ', description: e.message });
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleCardClick = (tx: Transaction) => {
@@ -339,9 +377,25 @@ export default function TransactionsPage() {
                           return (
                               <div className="flex justify-between items-center py-2 border-b border-dashed">
                                   <span className="text-muted-foreground flex items-center gap-2"><Activity className="h-4 w-4 text-primary"/> الجاهزية:</span>
-                                  <span className={cn("font-black text-xs px-3 py-0.5 rounded-full border", readiness.bgClass)}>
-                                      {readiness.text}
-                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                      <span className={cn("font-black text-xs px-3 py-0.5 rounded-full border", readiness.bgClass)}>
+                                          {readiness.text}
+                                      </span>
+                                      {readiness.status === 'pending' && (
+                                          <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleSyncStatus(selectedTx.id);
+                                              }}
+                                              disabled={isSyncing}
+                                              className="p-1 rounded-full hover:bg-muted text-amber-600 dark:text-amber-400 transition-colors"
+                                              title="فحص وتحديث الحالة من المزود"
+                                          >
+                                              <RefreshCw className={cn("h-3.5 w-3.5", isSyncing && "animate-spin")} />
+                                          </button>
+                                      )}
+                                  </div>
                               </div>
                           );
                       })()}
