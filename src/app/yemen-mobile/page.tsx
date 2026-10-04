@@ -432,8 +432,29 @@ export default function YemenMobilePage() {
               isPostpaid = resDesc.includes('postpaid') || resDesc.includes('فوترة');
           }
 
+          // فحص تقنية الشريحة (3G أو 4G) من الاشتراكات المفعلة (خاصة خدمة تفعيل الإنترنت)
+          const allOfferTexts = (offerResult?.offers || []).map((o: any) => 
+              `${o.offerName || ''} ${o.offer_name || ''} ${o.offertype || ''} ${o.offerId || ''}`
+          );
+
+          const has4G = allOfferTexts.some((text: string) => 
+              /4G|فورجي|فور\s*جي|lte/i.test(text)
+          );
+
+          const has3G = allOfferTexts.some((text: string) => 
+              /3G|ثري\s*جي/i.test(text)
+          );
+
+          let simGeneration = '';
+          if (has4G) {
+              simGeneration = '4G';
+          } else if (has3G) {
+              simGeneration = '3G';
+          }
+
           setLineTypeTab(isPostpaid ? 'postpaid' : 'prepaid');
-          const detectedTypeLabel = isPostpaid ? 'فاتورة' : 'دفع مسبق';
+          const baseType = isPostpaid ? 'فوترة' : 'دفع مسبق';
+          const detectedTypeLabel = simGeneration ? `${baseType} - ${simGeneration}` : baseType;
 
           const isLoan = solfaResult.status === "1" || solfaResult.status === 1;
           const loanAmt = isLoan ? parseFloat(solfaResult.loan_amount || "0") : 0;
