@@ -141,6 +141,16 @@ export function RecentTransactions() {
 
   const { data: transactions, isLoading } = useCollection<Transaction>(transactionsQuery);
 
+  // تحديث تلقائي صامت بمجرد تحميل القائمة إذا وُجدت أي عملية معلقة (دون تدخل العميل ودون قراءات متكررة)
+  React.useEffect(() => {
+    if (!transactions || transactions.length === 0) return;
+    const pendingTx = transactions.find(
+      (tx) => isTelecomService(tx.transactionType) && (tx.status === 'pending' || tx.readiness === 'قيد الانتظار')
+    );
+    if (pendingTx) {
+      handleSyncStatus(pendingTx.id);
+    }
+  }, [transactions]);
 
   const handleCopy = (text: string, label: string) => {
     if (!text) return;
@@ -179,6 +189,9 @@ export function RecentTransactions() {
                             if (open) {
                                 setSelectedTx(tx);
                                 setIsDialogOpen(true);
+                                if (isTelecomService(tx.transactionType) && (tx.status === 'pending' || tx.readiness === 'قيد الانتظار')) {
+                                    handleSyncStatus(tx.id);
+                                }
                             } else {
                                 setIsDialogOpen(false);
                                 setSelectedTx(null);
@@ -270,19 +283,8 @@ export function RecentTransactions() {
                                                         <span className={cn("font-black text-xs px-3 py-0.5 rounded-full border", readiness.bgClass)}>
                                                             {readiness.text}
                                                         </span>
-                                                        {readiness.status === 'pending' && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleSyncStatus(selectedTx.id);
-                                                                }}
-                                                                disabled={isSyncing}
-                                                                className="p-1 rounded-full hover:bg-muted text-amber-600 dark:text-amber-400 transition-colors"
-                                                                title="فحص وتحديث الحالة من المزود"
-                                                            >
-                                                                <RefreshCw className={cn("h-3.5 w-3.5", isSyncing && "animate-spin")} />
-                                                            </button>
+                                                        {isSyncing && readiness.status === 'pending' && (
+                                                            <RefreshCw className="h-3.5 w-3.5 animate-spin text-amber-600 dark:text-amber-400" />
                                                         )}
                                                     </div>
                                                 </div>
