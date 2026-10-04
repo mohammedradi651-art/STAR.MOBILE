@@ -61,6 +61,8 @@ export const dynamic = 'force-dynamic';
 type BillingInfo = {
     balance: number;
     customer_type: string;
+    baseType?: string;
+    simGeneration?: string;
     resultDesc?: string;
     isLoan: boolean;
     loanAmount?: number;
@@ -454,7 +456,7 @@ export default function YemenMobilePage() {
 
           setLineTypeTab(isPostpaid ? 'postpaid' : 'prepaid');
           const baseType = isPostpaid ? 'فوترة' : 'دفع مسبق';
-          const detectedTypeLabel = simGeneration ? `${baseType} - ${simGeneration}` : baseType;
+          const detectedTypeLabel = simGeneration ? `${baseType} - \u200E${simGeneration}` : baseType;
 
           const isLoan = solfaResult.status === "1" || solfaResult.status === 1;
           const loanAmt = isLoan ? parseFloat(solfaResult.loan_amount || "0") : 0;
@@ -462,6 +464,8 @@ export default function YemenMobilePage() {
           setBillingInfo({ 
               balance: parseFloat(queryResult.balance || "0"), 
               customer_type: detectedTypeLabel,
+              baseType: baseType,
+              simGeneration: simGeneration,
               resultDesc: queryResult.resultDesc,
               isLoan: isLoan,
               loanAmount: loanAmt
@@ -685,7 +689,15 @@ export default function YemenMobilePage() {
                                 </div>
                                 <div className="p-3">
                                     <p className="text-[10px] font-bold text-[#B32C4C] mb-1">نوع الرقم</p>
-                                    <p className="text-sm font-black text-[#B32C4C]">{billingInfo.customer_type}</p>
+                                    <div className="text-sm font-black text-[#B32C4C] flex items-center justify-center gap-1.5" dir="rtl">
+                                        <span>{billingInfo.baseType || billingInfo.customer_type}</span>
+                                        {billingInfo.simGeneration && (
+                                            <>
+                                                <span className="opacity-60">-</span>
+                                                <span dir="ltr" className="font-sans font-black">{billingInfo.simGeneration}</span>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -705,7 +717,18 @@ export default function YemenMobilePage() {
                                 <div className="bg-white dark:bg-slate-900 rounded-3xl overflow-hidden shadow-sm border border-[#B32C4C]/5 mt-2">
                                     <div className="grid grid-cols-3 text-center border-b bg-muted/10">
                                         <div className="p-3 border-l"><p className="text-[10px] font-bold text-[#B32C4C] mb-1">رصيد الرقم</p><p className="text-sm font-black text-[#B32C4C]">{billingInfo.balance.toLocaleString()}</p></div>
-                                        <div className="p-3 border-l"><p className="text-[10px] font-bold text-[#B32C4C] mb-1">نوع الرقم</p><p className="text-sm font-black text-[#B32C4C]">{billingInfo.customer_type}</p></div>
+                                        <div className="p-3 border-l">
+                                            <p className="text-[10px] font-bold text-[#B32C4C] mb-1">نوع الرقم</p>
+                                            <div className="text-sm font-black text-[#B32C4C] flex items-center justify-center gap-1.5" dir="rtl">
+                                                <span>{billingInfo.baseType || billingInfo.customer_type}</span>
+                                                {billingInfo.simGeneration && (
+                                                    <>
+                                                        <span className="opacity-60">-</span>
+                                                        <span dir="ltr" className="font-sans font-black">{billingInfo.simGeneration}</span>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
                                         <div className="p-3">
                                             <p className="text-[10px] font-bold text-[#B32C4C] mb-1">فحص السلفة</p>
                                             <div className="flex items-center justify-center gap-1">
