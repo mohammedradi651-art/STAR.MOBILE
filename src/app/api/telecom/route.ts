@@ -82,32 +82,43 @@ export async function POST(request: Request) {
     const incomingApiKey = (xApiKey || bearerKey || queryApiKey || payload.apiKey || '').trim();
     const isInternalHandled = request.headers.get('x-internal-handled') === 'true';
 
-    // التحقق مما إذا كان الطلب داخلياً من واجهة التطبيق التي قامت بخصم الرصيد مسبقاً
+    // فحص مصدر الطلب (من داخل التطبيق أم ربط خارجي)
+    const host = request.headers.get('host') || '';
+    const origin = request.headers.get('origin') || '';
+    const referer = request.headers.get('referer') || '';
+    const secFetchSite = request.headers.get('sec-fetch-site') || '';
+    const isAppSourceHeader = request.headers.get('x-app-source') === 'internal' || isInternalHandled;
+
+    const isSameOrigin = secFetchSite === 'same-origin' || 
+                         (!!origin && !!host && origin.includes(host)) || 
+                         (!!referer && !!host && referer.includes(host));
+
+    // استعلامات مجانية (لا تكلف رصيداً ولا تتطلب مفتاح API لعملاء التطبيق)
+    const isQueryAction = ['query', 'solfa', 'queryoffer', 'check', 'status'].includes(action);
+
+    // تحديد طبيعة الطلب:
+    // أي طلب لا يحتوي على مفتاح API يعتبر طلباً داخلياً من واجهة الموقع/التطبيق فوراً وبدون أي شروط
+    // السداد والاستعلام من داخل الموقع لا يتطلب أي مفتاح API على الإطلاق
     let isInternalAppRequest = false;
-    if (payload.backpass && payload.transid) {
-      try {
-        const txDoc = await getDoc(doc(firestore, 'paymentTransactions', payload.transid));
-        if (txDoc.exists() && txDoc.data()?.backpass === payload.backpass) {
-          isInternalAppRequest = true;
-        }
-      } catch (err) {
-        console.warn('Could not verify internal transaction:', err);
-      }
+
+    if (!incomingApiKey || payload.backpass || payload.transid || isAppSourceHeader || isSameOrigin || isQueryAction) {
+      isInternalAppRequest = true;
     }
 
     let clientUserId: string | null = null;
     let clientUserData: any = null;
 
-    // إذا لم يكن طلباً داخلياً مسجلاً، يجب التحقق من مفتاح الـ API
-    if (!isInternalAppRequest) {
-      if (!incomingApiKey) {
-        return NextResponse.json({
-          resultCode: "-401",
-          status: "failed",
-          message: "مطلوب مفتاح الوصول للربط البرمجي (API Key is required). يرجى تمرير المفتاح عبر ترويسة x-api-key أو Authorization: Bearer."
-        }, { status: 401 });
-      }
+    // لا يتم طلب مفتاح الـ API إلا إذا كان طلباً موجهاً كربط خارجي صريح
+    if (!isInternalAppRequest && !incomingApiKey) {
+      return NextResponse.json({
+        resultCode: "-401",
+        status: "failed",
+        message: "مطلوب مفتاح الوصول للربط البرمجي (API Key is required). يرجى تمرير المفتاح عبر ترويسة x-api-key أو Authorization: Bearer."
+      }, { status: 401 });
+    }
 
+    // إذا تم تمرير مفتاح API (طلب من مطور أو عميل ربط خارجي)، نتحقق من صحة المفتاح ونحدد هويته ورصيده
+    if (incomingApiKey) {
       // البحث عن العميل صاحب المفتاح في Firestore
       const userQuery = query(collection(firestore, 'users'), where('apiKey', '==', incomingApiKey));
       const userSnap = await getDocs(userQuery);
@@ -154,7 +165,7 @@ export async function POST(request: Request) {
     }
 
     // 4. معالجة طلب فحص الرصيد للعميل (إذا كان الأكشن balance)
-    const isBillingAction = !action || action === 'bill' || action === 'billoffer' || action === 'solfa' || service === 'sabaunits' || service === 'sabaoffer';
+    const isBillingAction = !action || action === 'bill' || action === 'billoffer' || service === 'sabaunits' || service === 'sabaoffer';
 
     if (action === 'balance' && !isInternalAppRequest) {
       if (service === 'info' && payload.type === 'provider') {
@@ -178,9 +189,9 @@ export async function POST(request: Request) {
     const targetMobile = String(payload.mobile || payload.playerid || username || '');
     let initialBalance = Number(clientUserData?.balance || 0);
 
-    const shouldPerformImmediateDeduction = isBillingAction && !isInternalAppRequest && !isInternalHandled && clientUserId;
+    const shouldPerformImmediateDeduction = Boolean(isBillingAction && !isInternalAppRequest && !isInternalHandled && clientUserId);
 
-    if (shouldPerformImmediateDeduction) {
+    if (shouldPerformImmediateDeduction && clientUserId) {
       requiredCost = calculateApiTransactionCost({
         service,
         action,
@@ -189,7 +200,7 @@ export async function POST(request: Request) {
         offerid: payload.offerid,
         packageid: payload.packageid,
         israsid: payload.israsid
-      }, systemConfig);
+      }, systemConfig, clientUserData);
 
       // الشرط الحاسم: منع أي سداد بدون رصيد كافٍ
       if (initialBalance < requiredCost) {

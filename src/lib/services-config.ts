@@ -141,20 +141,41 @@ export const DEFAULT_SERVICES_CONFIG: SystemServicesConfig = {
 };
 
 /**
- * حساب السعر النهائي للباقات
+ * تقريب العملة إلى منزلتين عشريتين بدقة
  */
-export function calculateFinalServicePrice(basePrice: number, setting?: ServicePricingSetting): number {
-  if (!basePrice || isNaN(basePrice) || basePrice <= 0) return 0;
-  if (!setting) return Math.ceil(basePrice);
+export function roundCurrency(num: number): number {
+  return Math.round((num + Number.EPSILON) * 100) / 100;
+}
 
-  if (setting.rate !== undefined && setting.rate > 0) {
-    return Math.ceil(basePrice * setting.rate);
+/**
+ * حساب السعر النهائي للباقات والخدمات مع تطبيق الخصم العشري الدقيق
+ */
+export function calculateFinalServicePrice(
+  basePrice: number, 
+  setting?: ServicePricingSetting, 
+  userDiscountPercent?: number
+): number {
+  if (!basePrice || isNaN(basePrice) || basePrice <= 0) return 0;
+  if (!setting && (!userDiscountPercent || userDiscountPercent <= 0)) return roundCurrency(basePrice);
+
+  let finalRate = setting?.rate;
+
+  // إذا كان لدى العميل نسبة خصم مخصصة (مثال: 3 تعني خصم 3%)
+  if (userDiscountPercent !== undefined && userDiscountPercent > 0) {
+    const customUserRate = (100 - userDiscountPercent) / 100;
+    finalRate = (finalRate !== undefined && finalRate > 0)
+      ? Math.min(finalRate, customUserRate)
+      : customUserRate;
   }
 
-  const percent = setting.percentage || 0;
-  const fixed = setting.fixedFee || 0;
+  if (finalRate !== undefined && finalRate > 0) {
+    return roundCurrency(basePrice * finalRate);
+  }
+
+  const percent = setting?.percentage || 0;
+  const fixed = setting?.fixedFee || 0;
   const total = basePrice + (basePrice * (percent / 100)) + fixed;
-  return Math.ceil(total);
+  return roundCurrency(total);
 }
 
 /**
@@ -299,7 +320,13 @@ export function calculateApiTransactionCost(
     israsid?: string | number;
     count?: string | number;
   },
-  config: SystemServicesConfig = DEFAULT_SERVICES_CONFIG
+  config: SystemServicesConfig = DEFAULT_SERVICES_CONFIG,
+  userDiscounts?: {
+    telecomDiscount?: number;
+    networksDiscount?: number;
+    gamesDiscount?: number;
+    alwadiDiscount?: number;
+  }
 ): number {
   const service = (payload.service || 'yemen').toLowerCase().trim();
   const action = (payload.action || 'bill').toLowerCase().trim();
@@ -307,15 +334,19 @@ export function calculateApiTransactionCost(
   const rawNum = String(payload.num || '').trim();
   const packageKey = String(payload.offerid || payload.packageid || payload.num || '').trim();
 
+  const telecomDiscount = Number(userDiscounts?.telecomDiscount || 0);
+  const networksDiscount = Number(userDiscounts?.networksDiscount || 0);
+  const gamesDiscount = Number(userDiscounts?.gamesDiscount || 0);
+
   // 1. يمن موبايل
   if (service === 'yemen' || service === 'yem') {
     if (action === 'billoffer') {
       const basePackagePrice = rawAmount > 0 
         ? rawAmount 
         : (KNOWN_PACKAGE_PRICES[packageKey] || 0);
-      return calculateFinalServicePrice(basePackagePrice, config.yemen_mobile);
+      return calculateFinalServicePrice(basePackagePrice, config.yemen_mobile, telecomDiscount);
     }
-    return calculateFinalServicePrice(rawAmount, config.yemen_mobile);
+    return calculateFinalServicePrice(rawAmount, config.yemen_mobile, telecomDiscount);
   }
 
   // 2. يو YOU
@@ -323,68 +354,86 @@ export function calculateApiTransactionCost(
     if (action === 'billoffer' || action === 'queryoffer') {
       const youFastPrice = KNOWN_PACKAGE_PRICES[`you_${rawNum}`] || KNOWN_PACKAGE_PRICES[packageKey];
       const basePrice = rawAmount > 0 ? rawAmount : (youFastPrice || 0);
-      return calculateFinalServicePrice(basePrice, config.you);
+      return calculateFinalServicePrice(basePrice, config.you, telecomDiscount);
     }
-    // شحن فوري أو رصيد يو (يطبق معامل العملة المرتفعة)
-    const multiplier = config.you?.balanceRate ?? 3.0;
-    return Math.ceil(rawAmount * multiplier);
+    // شحن فوري أو رصيد يو (يطبق معامل العملة المرتفعة مع الخصم)
+    let multiplier = config.you?.balanceRate ?? 3.0;
+    if (telecomDiscount > 0) {
+      multiplier = multiplier * ((100 - telecomDiscount) / 100);
+    }
+    return roundCurrency(rawAmount * multiplier);
   }
 
   // 3. سبأفون شمال (صنعاء وما حولها)
   if (service === 'sabaphone') {
     const rate = config.sabafon?.instantNorthRate ?? 1;
-    return calculateFinalServicePrice(rawAmount * rate, config.sabafon);
+    return calculateFinalServicePrice(rawAmount * rate, config.sabafon, telecomDiscount);
   }
 
   // 4. سبأفون جنوب (عدن - عملة مرتفعة)
   if (service === 'sbay') {
-    const southRate = config.sabafon?.instantSouthRate ?? config.sabafon?.balanceRate ?? 3.0;
-    return Math.ceil(rawAmount * southRate);
+    let southRate = config.sabafon?.instantSouthRate ?? config.sabafon?.balanceRate ?? 3.0;
+    if (telecomDiscount > 0) {
+      southRate = southRate * ((100 - telecomDiscount) / 100);
+    }
+    return roundCurrency(rawAmount * southRate);
   }
 
   // 5. سبأفون وحدات
   if (service === 'sabaunits') {
     const unitCount = parseFloat(rawNum || String(payload.amount || '0')) || 1;
-    const unitPrice = config.sabafon?.unitsRate ?? 45;
-    return Math.ceil(unitCount * unitPrice);
+    let unitPrice = config.sabafon?.unitsRate ?? 45;
+    if (telecomDiscount > 0) {
+      unitPrice = unitPrice * ((100 - telecomDiscount) / 100);
+    }
+    return roundCurrency(unitCount * unitPrice);
   }
 
   // 6. سبأفون باقات
   if (service === 'sabaoffer') {
     const sabaPkgPrice = KNOWN_PACKAGE_PRICES[`saba_${rawNum}`] || KNOWN_PACKAGE_PRICES[packageKey] || rawAmount;
-    const pkgRate = config.sabafon?.packagesRate ?? 1;
-    return Math.ceil(sabaPkgPrice * pkgRate);
+    let pkgRate = config.sabafon?.packagesRate ?? 1;
+    if (telecomDiscount > 0) {
+      pkgRate = pkgRate * ((100 - telecomDiscount) / 100);
+    }
+    return roundCurrency(sabaPkgPrice * pkgRate);
   }
 
   // 7. شركة واي (Why)
   if (service === 'why') {
-    const whyRate = config.why?.balanceRate ?? config.why?.rate ?? 3.8;
+    let whyRate = config.why?.balanceRate ?? config.why?.rate ?? 3.8;
+    if (telecomDiscount > 0) {
+      whyRate = whyRate * ((100 - telecomDiscount) / 100);
+    }
     const baseVal = rawAmount > 0 
       ? rawAmount 
       : (KNOWN_PACKAGE_PRICES[`why_${packageKey}`] || parseFloat(rawNum) || 0);
-    return Math.ceil(baseVal * whyRate);
+    return roundCurrency(baseVal * whyRate);
   }
 
   // 8. يمن فورجي 4G
   if (service === 'yem4g') {
-    return calculateFinalServicePrice(rawAmount, config.yemen_4g);
+    return calculateFinalServicePrice(rawAmount, config.yemen_4g, telecomDiscount);
   }
 
   // 9. عدن نت
   if (service === 'adenet') {
-    return calculateFinalServicePrice(rawAmount, config.aden_net);
+    return calculateFinalServicePrice(rawAmount, config.aden_net, telecomDiscount);
   }
 
   // 10. الهاتف الثابت والإنترنت المنزلي ADSL
   if (service === 'post') {
-    return calculateFinalServicePrice(rawAmount, config.landline_adsl);
+    return calculateFinalServicePrice(rawAmount, config.landline_adsl, telecomDiscount);
   }
 
   // 11. الألعاب وبطاقات الشحن
   if (service === 'games') {
-    return calculateFinalServicePrice(rawAmount, config.networks);
+    return calculateFinalServicePrice(rawAmount, config.networks, gamesDiscount || telecomDiscount);
   }
 
   // افتراضي لأي خدمة غير محددة
-  return Math.ceil(rawAmount);
+  if (telecomDiscount > 0) {
+    return roundCurrency(rawAmount * ((100 - telecomDiscount) / 100));
+  }
+  return roundCurrency(rawAmount);
 }

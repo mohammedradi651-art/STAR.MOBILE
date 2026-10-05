@@ -317,7 +317,10 @@ export async function executeTelecomRequestWithTimeout({
     try {
       const response = await fetch('/api/telecom', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-app-source': 'internal'
+        },
         body: JSON.stringify(fullPayload)
       });
       const data = await response.json();

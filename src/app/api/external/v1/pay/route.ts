@@ -99,8 +99,8 @@ export async function POST(req: Request) {
         }
     }
 
-    // احتساب السعر الدقيق من الربط البرمجي
-    const payAmount = calculateApiTransactionCost(body, systemConfig);
+    // احتساب السعر الدقيق من الربط البرمجي مع تطبيق خصومات العميل
+    const payAmount = calculateApiTransactionCost(body, systemConfig, effectiveUserData);
     const clientBalance = Number(effectiveUserData.balance || 0);
 
     if (clientBalance < payAmount) {

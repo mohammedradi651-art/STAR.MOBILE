@@ -392,17 +392,17 @@ export default function YemenMobilePage() {
       const [queryResponse, solfaResponse, offerResponse] = await Promise.all([
           fetch('/api/telecom', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', 'x-app-source': 'internal' },
               body: JSON.stringify({ mobile: phoneNumber, action: 'query', transid }),
           }),
           fetch('/api/telecom', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', 'x-app-source': 'internal' },
               body: JSON.stringify({ mobile: phoneNumber, action: 'solfa', transid }),
           }),
           fetch('/api/telecom', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', 'x-app-source': 'internal' },
               body: JSON.stringify({ mobile: phoneNumber, action: 'queryoffer', transid }),
           })
       ]);

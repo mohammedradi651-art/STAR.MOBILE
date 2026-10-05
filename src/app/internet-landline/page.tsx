@@ -172,7 +172,7 @@ export default function LandlinePage() {
             
             const response = await fetch('/api/telecom', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'x-app-source': 'internal' },
                 body: JSON.stringify({ 
                     mobile: phoneNumber, 
                     action: 'query', 

@@ -406,7 +406,7 @@ export default function UsersPage() {
       
       const telecomPromise = fetch('/api/telecom', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-app-source': 'internal' },
         body: JSON.stringify({ 
             action: 'balance',
             mobile: '770326828',
