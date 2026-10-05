@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { collection, doc, updateDoc, increment, query, orderBy, writeBatch, setDoc, getDocs } from 'firebase/firestore';
+import { collection, doc, updateDoc, increment, query, orderBy, writeBatch, setDoc, getDocs, where, limit, getDoc, getCountFromServer, getAggregateFromServer, sum, count } from 'firebase/firestore';
 import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking, useDoc, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -157,15 +157,208 @@ export default function UsersPage() {
 
   const isUserAdmin = user?.email === '770326828@shabakat.com' || user?.uid === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2';
 
-  const usersCollection = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'users'), orderBy('registrationDate', 'desc')) : null),
-    [firestore]
-  );
-  const { data: users, isLoading } = useCollection<User>(usersCollection);
+  // إدارة حالة المستخدمين عبر البحث عند الطلب فقط
+  const [searchedUsers, setSearchedUsers] = useState<User[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [totalUsersCount, setTotalUsersCount] = useState<number | null>(null);
+  const [totalUsersBalance, setTotalUsersBalance] = useState<number | null>(null);
 
-  const adminUser = useMemo(() => {
-    return users?.find(u => u.email === '770326828@shabakat.com' || u.id === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2');
-  }, [users]);
+  // إحصاء رصيد العملاء الإجمالي مع عدد المشتركين معاً في قراءة واحدة فقط (getAggregateFromServer)
+  useEffect(() => {
+    if (!firestore || !isUserAdmin) return;
+    getAggregateFromServer(collection(firestore, 'users'), {
+      totalBalance: sum('balance'),
+      totalCount: count()
+    })
+      .then(snap => {
+        const data = snap.data();
+        setTotalUsersBalance(data.totalBalance ?? 0);
+        setTotalUsersCount(data.totalCount ?? 0);
+      })
+      .catch((err) => {
+        console.error("Aggregation error:", err);
+      });
+  }, [firestore, isUserAdmin]);
+
+  // جلب رصيد حساب المدير (770326828) لخصمه من إجمالي رصيد العملاء
+  const adminDocRef = useMemoFirebase(
+    () => (firestore ? doc(firestore, 'users', user?.uid || 'wsy8bUcULSYX2J9Q9WyisiFX5ki2') : null),
+    [firestore, user]
+  );
+  const { data: adminData } = useDoc<User>(adminDocRef);
+
+  const adminBalance = adminData?.balance ?? 0;
+  const effectiveCustomerBalance = Math.max(0, (totalUsersBalance ?? 0) - adminBalance);
+  const effectiveCustomerCount = Math.max(0, (totalUsersCount ?? 0) - (adminData ? 1 : 0));
+
+
+  // دالة تنظيف وتوحيد الأحرف العربية (الهمزات، الياء، الهاء، إزالة التشكيل)
+  const normalizeArabic = (text?: string): string => {
+    if (!text) return '';
+    return text
+      .trim()
+      .toLowerCase()
+      .replace(/[\u064B-\u065F\u0670]/g, '') // إزالة التشكيل
+      .replace(/[أإآٱ]/g, 'ا') // توحيد الألف
+      .replace(/[ىي]/g, 'ي') // توحيد الياء
+      .replace(/ة/g, 'ه'); // توحيد التاء المربوطة
+  };
+
+  // التحقق من احتواء اسم المشترك على كل الكلمات المبحوث عنها (مثل الاسم الثلاثي)
+  const matchAllWords = (targetName: string, searchWords: string[]): boolean => {
+    const normTarget = normalizeArabic(targetName);
+    return searchWords.every(word => normTarget.includes(normalizeArabic(word)));
+  };
+
+  // توليد بدائل الهمزات (مثال: احمد / أحمد)
+  const getPrefixVariants = (str: string): string[] => {
+    const variants = new Set<string>();
+    variants.add(str);
+    if (str.startsWith('ا')) {
+      variants.add('أ' + str.slice(1));
+      variants.add('إ' + str.slice(1));
+      variants.add('آ' + str.slice(1));
+    } else if (str.startsWith('أ') || str.startsWith('إ') || str.startsWith('آ')) {
+      variants.add('ا' + str.slice(1));
+    }
+    return Array.from(variants);
+  };
+
+  // البحث المباشر الذكي عن مستخدم عند الطلب
+  const handleSearch = async (termToSearch: string) => {
+    const term = termToSearch.trim();
+    if (!term || !firestore) {
+      setSearchedUsers([]);
+      setHasSearched(false);
+      return;
+    }
+
+    setIsSearching(true);
+    setHasSearched(true);
+
+    try {
+      const usersRef = collection(firestore, 'users');
+      const resultsMap = new Map<string, User>();
+      const cleanDigits = term.replace(/\D/g, '');
+
+      // 1. إذا كان رقم هاتف أو بريد إلكتروني
+      if (cleanDigits.length >= 4) {
+        const phoneQ = query(usersRef, where('phoneNumber', '==', cleanDigits), limit(3));
+        const phoneSnap = await getDocs(phoneQ);
+        phoneSnap.forEach(d => resultsMap.set(d.id, { ...d.data(), id: d.id } as User));
+
+        if (resultsMap.size === 0) {
+          const emailQ = query(usersRef, where('email', '==', `${cleanDigits}@shabakat.com`), limit(3));
+          const emailSnap = await getDocs(emailQ);
+          emailSnap.forEach(d => resultsMap.set(d.id, { ...d.data(), id: d.id } as User));
+        }
+      }
+
+      // إذا لم يكن رقماً أو لم يعثر على الهاتف، نبحث بالاسم
+      if (resultsMap.size === 0) {
+        const words = term.split(/\s+/).filter(Boolean);
+
+        // 2. البحث ببادئة الاسم كاملة مع بدائل الهمزات
+        for (const prefix of getPrefixVariants(term)) {
+          if (resultsMap.size > 0) break;
+          const nameQ = query(
+            usersRef,
+            where('displayName', '>=', prefix),
+            where('displayName', '<=', prefix + '\uf8ff'),
+            limit(5)
+          );
+          const nameSnap = await getDocs(nameQ);
+          nameSnap.forEach(d => resultsMap.set(d.id, { ...d.data(), id: d.id } as User));
+        }
+
+        // 3. البحث بالاسم الثلاثي / المركب (مثال: "محمد راضي باشادي" يبحث عن "محمد راضي" ويطابق "باشادي")
+        if (resultsMap.size === 0 && words.length >= 2) {
+          const twoWords = `${words[0]} ${words[1]}`;
+          for (const prefix of getPrefixVariants(twoWords)) {
+            if (resultsMap.size > 0) break;
+            const twoWordsQ = query(
+              usersRef,
+              where('displayName', '>=', prefix),
+              where('displayName', '<=', prefix + '\uf8ff'),
+              limit(15)
+            );
+            const twoWordsSnap = await getDocs(twoWordsQ);
+            twoWordsSnap.forEach(d => {
+              const data = d.data();
+              if (matchAllWords(data.displayName || '', words)) {
+                resultsMap.set(d.id, { ...data, id: d.id } as User);
+              }
+            });
+          }
+        }
+
+        // 4. إذا لم يجد، نجرب عبر الاسم الأول ومطابقة باقي الكلمات (مثال: "محمد باشادي")
+        if (resultsMap.size === 0 && words.length >= 2) {
+          for (const prefix of getPrefixVariants(words[0])) {
+            if (resultsMap.size > 0) break;
+            // فحص بحقل firstName
+            const firstQ = query(usersRef, where('firstName', '==', prefix), limit(25));
+            const firstSnap = await getDocs(firstQ);
+            firstSnap.forEach(d => {
+              const data = d.data();
+              if (matchAllWords(data.displayName || '', words)) {
+                resultsMap.set(d.id, { ...data, id: d.id } as User);
+              }
+            });
+
+            // فحص ببادئة displayName
+            if (resultsMap.size === 0) {
+              const dispQ = query(
+                usersRef,
+                where('displayName', '>=', prefix),
+                where('displayName', '<=', prefix + '\uf8ff'),
+                limit(25)
+              );
+              const dispSnap = await getDocs(dispQ);
+              dispSnap.forEach(d => {
+                const data = d.data();
+                if (matchAllWords(data.displayName || '', words)) {
+                  resultsMap.set(d.id, { ...data, id: d.id } as User);
+                }
+              });
+            }
+          }
+        }
+
+        // 5. إذا كان البحث بكلمة واحدة أو لقب (مثال: "باشادي" أو "راضي")
+        if (resultsMap.size === 0) {
+          const targetWord = words[0];
+          for (const prefix of getPrefixVariants(targetWord)) {
+            if (resultsMap.size > 0) break;
+            const singleQ = query(
+              usersRef,
+              where('displayName', '>=', prefix),
+              where('displayName', '<=', prefix + '\uf8ff'),
+              limit(10)
+            );
+            const singleSnap = await getDocs(singleQ);
+            singleSnap.forEach(d => resultsMap.set(d.id, { ...d.data(), id: d.id } as User));
+          }
+        }
+
+        // 6. إذا كان معرّف وثيقة (Doc ID)
+        if (resultsMap.size === 0 && term.length > 15) {
+          const docSnap = await getDoc(doc(firestore, 'users', term));
+          if (docSnap.exists()) {
+            resultsMap.set(docSnap.id, { ...docSnap.data(), id: docSnap.id } as User);
+          }
+        }
+      }
+
+      setSearchedUsers(Array.from(resultsMap.values()));
+    } catch (err: any) {
+      console.error("Search error:", err);
+      toast({ variant: 'destructive', title: 'خطأ في البحث', description: err.message });
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
   const debtsCollection = useMemoFirebase(
     () => (firestore && isDebtsListOpen ? query(collection(firestore, 'clientDebts'), orderBy('timestamp', 'desc')) : null),
@@ -179,16 +372,24 @@ export default function UsersPage() {
   );
   const { data: appSettings } = useDoc<AppSettings>(settingsDocRef);
 
-  const boxBalance = appSettings?.boxBalance ?? 0;
-  const totalDebts = appSettings?.totalDebts ?? 0;
+  const [debtsSum, setDebtsSum] = useState<number | null>(null);
 
-  const totalUsersBalance = useMemo(() => {
-    if (!users) return 0;
-    return users.reduce((acc, user) => {
-      if (user.phoneNumber === '770326828') return acc;
-      return acc + (user.balance ?? 0);
-    }, 0);
-  }, [users]);
+  // إحصاء رصيد الديون بدقة (قراءة واحدة عبر التجميع)
+  useEffect(() => {
+    if (!firestore || !isUserAdmin) return;
+    getAggregateFromServer(collection(firestore, 'clientDebts'), {
+      total: sum('amount')
+    })
+      .then(snap => {
+        setDebtsSum(snap.data().total ?? 0);
+      })
+      .catch((err) => {
+        console.error("Debts aggregation error:", err);
+      });
+  }, [firestore, isUserAdmin]);
+
+  const boxBalance = appSettings?.boxBalance ?? 0;
+  const totalDebts = debtsSum !== null ? debtsSum : (appSettings?.totalDebts ?? 0);
 
   const getFirstLast = (name?: string) => {
     if (!name) return 'عميلنا';
@@ -255,13 +456,14 @@ export default function UsersPage() {
   }, [agentBalance, baityBalance, boxBalance, totalDebts]);
 
   const netProfit = useMemo(() => {
-    return combinedProvidersBalance - totalUsersBalance;
-  }, [combinedProvidersBalance, totalUsersBalance]);
+    return combinedProvidersBalance - effectiveCustomerBalance;
+  }, [combinedProvidersBalance, effectiveCustomerBalance]);
   
   const handleDelete = (userId: string) => {
     if (!firestore) return;
     const userDocRef = doc(firestore, 'users', userId);
     deleteDocumentNonBlocking(userDocRef);
+    setSearchedUsers(prev => prev.filter(u => u.id !== userId));
     toast({ title: "نجاح", description: "تم حذف المستخدم بنجاح." });
   };
 
@@ -274,6 +476,7 @@ export default function UsersPage() {
     const userNotificationsRef = collection(firestore, 'users', selectedUser.id, 'notifications');
     
     updateDocumentNonBlocking(userDocRef, { balance: increment(amount) });
+    setSearchedUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, balance: (u.balance || 0) + amount } : u));
     addDocumentNonBlocking(userNotificationsRef, {
       title: 'تمت تغذية حسابك',
       body: `تمت إضافة مبلغ ${amount.toLocaleString('en-US')} ريال إلى رصيدك.`,
@@ -309,6 +512,7 @@ export default function UsersPage() {
     const userTransactionsRef = collection(firestore, 'users', selectedUser.id, 'transactions');
 
     updateDocumentNonBlocking(userDocRef, { balance: increment(amount) });
+    setSearchedUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, balance: (u.balance ?? 0) + amount } : u));
     addDocumentNonBlocking(userTransactionsRef, {
         userId: selectedUser.id,
         transactionDate: new Date().toISOString(),
@@ -373,6 +577,7 @@ export default function UsersPage() {
     if (!selectedUser || !firestore) return;
     const docRef = doc(firestore, 'users', selectedUser.id);
     updateDocumentNonBlocking(docRef, { apiKey: tempApiKey });
+    setSearchedUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, apiKey: tempApiKey } : u));
     
     if (tempApiKey) {
         toast({ title: "تم الحفظ", description: "تم تفعيل مفتاح الربط بنجاح." });
@@ -402,6 +607,13 @@ export default function UsersPage() {
         telecomDiscount: Number(discounts.telecom),
         gamesDiscount: Number(discounts.games)
     });
+    setSearchedUsers(prev => prev.map(u => u.id === selectedUser.id ? {
+        ...u,
+        alwadiDiscount: Number(discounts.alwadi),
+        networksDiscount: Number(discounts.networks),
+        telecomDiscount: Number(discounts.telecom),
+        gamesDiscount: Number(discounts.games)
+    } : u));
     toast({ title: "تم الحفظ", description: "تم تحديث خصومات المستخدم بنجاح." });
     setIsDiscountDialogOpen(false);
   };
@@ -409,7 +621,14 @@ export default function UsersPage() {
   const handleSaveChanges = () => {
     if (!editingUser || !firestore) return;
     const docRef = doc(firestore, 'users', editingUser.id);
-    updateDocumentNonBlocking(docRef, { displayName: editingName, phoneNumber: editingPhoneNumber });
+    const updatedName = editingName.trim();
+    const updatedPhone = editingPhoneNumber.trim();
+    updateDocumentNonBlocking(docRef, { displayName: updatedName, phoneNumber: updatedPhone });
+    setSearchedUsers(prev => prev.map(u => u.id === editingUser.id ? {
+        ...u,
+        displayName: updatedName,
+        phoneNumber: updatedPhone
+    } : u));
     toast({ title: "نجاح", description: "تم تحديث المعلومات." });
     setIsEditDialogOpen(false);
   };
@@ -423,6 +642,7 @@ export default function UsersPage() {
     const txCol = collection(firestore, 'users', selectedUser.id, 'transactions');
 
     updateDocumentNonBlocking(userRef, { balance: increment(-amount) });
+    setSearchedUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, balance: (u.balance ?? 0) - amount } : u));
     addDocumentNonBlocking(txCol, {
         userId: selectedUser.id,
         transactionDate: new Date().toISOString(),
@@ -462,6 +682,7 @@ export default function UsersPage() {
     });
 
     updateDocumentNonBlocking(settingsDocRef, { totalDebts: increment(amt) });
+    setDebtsSum(prev => (prev ?? 0) + amt);
 
     toast({ title: "تمت الإضافة", description: `تم تسجيل دين على ${newDebtorName}.` });
     setNewDebtorName('');
@@ -474,6 +695,7 @@ export default function UsersPage() {
     const docRef = doc(firestore, 'clientDebts', debt.id);
     deleteDocumentNonBlocking(docRef);
     updateDocumentNonBlocking(settingsDocRef, { totalDebts: increment(-debt.amount) });
+    setDebtsSum(prev => Math.max(0, (prev ?? 0) - debt.amount));
     toast({ title: "تم الحذف", description: "تم حذف سجل الدين بنجاح." });
   };
 
@@ -489,6 +711,7 @@ export default function UsersPage() {
     
     try {
         await batch.commit();
+        setDebtsSum(0);
         toast({ title: "تم التصفير", description: "تم حذف كافة الديون وتصفير الإجمالي." });
     } catch (e) {
         toast({ variant: "destructive", title: "فشل التصفير" });
@@ -497,9 +720,7 @@ export default function UsersPage() {
     }
   };
 
-  const filteredUsers = users?.filter(user => {
-    const searchMatch = (user.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) || user.phoneNumber?.includes(searchTerm));
-    if (!searchMatch) return false;
+  const filteredUsers = searchedUsers.filter(user => {
     if (accountTypeFilter === 'all') return true;
     if (accountTypeFilter === 'user') return user.accountType === 'user' || !user.accountType;
     if (accountTypeFilter === 'with-balance') return (user.balance ?? 0) > 0;
@@ -614,131 +835,121 @@ export default function UsersPage() {
                 </div>
             </Card>
 
-            <div className="grid grid-cols-2 gap-4">
-                <Card className="relative overflow-hidden border-none shadow-sm bg-primary/5">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-[10px] font-black text-primary uppercase tracking-widest">إجمالي الأرصدة</CardTitle>
-                    <Wallet className="h-4 w-4 text-primary opacity-50" />
-                </CardHeader>
-                <CardContent>
-                    {isLoading ? <Skeleton className="h-10 w-32" /> : <div className="text-2xl font-black text-primary text-right" dir="rtl">{totalUsersBalance.toLocaleString('en-US')} <span className="text-[10px]">ر.ي</span></div>}
-                </CardContent>
-                </Card>
-                <Card className="border-none shadow-sm bg-muted/30">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">المستخدمين</CardTitle>
-                    <Users className="h-4 w-4 text-muted-foreground opacity-50" />
-                </CardHeader>
-                <CardContent>
-                    {isLoading ? <Skeleton className="h-10 w-24" /> : <div className="text-2xl font-black text-right" dir="rtl">{(users?.length ?? 0).toLocaleString('en-US')} <span className="text-[10px]">مستخدم</span></div>}
-                </CardContent>
-                </Card>
-            </div>
+            {/* مستطيل رصيد العملاء الإجمالي */}
+            <Card className="border-none shadow-md bg-muted/40 rounded-[28px] p-4 flex flex-col justify-center items-center text-center space-y-1 animate-in fade-in slide-in-from-top-1 duration-500">
+                <div className="flex items-center justify-center gap-1.5">
+                    <Coins className="h-4 w-4 text-[#0048ad]" />
+                    <span className="text-xs font-black text-foreground">رصيد العملاء الإجمالي</span>
+                    {totalUsersCount !== null && (
+                        <span className="text-[10px] font-bold text-muted-foreground mr-1">
+                            ({effectiveCustomerCount.toLocaleString('en-US')} مشترك)
+                        </span>
+                    )}
+                </div>
+                <div className="text-2xl font-black text-[#0048ad]" dir="rtl">
+                    {totalUsersBalance !== null ? effectiveCustomerBalance.toLocaleString('en-US', { maximumFractionDigits: 1 }) : '...'} 
+                    <span className="text-xs font-bold mr-1 text-muted-foreground">ر.ي</span>
+                </div>
+            </Card>
 
-            {/* Master API Key Card for Admin */}
-            {isUserAdmin && adminUser && (
-                <Card className="border-none shadow-xl bg-mesh-gradient text-white rounded-[32px] overflow-hidden animate-in zoom-in-95 duration-700">
-                    <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-white/20 rounded-xl backdrop-blur-md border border-white/20">
-                                    <ShieldCheck className="h-6 w-6 text-white" />
-                                </div>
-                                <h3 className="font-black text-base text-white">مفتاح الربط الشامل (Master API)</h3>
-                            </div>
-                            <Badge className="bg-green-400 text-green-900 border-none font-black text-[9px] uppercase tracking-widest h-5">Master Scope</Badge>
-                        </div>
-                        
-                        <div className="space-y-4">
-                            <div className="bg-black/20 rounded-2xl p-4 border border-white/10">
-                                <p className="text-[10px] font-bold text-white/60 mb-2 uppercase tracking-widest">مفتاح الوصول الخاص بالبوت</p>
-                                <div className="flex items-center gap-3">
-                                    <Input 
-                                        readOnly 
-                                        value={adminUser.apiKey || 'لا يوجد مفتاح مفعل'} 
-                                        className="bg-transparent border-none font-mono text-xs font-black text-white p-0 h-auto focus-visible:ring-0 placeholder:text-white/20"
-                                    />
-                                    <Button 
-                                        variant="ghost" 
-                                        size="icon" 
-                                        className="h-8 w-8 text-white hover:bg-white/10" 
-                                        onClick={() => {
-                                            if (adminUser.apiKey) {
-                                                navigator.clipboard.writeText(adminUser.apiKey);
-                                                toast({ title: "تم النسخ" });
-                                            }
-                                        }}
-                                    >
-                                        <Copy className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                            </div>
-                            
-                            <div className="flex items-start gap-3 opacity-80">
-                                <Zap className="h-4 w-4 text-yellow-300 shrink-0 mt-0.5" />
-                                <p className="text-[9px] font-bold leading-relaxed">
-                                    هذا المفتاح يمنح البوت صلاحية فحص رصيد أي مشترك عبر API الرصيد باستخدام باراميتر <code className="bg-black/30 px-1 rounded">?mobile=77xxxxxxx</code>
-                                </p>
-                            </div>
-
-                            <Button 
-                                onClick={() => handleApiKeyClick(adminUser)}
-                                className="w-full h-10 bg-white/20 hover:bg-white/30 text-white font-black text-xs border border-white/10 rounded-xl"
-                            >
-                                <Settings className="ml-2 h-3.5 w-3.5" />
-                                إدارة المفتاح الشامل
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
           </div>
           
-          <div className="relative">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <Input 
-                type="text" 
-                placeholder="ابحث عن مستخدم..." 
-                className="w-full pr-10 h-12 rounded-2xl bg-muted/20 border-none focus-visible:ring-primary transition-all shadow-inner" 
-                value={searchTerm} 
-                onChange={(e) => setSearchTerm(e.target.value)} 
-              />
-          </div>
-          
-          <div>
-            <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-1 mb-3">تصفية المستخدمين</h3>
-            <div className="grid grid-cols-2 gap-3">
-                {filterOptions.map((opt) => (
-                    <button
-                        key={opt.value}
-                        onClick={() => setAccountTypeFilter(opt.value as any)}
-                        className={cn(
-                            "flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all duration-300 gap-2",
-                            accountTypeFilter === opt.value
-                                ? "border-primary bg-primary/5 text-primary shadow-sm scale-[1.02]"
-                                : "border-transparent bg-card text-muted-foreground hover:bg-muted/50 shadow-sm"
-                        )}
-                    >
-                        <opt.icon className={cn("h-5 w-5", accountTypeFilter === opt.value ? "text-primary" : "text-muted-foreground/60")} />
-                        <span className="text-[11px] font-black">{opt.label}</span>
-                    </button>
-                ))}
+          {/* حقل البحث عند الطلب مع زر البحث الفوري */}
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input 
+                  type="text" 
+                  placeholder="ابحث باسم العميل أو رقمه (مثال: 771042239)..." 
+                  className="w-full pr-11 pl-10 h-12 rounded-2xl bg-card border border-border/60 text-xs font-bold focus-visible:ring-primary shadow-xs" 
+                  value={searchTerm} 
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSearch(searchTerm);
+                    }
+                  }}
+                />
+                {searchTerm && (
+                  <button 
+                    onClick={() => {
+                      setSearchTerm('');
+                      setSearchedUsers([]);
+                      setHasSearched(false);
+                    }} 
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded-full text-muted-foreground"
+                  >
+                    <XCircle className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              <Button 
+                onClick={() => handleSearch(searchTerm)}
+                disabled={isSearching || !searchTerm.trim()}
+                className="h-12 px-5 rounded-2xl font-black text-xs bg-[#0048ad] hover:bg-[#00388a] text-white shadow-xs shrink-0 gap-1.5"
+              >
+                {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                <span>بحث</span>
+              </Button>
             </div>
           </div>
+
+          {hasSearched && searchedUsers.length > 0 && (
+            <div>
+              <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-1 mb-3">تصفية النتائج</h3>
+              <div className="grid grid-cols-2 gap-3">
+                  {filterOptions.map((opt) => (
+                      <button
+                          key={opt.value}
+                          onClick={() => setAccountTypeFilter(opt.value as any)}
+                          className={cn(
+                              "flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all duration-300 gap-2",
+                              accountTypeFilter === opt.value
+                                  ? "border-primary bg-primary/5 text-primary shadow-sm scale-[1.02]"
+                                  : "border-transparent bg-card text-muted-foreground hover:bg-muted/50 shadow-sm"
+                          )}
+                      >
+                          <opt.icon className={cn("h-5 w-5", accountTypeFilter === opt.value ? "text-primary" : "text-muted-foreground/60")} />
+                          <span className="text-[11px] font-black">{opt.label}</span>
+                      </button>
+                  ))}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-3">
             <div className="flex justify-between items-center px-1 mb-1">
-                <h3 className="text-xs font-black text-primary uppercase tracking-widest">النتائج ({filteredUsers?.length || 0})</h3>
+                <h3 className="text-xs font-black text-primary uppercase tracking-widest">
+                  النتائج ({filteredUsers.length})
+                </h3>
+                {hasSearched && (
+                  <span className="text-[10px] font-bold text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full">
+                    جلب عند الطلب فقط
+                  </span>
+                )}
             </div>
-            {isLoading ? (
-                [1, 2, 3].map(i => <Skeleton key={i} className="h-24 w-full rounded-3xl" />)
-            ) : filteredUsers?.length === 0 ? (
-                <div className="text-center py-10 opacity-30">
-                    <Users className="h-12 w-12 mx-auto mb-2" />
-                    <p className="text-xs font-bold">لا يوجد مستخدمون مطابقون</p>
+
+            {isSearching ? (
+                [1, 2].map(i => <Skeleton key={i} className="h-24 w-full rounded-3xl" />)
+            ) : !hasSearched ? (
+                <Card className="rounded-3xl border border-dashed border-border/60 p-8 text-center bg-card/60 space-y-2">
+                    <Search className="h-10 w-10 mx-auto text-[#0048ad]/50" />
+                    <p className="text-xs font-black text-foreground">ابحث بأسم المستخدم ليتم جلبه</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      ابحث بأسم او رقم العميل.
+                    </p>
+                </Card>
+            ) : filteredUsers.length === 0 ? (
+                <div className="text-center py-10 opacity-60 space-y-2">
+                    <Users className="h-10 w-10 mx-auto text-muted-foreground/50" />
+                    <p className="text-xs font-bold text-foreground">لا يوجد مستخدم مطابق للبحث</p>
+                    <p className="text-[10px] text-muted-foreground">تأكد من كتابة الاسم أو الرقم بدقة وحاول مجدداً.</p>
                 </div>
             ) : (
-                filteredUsers?.map((user) => (
+                filteredUsers.map((user) => (
                 <Card key={user.id} className="rounded-3xl border-none shadow-sm hover:shadow-md transition-shadow overflow-hidden bg-card">
                     <CardContent className="p-4">
                     <div className="flex justify-between items-start">
