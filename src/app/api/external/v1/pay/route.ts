@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
-import { collection, query, where, getDocs, doc, writeBatch, increment } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, writeBatch, increment, getDoc } from 'firebase/firestore';
+import { DEFAULT_SERVICES_CONFIG, SystemServicesConfig, calculateApiTransactionCost } from '@/lib/services-config';
 
 /**
  * @fileOverview نقطة نهاية سداد العمليات الاحترافية v1.6
  * تدعم الخصم من رصيد العميل المستهدف إذا كان الطالب مديراً (Master Key Mode)
+ * وتطبق الأسعار الدقيقة من الربط البرمجي
  */
 
 const corsHeaders = {
@@ -57,7 +59,7 @@ export async function POST(req: Request) {
     const isAdmin = requesterData.email === '770326828@shabakat.com' || requesterDoc.id === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2';
 
     const body = await req.json();
-    const { mobile, action, service, amount } = body;
+    const { mobile, action, service } = body;
 
     if (!mobile || !action || !service) {
       return NextResponse.json({
@@ -68,6 +70,17 @@ export async function POST(req: Request) {
         data: null,
         timestamp
       }, { status: 400, headers: corsHeaders });
+    }
+
+    // جلب إعدادات الأسعار من النظام
+    let systemConfig: SystemServicesConfig = DEFAULT_SERVICES_CONFIG;
+    try {
+      const configSnap = await getDoc(doc(firestore, 'system_settings', 'telecom_config'));
+      if (configSnap.exists()) {
+        systemConfig = { ...DEFAULT_SERVICES_CONFIG, ...(configSnap.data() as any) };
+      }
+    } catch (e) {
+      console.warn("Could not read telecom_config in v1/pay:", e);
     }
 
     // 2. منطق توجيه الخصم (Redirection Logic)
@@ -86,14 +99,22 @@ export async function POST(req: Request) {
         }
     }
 
-    const payAmount = parseFloat(amount || "0");
-    if ((effectiveUserData.balance || 0) < payAmount) {
+    // احتساب السعر الدقيق من الربط البرمجي
+    const payAmount = calculateApiTransactionCost(body, systemConfig);
+    const clientBalance = Number(effectiveUserData.balance || 0);
+
+    if (clientBalance < payAmount) {
       return NextResponse.json({
         success: false,
         code: 'SM_INSUFFICIENT_BALANCE',
-        message: isAdmin ? `Insufficient balance for client ${mobile}` : 'Insufficient balance',
+        message: isAdmin 
+          ? `رصيد العميل ${mobile} غير كافٍ. الرصيد: ${clientBalance} ر.ي، والمطلوب: ${payAmount} ر.ي.`
+          : `رصيد حسابك غير كافٍ لتنفيذ هذه العملية. الرصيد: ${clientBalance} ر.ي، والمطلوب: ${payAmount} ر.ي.`,
         transactionId: null,
-        data: null,
+        data: {
+          currentBalance: clientBalance,
+          requiredCost: payAmount
+        },
         timestamp
       }, { status: 400, headers: corsHeaders });
     }
@@ -102,7 +123,11 @@ export async function POST(req: Request) {
     const origin = new URL(req.url).origin;
     const telecomResponse = await fetch(`${origin}/api/telecom`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-internal-handled': 'true',
+        'x-api-key': apiKey
+      },
       body: JSON.stringify(body)
     });
 
