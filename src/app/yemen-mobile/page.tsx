@@ -674,6 +674,31 @@ export default function YemenMobilePage() {
 
         {phone.length === 9 && (phone.startsWith('77') || phone.startsWith('78')) && (
             <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2">
+                {billingInfo && (
+                    <div className="rounded-3xl overflow-hidden shadow-lg p-1 animate-in zoom-in-95" style={YEMEN_MOBILE_GRADIENT}>
+                        <div className="bg-white/10 backdrop-blur-md rounded-[22px] grid grid-cols-3 text-center text-white">
+                            <div className="p-3 border-l border-white/10">
+                                <p className="text-[10px] font-bold opacity-80 mb-1">رصيد الرقم</p>
+                                <p className="text-sm font-black">{billingInfo.balance.toLocaleString('en-US')} ر.ي</p>
+                            </div>
+                            <div className="p-3 border-l border-white/10">
+                                <p className="text-[10px] font-bold opacity-80 mb-1">نوع الرقم</p>
+                                <p className="text-sm font-black">{billingInfo.baseType || (lineTypeTab === 'postpaid' ? 'فوترة' : 'دفع مسبق')}</p>
+                            </div>
+                            <div className="p-3">
+                                <p className="text-[10px] font-bold opacity-80 mb-1">حالة السلفة</p>
+                                <p className="text-sm font-black">
+                                    {billingInfo.isLoan 
+                                        ? (billingInfo.loanAmount && billingInfo.loanAmount > 0 
+                                            ? `متسلف (${billingInfo.loanAmount.toLocaleString('en-US')})` 
+                                            : 'متسلف') 
+                                        : 'غير متسلف'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full" defaultValue="balance">
                     <TabsList className="grid w-full grid-cols-2 bg-white dark:bg-slate-900 rounded-2xl h-14 p-1.5 shadow-sm border border-[#B32C4C]/5">
                         <TabsTrigger value="balance" className="rounded-xl font-bold text-sm data-[state=active]:bg-[#B32C4C] data-[state=active]:text-white">الرصيد</TabsTrigger>
@@ -681,26 +706,6 @@ export default function YemenMobilePage() {
                     </TabsList>
 
                     <TabsContent value="balance" className="pt-4 space-y-6 animate-in fade-in-0">
-                        {billingInfo && (
-                            <div className="rounded-3xl overflow-hidden shadow-sm border border-[#B32C4C]/5 bg-white dark:bg-slate-900 grid grid-cols-2 text-center animate-in zoom-in-95 duration-300">
-                                <div className="p-3 border-l">
-                                    <p className="text-[10px] font-bold text-[#B32C4C] mb-1">رصيد الرقم</p>
-                                    <p className="text-sm font-black text-[#B32C4C]">{billingInfo.balance.toLocaleString('en-US')}</p>
-                                </div>
-                                <div className="p-3">
-                                    <p className="text-[10px] font-bold text-[#B32C4C] mb-1">نوع الرقم</p>
-                                    <div className="text-sm font-black text-[#B32C4C] flex items-center justify-center gap-1.5" dir="rtl">
-                                        <span>{billingInfo.baseType || billingInfo.customer_type}</span>
-                                        {billingInfo.simGeneration && (
-                                            <>
-                                                <span className="opacity-60">-</span>
-                                                <span dir="ltr" className="font-sans font-black">{billingInfo.simGeneration}</span>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-[#B32C4C]/5 text-center">
                             <Label className="text-sm font-black text-muted-foreground block mb-4">ادخل المبلغ</Label>
                             <div className="relative max-w-[240px] mx-auto">
@@ -714,33 +719,6 @@ export default function YemenMobilePage() {
                     <TabsContent value="packages" className="space-y-4">
                         {billingInfo && (
                             <div className="space-y-4">
-                                <div className="bg-white dark:bg-slate-900 rounded-3xl overflow-hidden shadow-sm border border-[#B32C4C]/5 mt-2">
-                                    <div className="grid grid-cols-3 text-center border-b bg-muted/10">
-                                        <div className="p-3 border-l"><p className="text-[10px] font-bold text-[#B32C4C] mb-1">رصيد الرقم</p><p className="text-sm font-black text-[#B32C4C]">{billingInfo.balance.toLocaleString()}</p></div>
-                                        <div className="p-3 border-l">
-                                            <p className="text-[10px] font-bold text-[#B32C4C] mb-1">نوع الرقم</p>
-                                            <div className="text-sm font-black text-[#B32C4C] flex items-center justify-center gap-1.5" dir="rtl">
-                                                <span>{billingInfo.baseType || billingInfo.customer_type}</span>
-                                                {billingInfo.simGeneration && (
-                                                    <>
-                                                        <span className="opacity-60">-</span>
-                                                        <span dir="ltr" className="font-sans font-black">{billingInfo.simGeneration}</span>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="p-3">
-                                            <p className="text-[10px] font-bold text-[#B32C4C] mb-1">فحص السلفة</p>
-                                            <div className="flex items-center justify-center gap-1">
-                                                {billingInfo.isLoan ? (
-                                                    <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20 gap-1 px-1.5 h-6"><Frown className="h-3 w-3" /><span className="text-[9px] font-black">{billingInfo.loanAmount?.toLocaleString()}</span></Badge>
-                                                ) : (
-                                                    <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20 gap-1 h-6"><Smile className="h-3 w-3" /><span className="text-[9px] font-black">غير متسلف</span></Badge>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
 
                                 <div className="flex justify-center mt-2">
                                     <Tabs value={lineTypeTab} onValueChange={setLineTypeTab} className="w-full max-w-[200px]">
