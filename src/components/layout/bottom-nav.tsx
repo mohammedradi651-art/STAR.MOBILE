@@ -35,7 +35,7 @@ export function BottomNav() {
   const navItems = isUserAdmin ? adminNavItems : userNavItems;
 
   const getActiveState = (href: string) => {
-    if (href === '/login') return pathname === '/login';
+    if (href === '/login') return pathname === '/login' || pathname === '/';
     if (href === '/renewal-requests') return pathname.startsWith('/renewal-requests') || pathname.startsWith('/withdrawal-requests') || pathname.startsWith('/bill-payment-requests') || pathname.startsWith('/store-orders');
     if (href === '/card-sales-reports') return pathname.startsWith('/card-sales-reports');
     return pathname.startsWith(href);

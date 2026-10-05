@@ -12,6 +12,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import Image from 'next/image';
+import DashboardPage from '@/app/login/page';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,15 +27,28 @@ export default function LoginPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (!isUserLoading && user) {
-      router.replace('/login');
+  const [isKnownLoggedIn, setIsKnownLoggedIn] = useState<boolean | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('star_auth_state') === 'logged_in';
     }
-  }, [user, isUserLoading, router]);
+    return null;
+  });
 
-  // منع ظهور هذه الصفحة نهائياً أثناء التحقق من الجلسة أو إذا كان المستخدم مسجلاً
-  if (isUserLoading || user) {
-    return null; 
+  useEffect(() => {
+    if (!isUserLoading) {
+      if (user) {
+        localStorage.setItem('star_auth_state', 'logged_in');
+        setIsKnownLoggedIn(true);
+      } else {
+        localStorage.removeItem('star_auth_state');
+        setIsKnownLoggedIn(false);
+      }
+    }
+  }, [user, isUserLoading]);
+
+  // إذا كان العميل مسجلاً مسبقاً، اعرض له الصفحة الرئيسية مباشرة دون أي تحويل أو وميض
+  if (isKnownLoggedIn === true || user) {
+    return <DashboardPage />; 
   }
 
   const handleLogin = async (e: React.FormEvent) => {

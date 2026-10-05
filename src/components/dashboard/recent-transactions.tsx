@@ -162,7 +162,7 @@ export function RecentTransactions() {
   };
 
   return (
-    <div className="px-4 pt-2 pb-10 animate-in fade-in-0 duration-500">
+    <div className="px-4 pt-2 pb-10">
         <div className="flex justify-between items-center mb-4 px-2">
             <h3 className="text-lg font-bold text-primary">آخر العمليات</h3>
             <Link href="/transactions" className="flex items-center text-sm text-primary font-bold">

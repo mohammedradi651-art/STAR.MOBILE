@@ -12,7 +12,7 @@ import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
-const APP_VERSION = '1.7.7';
+const APP_VERSION = '1.7.9';
 
 type UserProfile = {
   isPinEnabled?: boolean;
@@ -27,33 +27,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const [isPinVerified, setIsPinVerified] = useState(false);
 
   useEffect(() => {
-    const savedVersion = localStorage.getItem('star_app_version');
-    
-    if (savedVersion !== APP_VERSION) {
-      localStorage.clear();
-      sessionStorage.clear();
-      
-      if (typeof document !== 'undefined') {
-        const cookies = document.cookie.split(";");
-        for (let i = 0; i < cookies.length; i++) {
-          const cookie = cookies[i];
-          const eqPos = cookie.indexOf("=");
-          const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
-          document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
-        }
-      }
-
-      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then((registrations) => {
-          for (const registration of registrations) {
-            registration.unregister();
-          }
-        });
-      }
-
-      localStorage.setItem('star_app_version', APP_VERSION);
-      window.location.reload();
-    }
+    localStorage.setItem('star_app_version', APP_VERSION);
   }, []);
 
   // Global PWA Install Prompt Listener
@@ -89,17 +63,11 @@ function AppContent({ children }: { children: React.ReactNode }) {
     '/withdrawal-requests',
     '/favorites',
     '/transactions'
-  ].includes(pathname);
+  ].includes(pathname) || (pathname === '/' && Boolean(user));
 
   useEffect(() => {
     if (sessionStorage.getItem('is_pin_verified')) setIsPinVerified(true);
   }, []);
-
-  useEffect(() => {
-    if (!isUserLoading && user && pathname === '/') {
-        router.replace('/login');
-    }
-  }, [user, isUserLoading, pathname, router]);
 
   const handlePinVerified = () => {
     setIsPinVerified(true);
@@ -139,7 +107,7 @@ export default function RootLayout({
       <head>
         <title>ستار موبايل</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-        <link rel="icon" href="/logo.jpeg" />
+        <link rel="icon" href="/logo.jpg" />
         <link rel="manifest" href={`/manifest.json?v=${APP_VERSION}`} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

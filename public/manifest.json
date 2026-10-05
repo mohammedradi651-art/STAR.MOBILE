@@ -2,19 +2,19 @@
   "name": "ستار موبايل",
   "short_name": "ستـار موبايل",
   "description": "تطبيق ستار موبايل لخدمات الاتصالات والإنترنت",
-  "start_url": "/login",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#0048ad",
   "theme_color": "#0048ad",
   "icons": [
     {
-      "src": "/logo.jpeg",
+      "src": "/logo.jpg",
       "sizes": "192x192",
       "type": "image/jpeg",
       "purpose": "any maskable"
     },
     {
-      "src": "/logo.jpeg",
+      "src": "/logo.jpg",
       "sizes": "512x512",
       "type": "image/jpeg",
       "purpose": "any maskable"

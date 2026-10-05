@@ -47,7 +47,7 @@ const ServiceItem = ({
   const content = (
     <div 
       className={cn(
-        "group flex flex-col items-center justify-center aspect-[1.6/1] rounded-[22px] border transition-all duration-300 active:scale-95 animate-in fade-in-0 zoom-in-95 relative",
+        "group flex flex-col items-center justify-center aspect-[1.6/1] rounded-[22px] border transition-all duration-300 active:scale-95 relative",
         isDisabled 
           ? "border-red-500/40 bg-red-500/5 text-red-600 grayscale-[0.3]" 
           : "border-border/15 bg-white text-foreground shadow-[0_4px_16px_rgba(0,0,0,0.05)] dark:bg-[#1b1b1f] dark:text-white dark:shadow-[0_10px_25px_rgba(0,0,0,0.28)]"

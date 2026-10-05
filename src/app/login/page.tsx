@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { BalanceCard } from '@/components/dashboard/balance-card';
 import { ServiceGrid } from '@/components/dashboard/service-grid';
 import { RecentTransactions } from '@/components/dashboard/recent-transactions';
@@ -47,7 +47,7 @@ const DashboardHero = () => {
         <CarouselContent>
           {banners.map((src, index) => (
             <CarouselItem key={index}>
-              <div className="relative w-full h-[140px] flex items-center justify-center animate-in fade-in zoom-in-95 duration-500">
+              <div className="relative w-full h-[140px] flex items-center justify-center">
                 <Image 
                   src={src} 
                   alt={`بانر ${index + 1}`} 
@@ -100,6 +100,13 @@ export default function DashboardPage() {
   const firestore = useFirestore();
   const router = useRouter();
 
+  const [isKnownLoggedIn, setIsKnownLoggedIn] = useState<boolean | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('star_auth_state') === 'logged_in';
+    }
+    return null;
+  });
+
   const userDocRef = useMemoFirebase(
     () => (user && firestore ? doc(firestore, 'users', user.uid) : null),
     [firestore, user]
@@ -107,12 +114,20 @@ export default function DashboardPage() {
   const { data: userProfile, isLoading } = useDoc<UserProfile>(userDocRef);
 
   useEffect(() => {
-    if (!isUserLoading && !user) {
-      router.replace('/');
+    if (!isUserLoading) {
+      if (!user) {
+        localStorage.removeItem('star_auth_state');
+        setIsKnownLoggedIn(false);
+        router.replace('/');
+      } else {
+        localStorage.setItem('star_auth_state', 'logged_in');
+        setIsKnownLoggedIn(true);
+      }
     }
   }, [user, isUserLoading, router]);
 
-  if (!isUserLoading && !user) {
+  // إذا لم يكن العميل مسجل دخول مسبقاً، احجب لوحة التحكم تماماً فوراً
+  if (isKnownLoggedIn === false || (!isUserLoading && !user)) {
     return null;
   }
 

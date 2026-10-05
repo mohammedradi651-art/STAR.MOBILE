@@ -44,10 +44,20 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
     const unsubscribe = onAuthStateChanged(
       activeAuth,
       (firebaseUser) => {
+        if (typeof window !== 'undefined') {
+          if (firebaseUser) {
+            localStorage.setItem('star_auth_state', 'logged_in');
+          } else {
+            localStorage.removeItem('star_auth_state');
+          }
+        }
         setUserAuthState({ user: firebaseUser, isUserLoading: false, userError: null });
       },
       (error) => {
         console.error("FirebaseProvider Error:", error);
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('star_auth_state');
+        }
         setUserAuthState({ user: null, isUserLoading: false, userError: error });
       }
     );

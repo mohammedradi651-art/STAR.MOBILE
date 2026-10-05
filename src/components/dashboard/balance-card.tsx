@@ -168,7 +168,7 @@ export function BalanceCard() {
   );
 
   return (
-    <div className="animate-in fade-in-0 zoom-in-95 duration-500 px-4">
+    <div className="px-4">
       <div className="relative flex items-center justify-center">
         <div className="absolute left-[-10px] top-1/2 -translate-y-1/2 -rotate-[10deg] z-0">{renderPreview("left")}</div>
 
@@ -195,7 +195,7 @@ export function BalanceCard() {
                 <div className="flex items-baseline justify-start gap-1.5 w-full" dir="ltr">
                   <span className="text-[13px] font-black text-white/90">ريال يمني</span>
                   <div className="text-[28px] font-black leading-none tracking-tight">
-                    {isLoading ? <Skeleton className="h-8 w-24 bg-white/20" /> : isBalanceVisible ? balance.toLocaleString("en-US") : "•••••"}
+                    {isBalanceVisible && !isLoading ? balance.toLocaleString("en-US") : "•••••"}
                   </div>
                 </div>
               </div>
