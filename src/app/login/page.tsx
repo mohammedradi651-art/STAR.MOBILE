@@ -108,11 +108,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!isUserLoading && !user) {
-      router.push('/');
+      router.replace('/');
     }
   }, [user, isUserLoading, router]);
 
-  if (isLoading || isUserLoading) {
+  if (!isUserLoading && !user) {
     return null;
   }
 

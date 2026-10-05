@@ -26,8 +26,14 @@ export default function LoginPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
-  // منع ظهور هذه الصفحة نهائياً إذا كان المستخدم مسجلاً بالفعل
-  if (!isUserLoading && user) {
+  useEffect(() => {
+    if (!isUserLoading && user) {
+      router.replace('/login');
+    }
+  }, [user, isUserLoading, router]);
+
+  // منع ظهور هذه الصفحة نهائياً أثناء التحقق من الجلسة أو إذا كان المستخدم مسجلاً
+  if (isUserLoading || user) {
     return null; 
   }
 

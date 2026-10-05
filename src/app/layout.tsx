@@ -12,7 +12,7 @@ import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
-const APP_VERSION = '1.7.6';
+const APP_VERSION = '1.7.7';
 
 type UserProfile = {
   isPinEnabled?: boolean;
