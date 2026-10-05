@@ -96,26 +96,14 @@ export async function POST(request: Request) {
     // استعلامات مجانية (لا تكلف رصيداً ولا تتطلب مفتاح API لعملاء التطبيق)
     const isQueryAction = ['query', 'solfa', 'queryoffer', 'check', 'status'].includes(action);
 
-    // تحديد طبيعة الطلب:
-    // أي طلب لا يحتوي على مفتاح API يعتبر طلباً داخلياً من واجهة الموقع/التطبيق فوراً وبدون أي شروط
-    // السداد والاستعلام من داخل الموقع لا يتطلب أي مفتاح API على الإطلاق
-    let isInternalAppRequest = false;
-
-    if (!incomingApiKey || payload.backpass || payload.transid || isAppSourceHeader || isSameOrigin || isQueryAction) {
-      isInternalAppRequest = true;
-    }
+    // التمييز القاطع والصارم:
+    // 1. إذا وجد incomingApiKey -> فهو مستخدم API ربط خارجي إلزامي ويجب فحص رصيده وحسمه بدقة.
+    // 2. إذا لم يوجد incomingApiKey -> فهو مستخدم عادي داخل الموقع/التطبيق ولا يطلب منه أي مفتاح نهائياً.
+    const isApiUser = Boolean(incomingApiKey);
+    const isInternalAppRequest = !isApiUser;
 
     let clientUserId: string | null = null;
     let clientUserData: any = null;
-
-    // لا يتم طلب مفتاح الـ API إلا إذا كان طلباً موجهاً كربط خارجي صريح
-    if (!isInternalAppRequest && !incomingApiKey) {
-      return NextResponse.json({
-        resultCode: "-401",
-        status: "failed",
-        message: "مطلوب مفتاح الوصول للربط البرمجي (API Key is required). يرجى تمرير المفتاح عبر ترويسة x-api-key أو Authorization: Bearer."
-      }, { status: 401 });
-    }
 
     // إذا تم تمرير مفتاح API (طلب من مطور أو عميل ربط خارجي)، نتحقق من صحة المفتاح ونحدد هويته ورصيده
     if (incomingApiKey) {
@@ -189,7 +177,9 @@ export async function POST(request: Request) {
     const targetMobile = String(payload.mobile || payload.playerid || username || '');
     let initialBalance = Number(clientUserData?.balance || 0);
 
-    const shouldPerformImmediateDeduction = Boolean(isBillingAction && !isInternalAppRequest && !isInternalHandled && clientUserId);
+    // شرط الخصم والفحص الصارم لعملاء الـ API:
+    // أي عميل يرسل مفتاح API ويطلب عملية سداد مالية يجب فحص رصيده أولاً ومنعه إذا لم يكن كافياً
+    const shouldPerformImmediateDeduction = Boolean(isApiUser && isBillingAction && !isInternalHandled && clientUserId);
 
     if (shouldPerformImmediateDeduction && clientUserId) {
       requiredCost = calculateApiTransactionCost({
