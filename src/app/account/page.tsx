@@ -99,7 +99,7 @@ type UserProfile = {
 const LoadingSpinner = () => (
   <div className="fixed inset-0 flex flex-col justify-center items-center z-[100] bg-mesh-gradient">
     <div className="relative w-28 h-28 overflow-hidden rounded-[32px] border-4 border-white/30 shadow-2xl bg-white">
-        <Image src="https://i.postimg.cc/2551nF1s/20260308-183624.jpg" alt="Logo" fill className="object-cover" priority />
+        <Image src="/logo.jpg" alt="Logo" fill className="object-cover" priority />
     </div>
   </div>
 );

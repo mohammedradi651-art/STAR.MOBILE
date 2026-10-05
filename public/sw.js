@@ -1,13 +1,8 @@
-
-// High Performance Service Worker for Star Mobile PWA
-const CACHE_NAME = 'star-mobile-v7';
+// High Performance Service Worker for Star Mobile PWA (Auto-Updating)
+const CACHE_NAME = 'star-mobile-v8';
 const PRECACHE_ASSETS = [
-  '/',
-  '/login',
   '/manifest.json',
   '/logo.jpg',
-  '/banr3.png',
-  '/banr4.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -21,11 +16,29 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
+        })
       )
     )
   );
   self.clients.claim();
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data) {
+    if (event.data.type === 'SKIP_WAITING') {
+      self.skipWaiting();
+    }
+    if (event.data.type === 'PURGE_AND_UPDATE') {
+      caches.keys().then((keys) => {
+        return Promise.all(keys.map((k) => caches.delete(k)));
+      });
+      self.skipWaiting();
+    }
+  }
 });
 
 self.addEventListener('fetch', (event) => {
@@ -46,7 +59,41 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-First for static assets (images, fonts)
+  // 1. Navigation requests (HTML pages): ALWAYS Network-First so users instantly see latest updates
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // 2. Next.js Static JS Chunks & CSS: Stale-While-Revalidate with Network Update
+  if (url.pathname.startsWith('/_next/static/')) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        const fetchPromise = fetch(event.request).then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return networkResponse;
+        }).catch(() => null);
+
+        return cached || fetchPromise;
+      })
+    );
+    return;
+  }
+
+  // 3. Static Media Assets (Images, Icons, Fonts)
   if (url.pathname.match(/\.(png|jpg|jpeg|svg|webp|woff2|ico)$/)) {
     event.respondWith(
       caches.match(event.request).then((cached) => {
@@ -63,7 +110,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-First with Cache fallback for pages and scripts
+  // 4. Default: Network-First with Cache fallback
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {

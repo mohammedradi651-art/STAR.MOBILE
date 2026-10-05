@@ -12,7 +12,7 @@ import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '2.0.0';
 
 type UserProfile = {
   isPinEnabled?: boolean;
@@ -29,10 +29,29 @@ function AppContent({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setIsMounted(true);
-    localStorage.setItem('star_app_version', APP_VERSION);
+
+    // فحص إصدار التطبيق ومسح التخزين المؤقت القديم تلقائياً لكل مستخدم قديم
+    try {
+      const savedVersion = localStorage.getItem('star_app_version');
+      if (savedVersion !== APP_VERSION) {
+        localStorage.setItem('star_app_version', APP_VERSION);
+
+        // 1. مسح كافة سجلات CacheStorage القديمة في متصفح المستخدم
+        if (typeof window !== 'undefined' && 'caches' in window) {
+          caches.keys().then((keys) => {
+            return Promise.all(keys.map((k) => caches.delete(k)));
+          }).catch(() => {});
+        }
+
+        // 2. إشعار الـ Service Worker بحذف الكاشات وتفعيل النسخة الجديدة فوراً
+        if (typeof window !== 'undefined' && 'serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({ type: 'PURGE_AND_UPDATE' });
+        }
+      }
+    } catch (e) {}
   }, []);
 
-  // Global PWA Install Prompt Listener
+  // Global PWA Install Prompt Listener & Service Worker Auto-Update
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
@@ -40,10 +59,34 @@ function AppContent({ children }: { children: React.ReactNode }) {
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     
-    if ('serviceWorker' in navigator) {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js?v=' + APP_VERSION, {
         updateViaCache: 'none'
+      }).then((registration) => {
+        // فحص التحديثات فوراً في الخلفية
+        registration.update().catch(() => {});
+
+        registration.onupdatefound = () => {
+          const installing = registration.installing;
+          if (installing) {
+            installing.onstatechange = () => {
+              if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+                // إخبار السيرفيس وركر الجديد بالتفعيل الفوري
+                installing.postMessage({ type: 'SKIP_WAITING' });
+              }
+            };
+          }
+        };
       }).catch(() => {});
+
+      // عند تفعيل السيرفيس وركر الجديد، يتم تحديث الصفحة تلقائياً لتظهر كل التعديلات فوراً
+      let isRefreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!isRefreshing) {
+          isRefreshing = true;
+          window.location.reload();
+        }
+      });
     }
 
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
