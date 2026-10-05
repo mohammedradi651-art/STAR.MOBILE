@@ -1,6 +1,6 @@
 
 // High Performance Service Worker for Star Mobile PWA
-const CACHE_NAME = 'star-mobile-v5';
+const CACHE_NAME = 'star-mobile-v7';
 const PRECACHE_ASSETS = [
   '/',
   '/login',
@@ -35,11 +35,19 @@ self.addEventListener('fetch', (event) => {
   // Ignore cross-origin requests
   if (url.origin !== self.location.origin) return;
 
-  // Cache-First for static JS, CSS, fonts, and images (instant load from disk in 0ms)
+  // Never intercept or cache Next.js dev bundles, hot updates, or localhost scripts
   if (
-    url.pathname.startsWith('/_next/static/') ||
-    url.pathname.match(/\.(png|jpg|jpeg|svg|webp|woff2|css|js|ico)$/)
+    url.pathname.startsWith('/_next/static/webpack/') ||
+    url.pathname.startsWith('/_next/static/development/') ||
+    url.pathname.includes('hot-update') ||
+    url.hostname === 'localhost' ||
+    url.hostname === '127.0.0.1'
   ) {
+    return;
+  }
+
+  // Cache-First for static assets (images, fonts)
+  if (url.pathname.match(/\.(png|jpg|jpeg|svg|webp|woff2|ico)$/)) {
     event.respondWith(
       caches.match(event.request).then((cached) => {
         if (cached) return cached;
@@ -55,7 +63,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-First with Cache fallback for HTML pages
+  // Network-First with Cache fallback for pages and scripts
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {

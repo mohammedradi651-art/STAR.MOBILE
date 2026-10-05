@@ -100,12 +100,7 @@ export default function DashboardPage() {
   const firestore = useFirestore();
   const router = useRouter();
 
-  const [isKnownLoggedIn, setIsKnownLoggedIn] = useState<boolean | null>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('star_auth_state') === 'logged_in';
-    }
-    return null;
-  });
+  const [isKnownLoggedIn, setIsKnownLoggedIn] = useState<boolean>(true);
 
   const userDocRef = useMemoFirebase(
     () => (user && firestore ? doc(firestore, 'users', user.uid) : null),
@@ -126,8 +121,8 @@ export default function DashboardPage() {
     }
   }, [user, isUserLoading, router]);
 
-  // إذا لم يكن العميل مسجل دخول مسبقاً، احجب لوحة التحكم تماماً فوراً
-  if (isKnownLoggedIn === false || (!isUserLoading && !user)) {
+  // إذا تم التأكد من عدم تسجيل الدخول، احجب الصفحة فوراً
+  if (isKnownLoggedIn === false) {
     return null;
   }
 

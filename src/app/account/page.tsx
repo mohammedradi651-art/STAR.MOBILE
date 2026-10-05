@@ -9,31 +9,20 @@ import {
   Phone,
   User,
   MapPin,
-  Users,
   Wifi,
   CreditCard,
-  BarChart3,
   Wallet,
-  Megaphone,
   Send,
-  Settings,
   Lock,
   Share2,
   HelpCircle,
   LogOut,
   Sun,
   Moon,
-  SatelliteDish,
-  ShoppingBag,
-  PackageCheck,
-  ListChecks,
-  Banknote,
   Code,
   UserRound,
   ShieldCheck,
-  TrendingUp,
   Zap,
-  Droplets,
   Bell,
   CheckCircle2,
   Clock,
@@ -86,23 +75,10 @@ type BankNotif = {
 
 const managementLinks = [
   { title: 'مراقبة العمليات', icon: Eye, href: '/monitoring' },
-  { title: 'إدارة المستخدمين', icon: Users, href: '/users' },
   { title: 'إدارة الإيداعات', icon: Building2, href: '/omqy-management' },
   { title: 'إدارة الشبكات', icon: Wifi, href: '/networks-management' },
-  { title: 'إدارة المتجر', icon: ShoppingBag, href: '/store-management' },
-  { title: 'طلبات المتجر', icon: PackageCheck, href: '/store-orders' },
-  { title: 'طلبات الكهرباء', icon: Zap, href: '/electricity-requests' },
-  { title: 'طلبات المياه', icon: Droplets, href: '/water-requests' },
-  { title: 'تحويل أرباح الكروت', icon: TrendingUp, href: '/card-sales-reports' },
-  { title: 'طلبات التجديد', icon: ListChecks, href: '/renewal-requests' },
-  { title: 'طلبات السداد', icon: CreditCard, href: '/bill-payment-requests' },
-  { title: 'طلبات السحب', icon: Banknote, href: '/withdrawal-requests' },
-  { title: 'إدارة منظومة الوادي', icon: SatelliteDish, href: '/alwadi-management' },
-  { title: 'تقارير منظومة الوادي', icon: BarChart3, href: '/alwadi-reports' },
   { title: 'إدارة طرق الدفع', icon: Wallet, href: '/payment-management' },
-  { title: 'إدارة الإعلانات', icon: Megaphone, href: '/ads-management' },
   { title: 'إرسال إشعارات', icon: Send, href: '/send-notifications' },
-  { title: 'إعدادات التطبيق', icon: Settings, href: '/app-settings' },
 ];
 
 const userAppSettingsLinks = [
@@ -148,8 +124,8 @@ export default function AccountPage() {
 
   // جلب آخر الإيداعات الواردة للمدير
   const bankQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'bankNotifications'), orderBy('timestamp', 'desc'), limit(5)) : null),
-    [firestore]
+    () => (firestore && isUserAdmin ? query(collection(firestore, 'bankNotifications'), orderBy('timestamp', 'desc'), limit(5)) : null),
+    [firestore, isUserAdmin]
   );
   const { data: bankNotifs } = useCollection<BankNotif>(bankQuery);
 
@@ -294,7 +270,13 @@ export default function AccountPage() {
         </div>
 
         <div>
-            <div className="flex items-center justify-center gap-2 mb-3"><Settings className="h-4 w-4 text-primary" /><h3 className="text-xs font-black text-primary uppercase tracking-widest">إعدادات الحساب</h3></div>
+            <div className="flex items-center justify-center gap-2 mb-3">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-primary">
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+              <h3 className="text-xs font-black text-primary uppercase tracking-widest">إعدادات الحساب</h3>
+            </div>
             <Card className="bg-card rounded-3xl border-none shadow-sm overflow-hidden">
                 <CardContent className="p-0">
                     {userAppSettingsLinks.map((link, index) => {

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
-import { collection, query, orderBy, writeBatch, doc } from 'firebase/firestore';
+import { collection, query, orderBy, writeBatch, doc, limit } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Bell, BellOff, Trash2, Calendar, Clock } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -39,16 +39,18 @@ export default function NotificationsPage() {
   const { user } = useUser();
   const { toast } = useToast();
   const [monthToDelete, setMonthToDelete] = useState<string | null>(null);
+  const [notifsLimit, setNotifsLimit] = useState<number>(30);
 
   // 1. جلب الإشعارات الشخصية
   const personalNotificationsQuery = useMemoFirebase(
     () => user && firestore
         ? query(
             collection(firestore, 'users', user.uid, 'notifications'),
-            orderBy('timestamp', 'desc')
+            orderBy('timestamp', 'desc'),
+            limit(notifsLimit)
           )
         : null,
-    [firestore, user]
+    [firestore, user, notifsLimit]
   );
   const { data: personalNotifications, isLoading: isLoadingPersonal } = useCollection<Notification>(personalNotificationsQuery);
   
@@ -57,10 +59,11 @@ export default function NotificationsPage() {
     () => firestore
         ? query(
             collection(firestore, 'notifications'),
-            orderBy('timestamp', 'desc')
+            orderBy('timestamp', 'desc'),
+            limit(notifsLimit)
           )
         : null,
-    [firestore]
+    [firestore, notifsLimit]
   );
   const { data: globalNotifications, isLoading: isLoadingGlobal } = useCollection<Notification>(globalNotificationsQuery);
 
@@ -226,6 +229,18 @@ export default function NotificationsPage() {
                         </div>
                     </div>
                 ))
+            )}
+
+            {allNotifications && allNotifications.length >= notifsLimit && (
+                <div className="pt-2 pb-6 text-center">
+                    <Button
+                        variant="outline"
+                        onClick={() => setNotifsLimit(prev => prev + 30)}
+                        className="w-full h-11 rounded-2xl font-bold border-dashed text-primary hover:text-primary hover:bg-primary/5 shadow-sm"
+                    >
+                        عرض المزيد من الإشعارات (+30)
+                    </Button>
+                </div>
             )}
         </div>
       </div>

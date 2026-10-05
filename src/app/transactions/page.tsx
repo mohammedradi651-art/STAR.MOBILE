@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, doc, writeBatch } from 'firebase/firestore';
+import { collection, query, orderBy, doc, writeBatch, limit } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { 
@@ -118,16 +118,18 @@ export default function TransactionsPage() {
   const [toDate, setToDate] = useState<string>('');
   const [appliedFrom, setAppliedFrom] = useState<string>('');
   const [appliedTo, setAppliedTo] = useState<string>('');
+  const [displayLimit, setDisplayLimit] = useState<number>(50);
 
   const transactionsQuery = useMemoFirebase(
     () =>
       user && firestore
         ? query(
             collection(firestore, 'users', user.uid, 'transactions'),
-            orderBy('transactionDate', 'desc')
+            orderBy('transactionDate', 'desc'),
+            limit(displayLimit)
           )
         : null,
-    [user, firestore]
+    [user, firestore, displayLimit]
   );
 
   const { data: transactions, isLoading } = useCollection<Transaction>(transactionsQuery);
@@ -358,6 +360,18 @@ export default function TransactionsPage() {
                         })
                     )}
                 </div>
+
+                {transactions && transactions.length >= displayLimit && (
+                    <div className="pt-2 pb-6 text-center">
+                        <Button
+                            variant="outline"
+                            onClick={() => setDisplayLimit(prev => prev + 50)}
+                            className="w-full h-11 rounded-2xl font-bold border-dashed text-primary hover:text-primary hover:bg-primary/5 shadow-sm"
+                        >
+                            عرض المزيد من العمليات (+50)
+                        </Button>
+                    </div>
+                )}
             </div>
         </div>
       </div>

@@ -27,27 +27,22 @@ export default function LoginPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
 
-  const [isKnownLoggedIn, setIsKnownLoggedIn] = useState<boolean | null>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('star_auth_state') === 'logged_in';
-    }
-    return null;
-  });
+  const [isKnownLoggedIn, setIsKnownLoggedIn] = useState<boolean>(true);
 
   useEffect(() => {
-    if (!isUserLoading) {
-      if (user) {
-        localStorage.setItem('star_auth_state', 'logged_in');
-        setIsKnownLoggedIn(true);
-      } else {
-        localStorage.removeItem('star_auth_state');
-        setIsKnownLoggedIn(false);
-      }
+    const savedState = typeof window !== 'undefined' ? localStorage.getItem('star_auth_state') : null;
+    if (!savedState && !user && !isUserLoading) {
+      setIsKnownLoggedIn(false);
+    } else if (!isUserLoading && !user && savedState !== 'logged_in') {
+      setIsKnownLoggedIn(false);
+    } else if (user) {
+      localStorage.setItem('star_auth_state', 'logged_in');
+      setIsKnownLoggedIn(true);
     }
   }, [user, isUserLoading]);
 
-  // إذا كان العميل مسجلاً مسبقاً، اعرض له الصفحة الرئيسية مباشرة دون أي تحويل أو وميض
-  if (isKnownLoggedIn === true || user) {
+  // عرض لوحة التحكم أولاً افتراضياً ليتطابق السيرفر مع المتصفح 100% ويفتح سريعاً للعميل المسجل
+  if (isKnownLoggedIn) {
     return <DashboardPage />; 
   }
 

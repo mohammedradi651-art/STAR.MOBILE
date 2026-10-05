@@ -176,6 +176,22 @@ export async function POST(req: Request) {
                 notes: `شبكة: ${localSnap.data().name}${isAdmin ? ' (عبر البوت)' : ''}`,
                 cardNumber: cardData.cardNumber
             });
+
+            // تحويل أرباح الكرت تلقائياً لمالك الشبكة بعد خصم 10%
+            const ownerId = localSnap.data()?.ownerId;
+            if (ownerId && ownerId !== 'admin') {
+                const commission = Math.ceil(price * 0.10);
+                const payoutAmount = price - commission;
+                batch.update(doc(firestore, 'users', ownerId), { balance: increment(payoutAmount) });
+                batch.set(doc(collection(firestore, `users/${ownerId}/transactions`)), {
+                    userId: ownerId,
+                    transactionDate: timestamp,
+                    amount: payoutAmount,
+                    transactionType: 'أرباح مبيعات الكروت',
+                    notes: `أرباح كرت ${catSnap.data()?.name || ''} - شبكة: ${localSnap.data().name} (صافي بعد خصم 10% عمولة)`
+                });
+            }
+
             await batch.commit();
 
             return NextResponse.json({

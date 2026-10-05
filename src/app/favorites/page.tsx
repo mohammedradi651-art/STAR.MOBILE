@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { useCollection, useFirestore, useMemoFirebase, useUser, deleteDocumentNonBlocking, useDoc } from '@/firebase';
-import { collection, query, where, doc, getDocs, writeBatch, increment, limit as firestoreLimit } from 'firebase/firestore';
+import { collection, query, where, doc, getDocs, getDoc, writeBatch, increment, limit as firestoreLimit } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { 
   Wifi, 
@@ -209,6 +209,31 @@ export default function FavoritesPage() {
                 userId: user.uid, transactionDate: now, amount: categoryPrice,
                 transactionType: `شراء كرت ${selectedCategory.name}`, notes: `شبكة: ${selectedNetwork.name}`, cardNumber: finalCardID,
             });
+
+            // تحويل أرباح الكرت تلقائياً لمالك الشبكة بعد خصم 10%
+            try {
+                const netSnap = await getDoc(doc(firestore, 'networks', selectedNetwork.id));
+                const ownerId = netSnap.exists() ? netSnap.data()?.ownerId : null;
+                const commission = Math.ceil(categoryPrice * 0.10);
+                const payoutAmount = categoryPrice - commission;
+
+                if (ownerId && ownerId !== 'admin') {
+                    const ownerRef = doc(firestore, 'users', ownerId);
+                    batch.update(ownerRef, { balance: increment(payoutAmount) });
+
+                    const ownerTxRef = doc(collection(firestore, `users/${ownerId}/transactions`));
+                    batch.set(ownerTxRef, {
+                        userId: ownerId,
+                        transactionDate: now,
+                        amount: payoutAmount,
+                        transactionType: 'أرباح مبيعات الكروت',
+                        notes: `أرباح كرت ${selectedCategory.name} - شبكة: ${selectedNetwork.name} (صافي بعد خصم 10% عمولة)`
+                    });
+                }
+            } catch (err) {
+                console.error("Owner payout fetch error:", err);
+            }
+
             await batch.commit();
             setPurchasedCard({ cardID: finalCardID });
         } else {

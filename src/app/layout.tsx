@@ -12,7 +12,7 @@ import { PinOverlay } from '@/components/layout/pin-overlay';
 import { doc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
-const APP_VERSION = '1.7.9';
+const APP_VERSION = '1.8.0';
 
 type UserProfile = {
   isPinEnabled?: boolean;
@@ -25,8 +25,10 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
   const [isPinVerified, setIsPinVerified] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    setIsMounted(true);
     localStorage.setItem('star_app_version', APP_VERSION);
   }, []);
 
@@ -55,15 +57,12 @@ function AppContent({ children }: { children: React.ReactNode }) {
 
   const isNavVisiblePage = [
     '/login', 
-    '/renewal-requests', 
     '/users', 
     '/account', 
-    '/store-orders', 
-    '/bill-payment-requests', 
-    '/withdrawal-requests',
+    '/admin-requests', 
     '/favorites',
     '/transactions'
-  ].includes(pathname) || (pathname === '/' && Boolean(user));
+  ].includes(pathname) || (isMounted && pathname === '/' && Boolean(user));
 
   useEffect(() => {
     if (sessionStorage.getItem('is_pin_verified')) setIsPinVerified(true);
@@ -74,13 +73,13 @@ function AppContent({ children }: { children: React.ReactNode }) {
     sessionStorage.setItem('is_pin_verified', 'true');
   };
 
-  const shouldShowPinLock = user && userProfile?.isPinEnabled && userProfile?.pinCode && !isPinVerified;
+  const shouldShowPinLock = isMounted && Boolean(user && userProfile?.isPinEnabled && userProfile?.pinCode && !isPinVerified);
 
   return (
     <div className="mx-auto max-w-[450px] bg-white h-[100dvh] flex flex-col shadow-2xl relative overflow-hidden">
-      {shouldShowPinLock && (
+      {shouldShowPinLock && userProfile?.pinCode && (
         <PinOverlay 
-            userPin={userProfile.pinCode!} 
+            userPin={userProfile.pinCode} 
             onVerified={handlePinVerified} 
         />
       )}

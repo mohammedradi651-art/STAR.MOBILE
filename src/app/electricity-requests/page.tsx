@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { collection, doc, query, orderBy, updateDoc, increment, writeBatch } from 'firebase/firestore';
+import { collection, doc, query, orderBy, updateDoc, increment, writeBatch, limit } from 'firebase/firestore';
 import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -75,7 +75,7 @@ export default function ElectricityRequestsPage() {
   const [cancelNote, setCancelNote] = useState('');
 
   const requestsQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'electricityRequests'), orderBy('timestamp', 'desc')) : null),
+    () => (firestore ? query(collection(firestore, 'electricityRequests'), orderBy('timestamp', 'desc'), limit(100)) : null),
     [firestore]
   );
   const { data: requests, isLoading } = useCollection<ElectricityRequest>(requestsQuery);

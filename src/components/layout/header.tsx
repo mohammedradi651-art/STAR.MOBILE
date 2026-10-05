@@ -68,13 +68,13 @@ const Header = () => {
   };
 
   const globalNotificationsQuery = useMemoFirebase(
-    () => (firestore) ? query(collection(firestore, 'notifications'), orderBy('timestamp', 'desc'), limit(20)) : null,
+    () => (firestore) ? query(collection(firestore, 'notifications'), orderBy('timestamp', 'desc'), limit(5)) : null,
     [firestore]
   );
   const { data: globalNotifications } = useCollection<Notification>(globalNotificationsQuery);
 
   const personalNotificationsQuery = useMemoFirebase(
-    () => (firestore && user) ? query(collection(firestore, 'users', user.uid, 'notifications'), orderBy('timestamp', 'desc'), limit(20)) : null,
+    () => (firestore && user) ? query(collection(firestore, 'users', user.uid, 'notifications'), orderBy('timestamp', 'desc'), limit(5)) : null,
     [firestore, user]
   );
   const { data: personalNotifications } = useCollection<Notification>(personalNotificationsQuery);

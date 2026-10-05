@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { collection, doc, query, orderBy, updateDoc, increment, writeBatch } from 'firebase/firestore';
+import { collection, doc, query, orderBy, updateDoc, increment, writeBatch, limit } from 'firebase/firestore';
 import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,7 +27,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { User, Phone, Check, X, Archive, Inbox, Droplets, Hash, Calendar, Wallet, MapPin, Textarea as TextareaIcon } from 'lucide-react';
+import { User, Phone, Check, X, Archive, Inbox, Droplets, Hash, Calendar, Wallet, MapPin, CheckCircle2 } from 'lucide-react';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -76,7 +76,7 @@ export default function WaterRequestsPage() {
   const [cancelNote, setCancelNote] = useState('');
 
   const requestsQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'waterRequests'), orderBy('timestamp', 'desc')) : null),
+    () => (firestore ? query(collection(firestore, 'waterRequests'), orderBy('timestamp', 'desc'), limit(100)) : null),
     [firestore]
   );
   const { data: requests, isLoading } = useCollection<WaterRequest>(requestsQuery);
@@ -210,24 +210,25 @@ export default function WaterRequestsPage() {
             <div className="bg-blue-600 p-6 text-center text-white">
                 <DialogHeader>
                     <DialogTitle className="text-white text-center font-black">تفاصيل سداد المياه</DialogTitle>
+                    <DialogDescription className="text-white/80 text-center text-xs">مراجعة بيانات فاتورة المياه</DialogDescription>
                 </DialogHeader>
             </div>
           {selectedRequest && (
             <div className="p-6 space-y-4">
               <div className="space-y-1">
-                <InfoRow icon={User} label="صاحب الرقم" value={selectedRequest.subscriberName} />
-                <InfoRow icon={MapPin} label="المنطقة" value={selectedRequest.city} />
-                <InfoRow icon={Hash} label="رقم المشترك" value={selectedRequest.subscriberNumber} />
+                <InfoRow icon={User} label="صاحب الرقم" value={selectedRequest.subscriberName || 'غير متوفر'} />
+                <InfoRow icon={MapPin} label="المنطقة" value={selectedRequest.city || 'غير محدد'} />
+                <InfoRow icon={Hash} label="رقم المشترك" value={selectedRequest.subscriberNumber || '...'} />
                 <hr className="my-2 border-dashed" />
-                <InfoRow icon={Wallet} label="قيمة الفاتورة" value={`${selectedRequest.billAmount.toLocaleString()} ر.ي`} />
-                <InfoRow icon={CheckCircle2} label="العمولة" value={`${selectedRequest.commission} ر.ي`} />
+                <InfoRow icon={Wallet} label="قيمة الفاتورة" value={`${Number(selectedRequest.billAmount || 0).toLocaleString()} ر.ي`} />
+                <InfoRow icon={CheckCircle2} label="العمولة" value={`${Number(selectedRequest.commission || 0).toLocaleString()} ر.ي`} />
                 <div className="flex justify-between items-center py-3 bg-muted/50 rounded-xl px-2 mt-2">
                     <span className="font-black text-xs">الإجمالي المخصوم:</span>
-                    <span className="font-black text-blue-600 text-base">{selectedRequest.totalAmount.toLocaleString()} ر.ي</span>
+                    <span className="font-black text-blue-600 text-base">{Number(selectedRequest.totalAmount || 0).toLocaleString()} ر.ي</span>
                 </div>
                 <hr className="my-2 border-dashed" />
-                <InfoRow icon={User} label="المرسل" value={selectedRequest.userName} />
-                <InfoRow icon={Phone} label="رقم المرسل" value={selectedRequest.userPhone} />
+                <InfoRow icon={User} label="المرسل" value={selectedRequest.userName || 'مشترك'} />
+                <InfoRow icon={Phone} label="رقم المرسل" value={selectedRequest.userPhone || '...'} />
               </div>
               
               {selectedRequest.status === 'pending' && (

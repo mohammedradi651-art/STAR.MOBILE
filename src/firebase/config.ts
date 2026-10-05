@@ -2,11 +2,17 @@
 
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, initializeFirestore, Firestore } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  initializeFirestore, 
+  Firestore,
+  persistentLocalCache,
+  persistentMultipleTabManager
+} from 'firebase/firestore';
 
 /**
- * تهيئة فايربيس - تم التحديث لضمان إعادة البناء (Build Trigger)
- * النسخة الحالية: 1.7.0
+ * تهيئة فايربيس - تم التحديث لضمان تقليل استهلاك القراءات عبر التخزين المؤقت المستمر
+ * النسخة الحالية: 1.8.0
  */
 const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "studio-239662212-1b7b6";
 
@@ -39,6 +45,9 @@ export function getFirebaseInstances(): {
       if (app && !firestore) {
         try {
           firestore = initializeFirestore(app, {
+            localCache: persistentLocalCache({
+              tabManager: persistentMultipleTabManager(),
+            }),
             experimentalForceLongPolling: true,
           });
         } catch {

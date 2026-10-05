@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { collection, doc, query, orderBy, updateDoc, addDoc, writeBatch, getDocs, where, increment } from 'firebase/firestore';
+import { collection, doc, query, orderBy, updateDoc, addDoc, writeBatch, getDocs, where, increment, limit } from 'firebase/firestore';
 import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -89,7 +89,7 @@ export default function WithdrawalRequestsPage() {
 
 
   const requestsQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'withdrawalRequests'), orderBy('requestTimestamp', 'desc')) : null),
+    () => (firestore ? query(collection(firestore, 'withdrawalRequests'), orderBy('requestTimestamp', 'desc'), limit(100)) : null),
     [firestore]
   );
   const { data: requests, isLoading } = useCollection<WithdrawalRequest>(requestsQuery);

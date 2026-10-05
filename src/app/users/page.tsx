@@ -168,8 +168,8 @@ export default function UsersPage() {
   }, [users]);
 
   const debtsCollection = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'clientDebts'), orderBy('timestamp', 'desc')) : null),
-    [firestore]
+    () => (firestore && isDebtsListOpen ? query(collection(firestore, 'clientDebts'), orderBy('timestamp', 'desc')) : null),
+    [firestore, isDebtsListOpen]
   );
   const { data: clientDebts, isLoading: isLoadingDebts } = useCollection<ClientDebt>(debtsCollection);
 

@@ -344,8 +344,23 @@ export default function CombinedNetworksPage() {
                 buyerName: userProfile.displayName || 'مشترك',
                 buyerPhoneNumber: userProfile.phoneNumber || '',
                 soldTimestamp: now,
-                payoutStatus: 'pending'
+                payoutStatus: 'completed'
             });
+
+            // تحويل أرباح الكرت تلقائياً لمالك الشبكة بعد خصم 10%
+            if (ownerId && ownerId !== 'admin') {
+                const ownerRef = doc(firestore, 'users', ownerId);
+                batch.update(ownerRef, { balance: increment(payoutAmount) });
+
+                const ownerTxRef = doc(collection(firestore, `users/${ownerId}/transactions`));
+                batch.set(ownerTxRef, {
+                    userId: ownerId,
+                    transactionDate: now,
+                    amount: payoutAmount,
+                    transactionType: 'أرباح مبيعات الكروت',
+                    notes: `أرباح كرت ${selectedCategory.name} - شبكة: ${selectedNetwork.name} (صافي بعد خصم 10% عمولة)`
+                });
+            }
 
             await batch.commit();
             setPurchasedCard({ cardID: cardData.cardNumber });
