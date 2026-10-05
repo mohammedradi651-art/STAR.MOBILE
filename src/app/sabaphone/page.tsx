@@ -46,6 +46,7 @@ import { ar } from 'date-fns/locale';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 import { cn } from '@/lib/utils';
 import { initiateTelecomPayment, executeTelecomRequestWithTimeout } from '@/lib/telecom-order';
+import { DEFAULT_SERVICES_CONFIG, SystemServicesConfig } from '@/lib/services-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -115,28 +116,31 @@ const POSTPAID_CATEGORIES = [
   }
 ];
 
-const InstantOfferCard = ({ offer, onClick }: { offer: any, onClick: () => void }) => (
-    <Card 
-        className="overflow-hidden rounded-[20px] border-none shadow-md bg-white cursor-pointer hover:shadow-lg transition-all active:scale-[0.95] group border border-primary/5"
-        onClick={onClick}
-    >
-        <div className="bg-[#0048ad] p-2.5 text-white relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent)]" />
-            <div className="text-center relative z-10">
-                <h3 className="text-xl font-black text-white group-hover:scale-105 transition-transform tracking-tight">{offer.category}</h3>
+const InstantOfferCard = ({ offer, rate = 1, onClick }: { offer: any, rate?: number, onClick: () => void }) => {
+    const finalPrice = Math.ceil(parseFloat(offer.category) * rate);
+    return (
+        <Card 
+            className="overflow-hidden rounded-[20px] border-none shadow-md bg-white cursor-pointer hover:shadow-lg transition-all active:scale-[0.95] group border border-primary/5"
+            onClick={onClick}
+        >
+            <div className="bg-[#0048ad] p-2.5 text-white relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent)]" />
+                <div className="text-center relative z-10">
+                    <h3 className="text-xl font-black text-white group-hover:scale-105 transition-transform tracking-tight">{offer.category}</h3>
+                </div>
             </div>
-        </div>
-        <CardContent className="p-2 text-center space-y-1 bg-white">
-            <p className="text-xs font-black text-[#0048ad]">{offer.price.toLocaleString()}</p>
-            <div className="bg-[#0048ad]/5 py-1 rounded-xl w-full border border-[#0048ad]/10">
-                <span className="text-[9px] font-black text-[#0048ad] whitespace-nowrap">{offer.validity}</span>
-            </div>
-        </CardContent>
-    </Card>
-);
+            <CardContent className="p-2 text-center space-y-1 bg-white">
+                <p className="text-xs font-black text-[#0048ad]">{finalPrice.toLocaleString()} ر.ي</p>
+                <div className="bg-[#0048ad]/5 py-1 rounded-xl w-full border border-[#0048ad]/10">
+                    <span className="text-[9px] font-black text-[#0048ad] whitespace-nowrap">{offer.validity}</span>
+                </div>
+            </CardContent>
+        </Card>
+    );
+};
 
-const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) => {
-    const finalPrice = Math.ceil(offer.price * NORTH_RATE);
+const PackageItemCard = ({ offer, rate = 1, onClick }: { offer: Offer, rate?: number, onClick: () => void }) => {
+    const finalPrice = Math.ceil(offer.price * rate);
 
     return (
         <div 
@@ -192,6 +196,9 @@ export default function SabaphonePage() {
     const [isProcessing, setIsProcessing] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [lastTxDetails, setLastTxDetails] = useState<any>(null);
+    const [instantRegion, setInstantRegion] = useState<'south' | 'north'>('south');
+    const [balanceMode, setBalanceMode] = useState<'riyals' | 'units'>('riyals');
+    const [balanceRegion, setBalanceRegion] = useState<'south' | 'north'>('south');
     const audioRef = useRef<HTMLAudioElement>(null);
 
     const userDocRef = useMemoFirebase(
@@ -199,6 +206,13 @@ export default function SabaphonePage() {
         [firestore, user]
     );
     const { data: userProfile } = useDoc<any>(userDocRef);
+
+    const telecomConfigDocRef = useMemoFirebase(
+        () => (firestore ? doc(firestore, 'system_settings', 'telecom_config') : null),
+        [firestore]
+    );
+    const { data: telecomConfig } = useDoc<SystemServicesConfig>(telecomConfigDocRef);
+    const sabafonConfig = telecomConfig?.sabafon ?? DEFAULT_SERVICES_CONFIG.sabafon;
 
     useEffect(() => {
         if (showSuccess && audioRef.current) {
@@ -214,8 +228,8 @@ export default function SabaphonePage() {
             if (typeof navigator !== 'undefined' && navigator.vibrate) {
                 navigator.vibrate(50);
             }
-            if (!cleaned.startsWith('71')) {
-                toast({ variant: 'destructive', title: 'رقم غير مدعوم', description: 'يرجى إدخال رقم سبأفون جنوب يبدأ بـ 71' });
+            if (!cleaned.startsWith('71') && !cleaned.startsWith('72')) {
+                toast({ variant: 'destructive', title: 'رقم غير مدعوم', description: 'يرجى إدخال رقم سبأفون يبدأ بـ 71 أو 72' });
             }
         }
     };
@@ -347,7 +361,7 @@ export default function SabaphonePage() {
                     <div className="relative">
                         <Input
                             type="tel"
-                            placeholder="71xxxxxxx"
+                            placeholder="71xxxxxxx أو 72xxxxxxx"
                             value={phone}
                             onChange={(e) => handlePhoneChange(e.target.value, e.target)}
                             className="text-center font-bold text-lg h-12 rounded-2xl border-none bg-muted/20 focus-visible:ring-[#0048ad] pr-12 pl-12"
@@ -356,7 +370,7 @@ export default function SabaphonePage() {
                     </div>
                 </div>
 
-                {phone.length === 9 && phone.startsWith('71') && (
+                {phone.length === 9 && (phone.startsWith('71') || phone.startsWith('72')) && (
                     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                             <TabsList className="grid w-full grid-cols-3 bg-white dark:bg-slate-900 rounded-2xl h-14 p-1.5 shadow-sm border border-[#0048ad]/10">
@@ -389,18 +403,22 @@ export default function SabaphonePage() {
                                             </AccordionTrigger>
                                             <AccordionContent className="p-4 bg-white dark:bg-slate-900 border-x border-b border-[#0048ad]/10 rounded-b-2xl shadow-sm">
                                                 <div className="grid grid-cols-1 gap-1">
-                                                    {cat.offers.map((o) => (
-                                                        <PackageItemCard key={o.num} offer={o} onClick={() => {
-                                                            setSelectedOffer({
-                                                                typeLabel: o.offerName,
-                                                                endpoint: 'sabaoffer',
-                                                                num: o.num,
-                                                                finalPrice: Math.ceil(o.price * NORTH_RATE),
-                                                                originalPrice: o.price
-                                                            });
-                                                            setIsConfirmingAction(true);
-                                                        }} />
-                                                    ))}
+                                                    {cat.offers.map((o) => {
+                                                        const pkgRate = sabafonConfig?.packagesRate ?? sabafonConfig?.rate ?? 1;
+                                                        const pkgFinalPrice = Math.ceil(o.price * pkgRate);
+                                                        return (
+                                                            <PackageItemCard key={o.num} offer={o} rate={pkgRate} onClick={() => {
+                                                                setSelectedOffer({
+                                                                    typeLabel: o.offerName,
+                                                                    endpoint: 'sabaoffer',
+                                                                    num: o.num,
+                                                                    finalPrice: pkgFinalPrice,
+                                                                    originalPrice: o.price
+                                                                });
+                                                                setIsConfirmingAction(true);
+                                                            }} />
+                                                        );
+                                                    })}
                                                 </div>
                                             </AccordionContent>
                                         </AccordionItem>
@@ -409,23 +427,58 @@ export default function SabaphonePage() {
                             </TabsContent>
 
                             <TabsContent value="instant" className="pt-2">
+                                <div className="flex justify-center mb-3">
+                                    <div className="bg-white dark:bg-slate-900 p-1 rounded-2xl border border-[#0048ad]/20 shadow-xs flex items-center gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => setInstantRegion('south')}
+                                            className={cn(
+                                                "px-4 py-1.5 rounded-xl text-xs font-black transition-all",
+                                                instantRegion === 'south' 
+                                                    ? "bg-[#0048ad] text-white shadow-sm" 
+                                                    : "text-muted-foreground hover:text-foreground"
+                                            )}
+                                        >
+                                            جنوب (عملة مرتفعة)
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setInstantRegion('north')}
+                                            className={cn(
+                                                "px-4 py-1.5 rounded-xl text-xs font-black transition-all",
+                                                instantRegion === 'north' 
+                                                    ? "bg-[#0048ad] text-white shadow-sm" 
+                                                    : "text-muted-foreground hover:text-foreground"
+                                            )}
+                                        >
+                                            شمال (صنعاء)
+                                        </button>
+                                    </div>
+                                </div>
                                 <div className="grid grid-cols-3 gap-2 pb-20">
-                                    {INSTANT_OFFERS.map((offer) => (
-                                        <InstantOfferCard 
-                                            key={offer.num} 
-                                            offer={offer} 
-                                            onClick={() => {
-                                                setSelectedOffer({
-                                                    typeLabel: `فئة ${offer.category} (شمال)`,
-                                                    endpoint: 'sbay',
-                                                    num: offer.num,
-                                                    finalPrice: offer.price,
-                                                    originalPrice: offer.category
-                                                });
-                                                setIsConfirmingAction(true);
-                                            }} 
-                                        />
-                                    ))}
+                                    {INSTANT_OFFERS.map((offer) => {
+                                        const currentInstantRate = instantRegion === 'south' 
+                                            ? (sabafonConfig?.instantSouthRate ?? sabafonConfig?.balanceRate ?? 3.0) 
+                                            : (sabafonConfig?.instantNorthRate ?? 1.0);
+                                        const finalPrice = Math.ceil(parseFloat(offer.category) * currentInstantRate);
+                                        return (
+                                            <InstantOfferCard 
+                                                key={offer.num} 
+                                                offer={offer} 
+                                                rate={currentInstantRate}
+                                                onClick={() => {
+                                                    setSelectedOffer({
+                                                        typeLabel: `فوري ${offer.category} (${instantRegion === 'south' ? 'جنوب' : 'شمال'})`,
+                                                        endpoint: 'sbay',
+                                                        num: offer.num,
+                                                        finalPrice,
+                                                        originalPrice: offer.category
+                                                    });
+                                                    setIsConfirmingAction(true);
+                                                }} 
+                                            />
+                                        );
+                                    })}
                                 </div>
                             </TabsContent>
 
@@ -439,44 +492,175 @@ export default function SabaphonePage() {
                                     </Tabs>
                                 </div>
 
-                                <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-sm border border-[#0048ad]/5 text-center">
-                                    <Label className="text-[11px] font-black text-muted-foreground block mb-3 uppercase">ادخل عدد الوحدات</Label>
-                                    <div className="relative max-w-[180px] mx-auto">
-                                        <Input 
-                                            type="number" 
-                                            placeholder="عدد الوحدات" 
-                                            value={amount} 
-                                            onChange={(e) => setAmount(e.target.value)} 
-                                            className="text-center font-black text-lg h-10 rounded-2xl bg-white border-2 border-solid border-[#0048ad]/40 text-[#0048ad] focus-visible:ring-[#0048ad]" 
-                                        />
+                                {/* اختيار نوع السداد: رصيد بالريال للزبائن العاديين أو وحدات */}
+                                <div className="flex justify-center">
+                                    <div className="bg-white dark:bg-slate-900 p-1 rounded-2xl border border-[#0048ad]/20 shadow-xs flex items-center gap-1 w-full max-w-xs">
+                                        <button
+                                            type="button"
+                                            onClick={() => setBalanceMode('riyals')}
+                                            className={cn(
+                                                "flex-1 py-1.5 rounded-xl text-xs font-black transition-all text-center",
+                                                balanceMode === 'riyals' 
+                                                    ? "bg-[#0048ad] text-white shadow-sm" 
+                                                    : "text-muted-foreground hover:text-foreground"
+                                            )}
+                                        >
+                                            رصيد بالريال (زبائن)
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setBalanceMode('units')}
+                                            className={cn(
+                                                "flex-1 py-1.5 rounded-xl text-xs font-black transition-all text-center",
+                                                balanceMode === 'units' 
+                                                    ? "bg-[#0048ad] text-white shadow-sm" 
+                                                    : "text-muted-foreground hover:text-foreground"
+                                            )}
+                                        >
+                                            سداد وحدات سبأفون
+                                        </button>
                                     </div>
-                                    <div className="mt-4 p-3 bg-[#0048ad]/5 rounded-2xl border-2 border-dashed border-[#0048ad]/20">
-                                        <p className="text-[9px] font-black text-muted-foreground uppercase mb-1 tracking-widest">إجمالي المبلغ المطلوب</p>
-                                        <p className="text-xl font-black text-[#0048ad]">
-                                            {amount ? (parseFloat(amount) * NORTH_RATE).toLocaleString() : '0'}
-                                        </p>
-                                    </div>
-                                    <Button 
-                                        className="w-full h-12 rounded-2xl text-base font-black mt-6 shadow-lg text-white" 
-                                        onClick={() => {
-                                            const val = parseFloat(amount);
-                                            if (isNaN(val) || val <= 0) return;
-                                            
-                                            setSelectedOffer({
-                                                typeLabel: `شحن رصيد (شمال)`,
-                                                endpoint: 'sabaphone',
-                                                num: val,
-                                                finalPrice: Math.ceil(val * NORTH_RATE),
-                                                originalPrice: val
-                                            });
-                                            setIsConfirmingAction(true);
-                                        }} 
-                                        disabled={!amount} 
-                                        style={{ backgroundColor: SABA_PRIMARY }}
-                                    >
-                                        تسديد الرصيد
-                                    </Button>
                                 </div>
+
+                                {balanceMode === 'riyals' ? (
+                                    /* نموذج سداد رصيد بالريال للزبائن العاديين */
+                                    <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-sm border border-[#0048ad]/10 text-center space-y-4">
+                                        <div className="flex justify-center">
+                                            <div className="bg-muted/40 p-1 rounded-xl flex items-center gap-1 text-[11px] font-bold">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setBalanceRegion('south')}
+                                                    className={cn(
+                                                        "px-3 py-1 rounded-lg transition-all",
+                                                        balanceRegion === 'south' ? "bg-[#0048ad] text-white shadow-xs" : "text-muted-foreground"
+                                                    )}
+                                                >
+                                                    جنوب (عملة مرتفعة)
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setBalanceRegion('north')}
+                                                    className={cn(
+                                                        "px-3 py-1 rounded-lg transition-all",
+                                                        balanceRegion === 'north' ? "bg-[#0048ad] text-white shadow-xs" : "text-muted-foreground"
+                                                    )}
+                                                >
+                                                    شمال (صنعاء)
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <Label className="text-[11px] font-black text-muted-foreground block mb-2 uppercase">ادخل المبلغ بالريال اليمني</Label>
+                                            <div className="relative max-w-[200px] mx-auto">
+                                                <Input 
+                                                    type="number" 
+                                                    placeholder="مثال: 1000" 
+                                                    value={amount} 
+                                                    onChange={(e) => setAmount(e.target.value)} 
+                                                    className="text-center font-black text-lg h-11 rounded-2xl bg-white border-2 border-solid border-[#0048ad]/40 text-[#0048ad] focus-visible:ring-[#0048ad]" 
+                                                />
+                                            </div>
+                                            {/* أزرار سريعة للمبالغ */}
+                                            <div className="flex items-center justify-center gap-1.5 mt-2.5">
+                                                {[500, 1000, 2000, 5000].map((val) => (
+                                                    <button
+                                                        key={val}
+                                                        type="button"
+                                                        onClick={() => setAmount(String(val))}
+                                                        className="px-2 py-0.5 text-[10px] font-black rounded-lg border bg-muted/30 hover:bg-muted text-foreground transition-colors"
+                                                    >
+                                                        {val}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {(() => {
+                                            const currentRate = balanceRegion === 'south' 
+                                                ? (sabafonConfig?.instantSouthRate ?? sabafonConfig?.balanceRate ?? 3.0) 
+                                                : (sabafonConfig?.instantNorthRate ?? 1.0);
+                                            const finalCalc = amount ? Math.ceil(parseFloat(amount) * currentRate) : 0;
+                                            return (
+                                                <div className="p-3 bg-[#0048ad]/5 rounded-2xl border-2 border-dashed border-[#0048ad]/20">
+                                                    <p className="text-[9px] font-black text-muted-foreground uppercase mb-1 tracking-widest">إجمالي المبلغ المطلوب خصمه</p>
+                                                    <p className="text-xl font-black text-[#0048ad]">
+                                                        {finalCalc.toLocaleString()} ر.ي
+                                                    </p>
+                                                </div>
+                                            );
+                                        })()}
+
+                                        <Button 
+                                            className="w-full h-12 rounded-2xl text-base font-black shadow-lg text-white" 
+                                            onClick={() => {
+                                                const val = parseFloat(amount);
+                                                if (isNaN(val) || val <= 0) return;
+                                                const currentRate = balanceRegion === 'south' 
+                                                    ? (sabafonConfig?.instantSouthRate ?? sabafonConfig?.balanceRate ?? 3.0) 
+                                                    : (sabafonConfig?.instantNorthRate ?? 1.0);
+                                                const finalPrice = Math.ceil(val * currentRate);
+                                                
+                                                setSelectedOffer({
+                                                    typeLabel: `شحن رصيد سبأفون (${balanceRegion === 'south' ? 'جنوب' : 'شمال'})`,
+                                                    endpoint: balanceRegion === 'south' ? 'sbay' : 'sabaphone',
+                                                    num: val,
+                                                    finalPrice,
+                                                    originalPrice: val
+                                                });
+                                                setIsConfirmingAction(true);
+                                            }} 
+                                            disabled={!amount} 
+                                            style={{ backgroundColor: SABA_PRIMARY }}
+                                        >
+                                            تسديد الرصيد
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    /* نموذج سداد وحدات سبأفون */
+                                    <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-sm border border-[#0048ad]/5 text-center space-y-4">
+                                        <div>
+                                            <Label className="text-[11px] font-black text-muted-foreground block mb-2 uppercase">ادخل عدد الوحدات</Label>
+                                            <div className="relative max-w-[180px] mx-auto">
+                                                <Input 
+                                                    type="number" 
+                                                    placeholder="عدد الوحدات" 
+                                                    value={amount} 
+                                                    onChange={(e) => setAmount(e.target.value)} 
+                                                    className="text-center font-black text-lg h-10 rounded-2xl bg-white border-2 border-solid border-[#0048ad]/40 text-[#0048ad] focus-visible:ring-[#0048ad]" 
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="p-3 bg-[#0048ad]/5 rounded-2xl border-2 border-dashed border-[#0048ad]/20">
+                                            <p className="text-[9px] font-black text-muted-foreground uppercase mb-1 tracking-widest">إجمالي المبلغ المطلوب</p>
+                                            <p className="text-xl font-black text-[#0048ad]">
+                                                {amount ? (Math.ceil(parseFloat(amount) * (sabafonConfig?.unitsRate ?? 45))).toLocaleString() : '0'} ر.ي
+                                            </p>
+                                        </div>
+                                        <Button 
+                                            className="w-full h-12 rounded-2xl text-base font-black shadow-lg text-white" 
+                                            onClick={() => {
+                                                const val = parseFloat(amount);
+                                                if (isNaN(val) || val <= 0) return;
+                                                const uRate = sabafonConfig?.unitsRate ?? 45;
+                                                const finalUnitsPrice = Math.ceil(val * uRate);
+                                                
+                                                setSelectedOffer({
+                                                    typeLabel: `سداد ${val} وحدة سبأفون`,
+                                                    endpoint: 'sabaphone',
+                                                    num: val,
+                                                    finalPrice: finalUnitsPrice,
+                                                    originalPrice: val
+                                                });
+                                                setIsConfirmingAction(true);
+                                            }} 
+                                            disabled={!amount} 
+                                            style={{ backgroundColor: SABA_PRIMARY }}
+                                        >
+                                            تسديد الوحدات
+                                        </Button>
+                                    </div>
+                                )}
                             </TabsContent>
                         </Tabs>
                     </div>

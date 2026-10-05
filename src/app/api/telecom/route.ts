@@ -1,17 +1,18 @@
 import { NextResponse } from 'next/server';
 import CryptoJS from 'crypto-js';
+import { initializeServerFirebase } from '@/firebase/server-init';
+import { doc, getDoc } from 'firebase/firestore';
 
-// المعلمات المعتمدة من متغيرات البيئة
-const USERID = process.env.TELECOM_USERID;
-const USERNAME = process.env.TELECOM_USERNAME;
-const PASSWORD = process.env.TELECOM_PASSWORD;
-const API_BASE_URL = 'http://echehanly.yrbso.net/api/yr/'; 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-const generateToken = (transid: string, identifier: string) => {
-  if (!PASSWORD || !USERNAME) return '';
-  const hashPassword = CryptoJS.MD5(PASSWORD).toString();
+const DEFAULT_API_BASE_URL = 'http://echehanly.yrbso.net/api/yr/';
+
+const generateToken = (password: string, username: string, transid: string, identifier: string) => {
+  if (!password || !username) return '';
+  const hashPassword = CryptoJS.MD5(password).toString();
   // التوكن المعتمد: MD5(MD5(password) + transid + username + identifier)
-  const tokenString = hashPassword + transid + USERNAME + identifier;
+  const tokenString = hashPassword + transid + username + identifier;
   return CryptoJS.MD5(tokenString).toString();
 };
 
@@ -19,56 +20,113 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { action, service, ...payload } = body;
+
+    // استخراج بيانات الاعتماد من البيئة أولاً كقيم افتراضية
+    let userId = process.env.TELECOM_USERID || '';
+    let username = process.env.TELECOM_USERNAME || '';
+    let password = process.env.TELECOM_PASSWORD || '';
+    let apiBaseUrl = DEFAULT_API_BASE_URL;
+    let customBackUrl = 'https://star26.vercel.app/api/payment/webhook';
+    let validApiKey = process.env.TELECOM_CLIENT_API_KEY || 'star_live_key_9f8e7d6c5b4a3210';
+
+    // محاولة جلب الإعدادات المحدثة من Firestore إذا تم ضبطها من لوحة تحكم المدير
+    try {
+      const { firestore } = initializeServerFirebase();
+      const settingsRef = doc(firestore, 'system_settings', 'telecom_config');
+      const settingsSnap = await getDoc(settingsRef);
+      if (settingsSnap.exists()) {
+        const configData = settingsSnap.data();
+        const apiCreds = configData?.telecomApi;
+        if (apiCreds?.userId) userId = apiCreds.userId.trim();
+        if (apiCreds?.username) username = apiCreds.username.trim();
+        if (apiCreds?.password) password = apiCreds.password.trim();
+        if (apiCreds?.apiBaseUrl) {
+          apiBaseUrl = apiCreds.apiBaseUrl.trim();
+          if (!apiBaseUrl.endsWith('/')) apiBaseUrl += '/';
+        }
+        if (apiCreds?.backUrl) customBackUrl = apiCreds.backUrl.trim();
+        if (apiCreds?.clientApiKey) validApiKey = apiCreds.clientApiKey.trim();
+      }
+    } catch (e) {
+      console.warn("Could not read dynamic telecom settings from Firestore, using environment defaults:", e);
+    }
+
+    // التحقق من مفتاح الـ API للطلبات الخارجية (عبر Headers أو Body أو Query)
+    const authHeader = request.headers.get('authorization') || '';
+    const xApiKey = request.headers.get('x-api-key') || '';
+    const bearerKey = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : '';
+    const { searchParams } = new URL(request.url);
+    const queryApiKey = searchParams.get('apiKey') || searchParams.get('api_key') || '';
+    const incomingApiKey = xApiKey || bearerKey || queryApiKey || payload.apiKey;
+
+    // إذا تم تقديم مفتاح API وكان غير مطابق، نرفض الطلب فوراً
+    if (incomingApiKey && validApiKey && incomingApiKey !== validApiKey) {
+      return NextResponse.json({
+        resultCode: "-401",
+        message: "مفتاح الوصول غير صحيح أو غير مصرح به (Invalid API Key). يرجى فحص مفتاح الـ API المرسل."
+      }, { status: 401 });
+    }
     
-    if (!USERID || !USERNAME || !PASSWORD) {
-        return new NextResponse(JSON.stringify({ message: 'Telecom settings are missing in environment variables' }), { status: 500 });
+    if (!userId || !username || !password) {
+        return NextResponse.json({ 
+          resultCode: "-1", 
+          message: 'بيانات اتصال الـ API غير مهيأة. يرجى إدخال USERID واسم المستخدم وكلمة المرور في لوحة تحكم المدير أو متغيرات البيئة.' 
+        }, { status: 400 });
     }
 
     // المعرف المستخدم في التوكن (الرقم أو رقم اللاعب أو اسم المستخدم)
-    const identifier = payload.mobile || payload.playerid || USERNAME;
+    const identifier = payload.mobile || payload.playerid || username;
     const transid = payload.transid || `${Date.now()}`.slice(-10);
-    const token = generateToken(transid, identifier);
+    const token = generateToken(password, username, transid, identifier);
 
-    const BACKURL = 'https://star26.vercel.app/api/payment/webhook';
     let endpoint = '';
     let apiRequestParams: any = {
-      userid: USERID,
+      userid: userId,
       transid: transid,
       token: token,
-      backurl: BACKURL,
+      backurl: customBackUrl,
       ...payload
     };
+
     if (payload.backpass) {
       apiRequestParams.backpass = payload.backpass;
     }
 
-    
-    // الأولوية لطلبات الاستعلام والحالة لتوجيهها لمسار info لضمان جلب رصيد الوكيل بدقة
+    // توجيه الطلبات حسب نوع الخدمة والأكشن
     if (action === 'balance' || action === 'status') {
+        // فحص رصيد حساب الوكيل أو حالة العملية
         endpoint = 'info';
         apiRequestParams.action = action;
     } else if (service === 'yem4g') {
+        // يمن فورجي (استعلام أو سداد رصيد وباقات)
         endpoint = 'yem4g';
-        apiRequestParams.action = action;
+        apiRequestParams.action = action || 'bill';
     } else if (service === 'post') {
+        // الثابت والانترنت المنزلي ADSL
         endpoint = 'post';
-        apiRequestParams.action = action;
+        apiRequestParams.action = action || 'bill';
     } else if (service === 'adenet') {
+        // عدن نت (استعلام أو سداد باقات)
         endpoint = 'adenet';
-        apiRequestParams.action = action;
+        apiRequestParams.action = action || 'bill';
     } else if (service === 'sabaphone') {
+        // سبافون (شمال)
         endpoint = 'sabaphone';
-        apiRequestParams.action = 'bill';
+        apiRequestParams.action = action || 'bill';
     } else if (service === 'sabaoffer') {
+        // باقات سبافون
         endpoint = 'sabaoffer';
         delete apiRequestParams.action;
     } else if (service === 'sbay') {
+        // سبافون (جنوب)
         endpoint = 'sbay';
-        apiRequestParams.action = 'bill';
+        apiRequestParams.action = action || 'bill';
     } else if (service === 'sabaunits') {
+        // وحدات سبافون
         endpoint = 'sabaunits';
         delete apiRequestParams.action;
     } else if (service === 'why') {
+        // واي (رصيد وباقات كرم)
         endpoint = 'why';
         apiRequestParams.action = 'bill';
         const finalNum = String(payload.num || payload.amount || "");
@@ -81,16 +139,18 @@ export async function POST(request: Request) {
             }
         }
     } else if (service === 'you') {
+        // يو YOU (رصيد، فوري، باقات)
         if (action === 'billoffer' || action === 'queryoffer') {
             endpoint = 'mtnoffer';
             delete apiRequestParams.action;
         } else {
             endpoint = 'mtn';
-            apiRequestParams.action = action;
+            apiRequestParams.action = action || 'bill';
         }
     } else if (service === 'games') {
         endpoint = 'gameswcards';
     } else if (service === 'yemen' || service === 'yem' || !service) {
+        // يمن موبايل
         if (action === 'billoffer') {
             endpoint = 'offeryem';
             apiRequestParams.action = 'billoffer';
@@ -100,21 +160,11 @@ export async function POST(request: Request) {
             }
         } else {
             endpoint = 'yem';
-            apiRequestParams.action = action;
+            apiRequestParams.action = action || 'bill';
         }
     } else { 
-        switch(action) {
-            case 'query':
-            case 'bill':
-            case 'solfa':
-            case 'queryoffer':
-                endpoint = 'yem';
-                apiRequestParams.action = action;
-                break;
-            default:
-                endpoint = 'yem';
-                apiRequestParams.action = action;
-        }
+        endpoint = 'yem';
+        apiRequestParams.action = action || 'bill';
     }
 
     delete apiRequestParams.service;
@@ -125,7 +175,7 @@ export async function POST(request: Request) {
         }
     });
 
-    const fullUrl = `${API_BASE_URL}${endpoint}?${params.toString()}`;
+    const fullUrl = `${apiBaseUrl}${endpoint}?${params.toString()}`;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 90000); 
@@ -145,12 +195,13 @@ export async function POST(request: Request) {
         clearTimeout(timeoutId);
         const responseText = (await response.text()).trim();
         
-        if (!responseText) throw new Error('رد فارغ من السيرفر.');
+        if (!responseText) throw new Error('رد فارغ من السيرفر المزود.');
 
         let data;
         try {
             data = JSON.parse(responseText);
         } catch (e) {
+            // معالجة ردود الرصيد النصية القديمة من السيرفر
             const balanceMatch = responseText.match(/Your balance:?\s*([\d.]+)/i);
             if (balanceMatch) {
                 return NextResponse.json({ 
@@ -159,15 +210,37 @@ export async function POST(request: Request) {
                     resultDesc: responseText
                 });
             }
-            return new NextResponse(JSON.stringify({ message: responseText, resultCode: "-1" }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            return NextResponse.json({ message: responseText, resultCode: "-1" });
         }
         return NextResponse.json(data);
 
     } catch (fetchError: any) {
         clearTimeout(timeoutId);
-        return new NextResponse(JSON.stringify({ message: 'فشل الاتصال: ' + fetchError.message }), { status: 504 });
+        return NextResponse.json({ message: 'فشل الاتصال بسيرفر الـ API المزود: ' + fetchError.message, resultCode: "-1" }, { status: 504 });
     }
   } catch (error: any) {
-    return new NextResponse(JSON.stringify({ message: `خطأ داخلي: ${error.message}` }), { status: 500 });
+    return NextResponse.json({ message: `خطأ داخلي في الخادم: ${error.message}`, resultCode: "-1" }, { status: 500 });
   }
 }
+
+export async function GET(request: Request) {
+  return NextResponse.json({
+    status: 'online',
+    system: 'Star Mobile Telecom API Engine',
+    version: '2.0.0',
+    documentation: 'https://star26.vercel.app/api-docs',
+    authMethod: 'API Key (Headers: x-api-key or Authorization: Bearer <API_KEY>)',
+    supportedServices: {
+      yemen_mobile: ['query', 'bill', 'solfa', 'queryoffer', 'billoffer'],
+      you: ['bill', 'billoffer', 'queryoffer'],
+      sabafon: ['sabaphone (شمال)', 'sbay (جنوب)', 'sabaunits (وحدات)', 'sabaoffer (باقات) - يدعم 71 و 72'],
+      why: ['bill (رصيد وباقات كرم)'],
+      yemen_4g: ['query', 'bill'],
+      aden_net: ['query', 'bill'],
+      landline_adsl: ['query', 'bill'],
+      info: ['balance', 'status']
+    },
+    timestamp: new Date().toISOString()
+  });
+}
+

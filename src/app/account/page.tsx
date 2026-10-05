@@ -28,7 +28,8 @@ import {
   Clock,
   XCircle,
   Building2,
-  Eye
+  Eye,
+  SlidersHorizontal
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { SimpleHeader } from '@/components/layout/simple-header';
@@ -74,6 +75,7 @@ type BankNotif = {
 };
 
 const managementLinks = [
+  { title: 'الربط البرمجي والأسعار والنسب (API)', icon: SlidersHorizontal, href: '/api-services-management' },
   { title: 'مراقبة العمليات', icon: Eye, href: '/monitoring' },
   { title: 'إدارة الإيداعات', icon: Building2, href: '/omqy-management' },
   { title: 'إدارة الشبكات', icon: Wifi, href: '/networks-management' },
