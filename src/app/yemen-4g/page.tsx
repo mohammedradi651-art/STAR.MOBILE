@@ -143,10 +143,14 @@ export default function Yemen4GPage() {
         }
     }, [showSuccess]);
 
-    const handlePhoneChange = (val: string) => {
+    const handlePhoneChange = (val: string, element?: HTMLInputElement) => {
         const cleaned = val.replace(/\D/g, '').slice(0, 9);
         setPhone(cleaned);
         if (cleaned.length === 9) {
+            if (element) element.blur();
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                navigator.vibrate(50);
+            }
             if (!cleaned.startsWith('10')) {
                 toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'رقم يمن فورجي يجب أن يبدأ بـ 10' });
             } else {
@@ -238,7 +242,12 @@ export default function Yemen4GPage() {
                 
                 const cleanedNum = selectedNumber.slice(0, 9);
                 setPhone(cleanedNum);
-                if (cleanedNum.length === 9) handleSearch(cleanedNum);
+                if (cleanedNum.length === 9) {
+                    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                        navigator.vibrate(50);
+                    }
+                    handleSearch(cleanedNum);
+                }
             }
         } catch (err) {
             console.error("Contacts selection failed:", err);
@@ -396,7 +405,7 @@ export default function Yemen4GPage() {
                             type="tel"
                             placeholder="10xxxxxxx"
                             value={phone}
-                            onChange={(e) => handlePhoneChange(e.target.value)}
+                            onChange={(e) => handlePhoneChange(e.target.value, e.target)}
                             className="text-center font-bold text-lg h-12 rounded-2xl border-none bg-muted/20 focus-visible:ring-[#106BA2] transition-all pr-12 pl-12"
                         />
                         <button 

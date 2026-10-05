@@ -104,6 +104,13 @@ const INTERNET_PACKAGES = [
     }
 ];
 
+interface LandlineQueryResult {
+    balance: string;
+    packagePrice: string;
+    expireDate: string;
+    rawText?: string;
+}
+
 export default function LandlinePage() {
     const router = useRouter();
     const { toast } = useToast();
@@ -113,7 +120,7 @@ export default function LandlinePage() {
     const [phone, setPhone] = useState('');
     const [activeTab, setActiveTab] = useState("internet");
     const [isSearching, setIsSearching] = useState(false);
-    const [queryResult, setQueryResult] = useState<string | null>(null);
+    const [queryResult, setQueryResult] = useState<LandlineQueryResult | string | null>(null);
     const [amount, setAmount] = useState('');
     const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -140,6 +147,9 @@ export default function LandlinePage() {
         setPhone(cleaned);
         if (cleaned.length === 8) {
             element.blur();
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                navigator.vibrate(50);
+            }
             if (!cleaned.startsWith('0')) {
                 toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'الرقم الأرضي يجب أن يبدأ بـ 0' });
             } else {
@@ -149,7 +159,7 @@ export default function LandlinePage() {
     };
 
     const handleSearch = useCallback(async (phoneNumber: string = phone) => {
-        if (!phoneNumber || phoneNumber.length < 7) {
+        if (!phoneNumber || phoneNumber.length < 8) {
             toast({ variant: 'destructive', title: 'رقم ناقص', description: 'يرجى إدخال رقم صحيح مكون من 8 أرقام.' });
             return;
         }
@@ -173,35 +183,161 @@ export default function LandlinePage() {
             });
             const result = await response.json();
             
-            const isSuccess = result.resultCode === "0" || result.resultCode === 0;
+            if (activeTab === 'internet') {
+                const isSuccess = result.resultCode === "0" || result.resultCode === 0;
 
-            if (isSuccess || result.resultCode === "-2") {
-                let desc = "";
-                const rawDesc = String(result.resultDesc || "");
-                const rawBalance = String(result.balance || "");
-                
-                const importantKeywords = ['باقة', 'رصيد', 'تأريخ', 'مبلغ', 'فاتورة', 'مديونية', 'سداد'];
-                const hasInfo = (text: string) => importantKeywords.some(kw => text.includes(kw));
+                if (isSuccess || result.resultCode === "-2") {
+                    let desc = "";
+                    const rawDesc = String(result.resultDesc || "");
+                    const rawBalance = String(result.balance || "");
+                    
+                    const importantKeywords = ['باقة', 'رصيد', 'تأريخ', 'مبلغ', 'فاتورة', 'مديونية', 'سداد'];
+                    const hasInfo = (text: string) => importantKeywords.some(kw => text.includes(kw));
 
-                if (rawBalance && hasInfo(rawBalance)) {
-                    desc = rawBalance;
-                } else if (rawDesc && hasInfo(rawDesc)) {
-                    desc = rawDesc;
+                    if (rawBalance && hasInfo(rawBalance)) {
+                        desc = rawBalance;
+                    } else if (rawDesc && hasInfo(rawDesc)) {
+                        desc = rawDesc;
+                    } else {
+                        desc = (rawDesc.toLowerCase() === 'success' || !rawDesc) ? rawBalance : rawDesc;
+                    }
+
+                    if (!desc || desc.toLowerCase() === 'success') {
+                        desc = "تم الاستعلام بنجاح.";
+                    }
+
+                    // استخراج تفاصيل باقة النت الأرضي بتنسيق يمن فورجي
+                    // مثال النص: رصيد الباقة: 0.00 Gigabyte(s) قيمة الباقة: 4725 تأريخ الانتهاء: 18-09-2026 06:27:00 اقل مبلغ سداد: 250
+                    const balMatch = desc.match(/(?:رصيد الباقة|الرصيد المتبقي|رصيد)\s*:?\s*([\d.]+)/i);
+                    const priceMatch = desc.match(/(?:قيمة الباقة|مبلغ الباقة|سعر الباقة)\s*:?\s*([\d.]+)/i);
+                    const dateMatch = desc.match(/(?:تأريخ الانتهاء|تاريخ الانتهاء|تأريخ انتهاء|تاريخ انتهاء|الصلاحية)\s*:?\s*(\d{1,4}[-/]\d{1,2}[-/]\d{1,4})/i);
+
+                    if (balMatch || priceMatch || dateMatch) {
+                        let unit = 'GB';
+                        const unitMatch = desc.match(/(?:Gigabyte\(s\)|Gigabytes|Gigabyte|GB|MB|KB)/i);
+                        if (unitMatch) {
+                            const u = unitMatch[0].toUpperCase();
+                            if (u.includes('MB')) unit = 'MB';
+                            else if (u.includes('KB')) unit = 'KB';
+                            else unit = 'GB';
+                        }
+                        const balance = balMatch ? `${balMatch[1]} ${unit}` : '0.00 GB';
+                        const packagePrice = priceMatch ? priceMatch[1] : '';
+
+                        let expireDate = '...';
+                        if (dateMatch) {
+                            const rawDate = dateMatch[1];
+                            const parts = rawDate.split(/[-/]/);
+                            if (parts.length === 3) {
+                                if (parts[0].length === 4) {
+                                    // YYYY-MM-DD
+                                    expireDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+                                } else if (parts[2].length === 4) {
+                                    // DD-MM-YYYY -> YYYY-MM-DD (2026-09-18)
+                                    expireDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                                } else {
+                                    expireDate = rawDate;
+                                }
+                            } else {
+                                expireDate = rawDate;
+                            }
+                        } else if (result.expireDate) {
+                            const rawDate = String(result.expireDate).trim();
+                            const parts = rawDate.split(/[-/]/);
+                            if (parts.length === 3) {
+                                if (parts[0].length === 4) {
+                                    expireDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+                                } else if (parts[2].length === 4) {
+                                    expireDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                                } else {
+                                    expireDate = rawDate;
+                                }
+                            } else {
+                                expireDate = rawDate;
+                            }
+                        }
+
+                        setQueryResult({
+                            balance,
+                            packagePrice,
+                            expireDate,
+                            rawText: desc
+                        });
+
+                        if (packagePrice && !isNaN(parseFloat(packagePrice))) {
+                            setAmount(packagePrice);
+                        }
+                    } else {
+                        setQueryResult(desc);
+                        if (result.balance && !isNaN(parseFloat(result.balance))) {
+                            setAmount(String(result.balance));
+                        }
+                    }
                 } else {
-                    desc = (rawDesc.toLowerCase() === 'success' || !rawDesc) ? rawBalance : rawDesc;
-                }
-
-                if (!desc || desc.toLowerCase() === 'success') {
-                    desc = "تم الاستعلام بنجاح.";
-                }
-
-                setQueryResult(desc);
-
-                if (result.balance && !isNaN(parseFloat(result.balance))) {
-                    setAmount(String(result.balance));
+                    throw new Error(result.resultDesc || 'الرقم غير مسجل أو هناك خطأ في الاستعلام.');
                 }
             } else {
-                throw new Error(result.resultDesc || 'الرقم غير مسجل أو هناك خطأ في الاستعلام.');
+                // منطق الهاتف الثابت فقط
+                const isSuccess = response.ok && (result.resultCode === "0" || result.resultCode === 0 || result.resultCode === "-2");
+
+                const rawDesc = String(result.resultDesc || result.message || "").trim();
+                const rawBalance = String(result.balance !== undefined && result.balance !== null ? result.balance : "").trim();
+                
+                let detectedAmount: string | null = null;
+
+                // 1. فحص قيمة balance
+                if (rawBalance) {
+                    const cleanedBalance = rawBalance.replace(/,/g, '').trim();
+                    const parsed = parseFloat(cleanedBalance);
+                    if (!isNaN(parsed) && parsed > 0) {
+                        detectedAmount = String(parsed);
+                    }
+                }
+
+                // 2. إذا لم يتوفر المبلغ في balance، محاولة استخراجه من resultDesc إذا لم تكن رسالة نجاح عامة
+                if (!detectedAmount && rawDesc) {
+                    const isGenericDesc = /^(success|تم الاستعلام بنجاح\.?)$/i.test(rawDesc);
+                    if (!isGenericDesc) {
+                        const parsedDescNum = parseFloat(rawDesc.replace(/,/g, '').trim());
+                        if (!isNaN(parsedDescNum) && parsedDescNum > 0) {
+                            detectedAmount = String(parsedDescNum);
+                        } else {
+                            const match = rawDesc.match(/(\d+(?:\.\d+)?)/);
+                            if (match) {
+                                const parsedMatch = parseFloat(match[1]);
+                                if (!isNaN(parsedMatch) && parsedMatch > 0) {
+                                    detectedAmount = String(parsedMatch);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // التحقق من نجاح العملية ووجود مبلغ
+                if (isSuccess && detectedAmount) {
+                    setAmount(detectedAmount);
+                    setQueryResult(`مبلغ الفاتورة الحالية (${detectedAmount}) ريال`);
+                } else {
+                    setQueryResult(null);
+                    setAmount('');
+                    
+                    let errorMsg = '';
+                    const isGenericDesc = /^(success|تم الاستعلام بنجاح\.?)$/i.test(rawDesc);
+                    
+                    if (rawDesc && !isGenericDesc) {
+                        errorMsg = rawDesc;
+                    } else if (result.message && !isGenericDesc) {
+                        errorMsg = result.message;
+                    } else {
+                        errorMsg = 'لم يتم العثور على مبلغ الفاتورة.';
+                    }
+                    
+                    toast({
+                        variant: 'destructive',
+                        title: 'تنبيه من المزود',
+                        description: errorMsg
+                    });
+                }
             }
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'تنبيه من المزود', description: error.message });
@@ -227,7 +363,12 @@ export default function LandlinePage() {
                 let num = contacts[0].tel[0].replace(/\D/g, '').slice(-8);
                 if (!num.startsWith('0')) num = '0' + num;
                 setPhone(num);
-                if (num.length === 8) handleSearch(num);
+                if (num.length === 8) {
+                    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                        navigator.vibrate(50);
+                    }
+                    handleSearch(num);
+                }
             }
         } catch (err) { console.error(err); }
     };
@@ -320,7 +461,7 @@ export default function LandlinePage() {
                         <button onClick={handleContactPick} className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-xl transition-colors" style={{ color: currentTheme.primary }}><Users className="h-5 w-5" /></button>
                     </div>
 
-                    {phone.length >= 7 && phone.startsWith('0') && (
+                    {phone.length === 8 && phone.startsWith('0') && (
                         <div className="animate-in fade-in zoom-in duration-300">
                             <Button 
                                 className="w-full h-12 rounded-2xl font-bold mt-4 shadow-sm text-white" 
@@ -335,16 +476,33 @@ export default function LandlinePage() {
                     )}
                 </div>
 
-                {phone.length >= 7 && phone.startsWith('0') && (
+                {phone.length === 8 && phone.startsWith('0') && (
                     <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
                         
                         {queryResult && (
                             <div className="rounded-3xl overflow-hidden shadow-lg p-1 animate-in zoom-in-95" style={currentTheme.gradient}>
-                                <div className="bg-white/10 backdrop-blur-md rounded-[22px] p-5 text-right text-white space-y-2">
-                                    <p className="text-sm font-bold leading-relaxed whitespace-pre-wrap">
-                                        {queryResult}
-                                    </p>
-                                </div>
+                                {typeof queryResult === 'object' ? (
+                                    <div className="bg-white/10 backdrop-blur-md rounded-[22px] grid grid-cols-3 text-center text-white">
+                                        <div className="p-3 border-l border-white/10">
+                                            <p className="text-[10px] font-bold opacity-80 mb-1">الرصيد المتبقي</p>
+                                            <p className="text-sm font-black">{queryResult.balance}</p>
+                                        </div>
+                                        <div className="p-3 border-l border-white/10">
+                                            <p className="text-[10px] font-bold opacity-80 mb-1">قيمة الباقة</p>
+                                            <p className="text-sm font-black">{queryResult.packagePrice ? `${queryResult.packagePrice} ر.ي` : '---'}</p>
+                                        </div>
+                                        <div className="p-3">
+                                            <p className="text-[10px] font-bold opacity-80 mb-1">تاريخ الانتهاء</p>
+                                            <p className="text-sm font-black">{queryResult.expireDate}</p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="bg-white/10 backdrop-blur-md rounded-[22px] p-5 text-center text-white space-y-2">
+                                        <p className="text-sm font-bold leading-relaxed whitespace-pre-wrap">
+                                            {queryResult}
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         )}
 
