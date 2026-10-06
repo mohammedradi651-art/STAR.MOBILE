@@ -546,7 +546,7 @@ export default function YouServicesPage() {
                     </div>
                 </div>
 
-                {phone.length === 9 && phone.startsWith('73') && (
+                {phone.length === 9 && phone.startsWith('7') && (
                     <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
 
                         <div className="flex justify-center mt-2">
