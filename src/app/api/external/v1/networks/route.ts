@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
 import { collection, query, where, getDocs, doc, writeBatch, increment, limit as firestoreLimit, getDoc } from 'firebase/firestore';
-import { DEFAULT_SERVICES_CONFIG, SystemServicesConfig, calculateFinalServicePrice } from '@/lib/services-config';
 
 /**
  * @fileOverview بوابة الربط البرمجي للشبكات v1.6
- * تدعم الخصم من رصيد العميل بناءً على نسب وإعدادات الربط البرمجي وخصومات العميل (networksDiscount)
- * وتدعم الخصم من العميل المستهدف (بناءً على رقم الجوال) إذا كان الطالب مديراً (Master Key)
+ * تدعم الخصم من رصيد العميل (بناءً على رقم الجوال) إذا كان الطالب مديراً (Master Key)
  */
 
 const corsHeaders = {
@@ -51,26 +49,6 @@ export async function POST(req: Request) {
     const requesterDoc = uSnap.docs[0];
     const requesterData = requesterDoc.data();
     const isAdmin = requesterData.email === '770326828@shabakat.com' || requesterDoc.id === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2';
-
-    // جلب إعدادات أسعار الربط البرمجي
-    let systemConfig: SystemServicesConfig = DEFAULT_SERVICES_CONFIG;
-    try {
-      const configSnap = await getDoc(doc(firestore, 'system_settings', 'telecom_config'));
-      if (configSnap.exists()) {
-        systemConfig = { ...DEFAULT_SERVICES_CONFIG, ...(configSnap.data() as any) };
-      }
-    } catch (e) {
-      console.warn("Could not read telecom_config in v1/networks:", e);
-    }
-
-    if (systemConfig.networks && systemConfig.networks.enabled === false) {
-      return NextResponse.json({
-        success: false,
-        code: 'SM_SERVICE_DISABLED',
-        message: 'خدمة كروت شبكات الواي فاي معطلة حالياً في النظام',
-        timestamp
-      }, { status: 403, headers: corsHeaders });
-    }
 
     const body = await req.json();
     const { action, networkId, classId, mobile } = body;
@@ -122,7 +100,7 @@ export async function POST(req: Request) {
         }, { headers: corsHeaders });
     }
 
-    // 2. جلب الفئات لشبكة معينة مع تطبيق أسعار ونسب الربط البرمجي
+    // 2. جلب الفئات لشبكة معينة
     if (action === 'list_classes') {
         if (!networkId) {
             return NextResponse.json({ success: false, code: 'SM_VALIDATION_ERROR', message: 'networkId is required' }, { status: 400, headers: corsHeaders });
@@ -133,48 +111,30 @@ export async function POST(req: Request) {
         
         if (localSnap.exists()) {
             const catsSnap = await getDocs(collection(firestore, `networks/${networkId}/cardCategories`));
-            const cats = catsSnap.docs.map(d => {
-                const rawPrice = Number(d.data().price || 0);
-                const finalPrice = calculateFinalServicePrice(
-                    rawPrice, 
-                    systemConfig.networks, 
-                    effectiveUserData?.networksDiscount
-                );
-                return {
-                    id: d.id,
-                    name: d.data().name,
-                    price: finalPrice,
-                    originalPrice: rawPrice,
-                    dataLimit: d.data().capacity || '',
-                    validity: d.data().validity || ''
-                };
-            });
+            const cats = catsSnap.docs.map(d => ({
+                id: d.id,
+                name: d.data().name,
+                price: d.data().price,
+                dataLimit: d.data().capacity || '',
+                validity: d.data().validity || ''
+            }));
             return NextResponse.json({ success: true, code: 'SM_SUCCESS', data: cats, timestamp }, { headers: corsHeaders });
         } else {
             const extRes = await fetch(`${origin}/services/networks-api/${networkId}/classes`);
             if (!extRes.ok) return NextResponse.json({ success: false, code: 'SM_NOT_FOUND', message: 'Network not found' }, { status: 404, headers: corsHeaders });
             const data = await extRes.json();
-            const mapped = data.map((c: any) => {
-                const rawPrice = Number(c.price || 0);
-                const finalPrice = calculateFinalServicePrice(
-                    rawPrice, 
-                    systemConfig.networks, 
-                    effectiveUserData?.networksDiscount
-                );
-                return {
-                    id: c.id,
-                    name: c.name,
-                    price: finalPrice,
-                    originalPrice: rawPrice,
-                    dataLimit: c.dataLimit,
-                    validity: c.expirationDate
-                };
-            });
+            const mapped = data.map((c: any) => ({
+                id: c.id,
+                name: c.name,
+                price: c.price,
+                dataLimit: c.dataLimit,
+                validity: c.expirationDate
+            }));
             return NextResponse.json({ success: true, code: 'SM_SUCCESS', data: mapped, timestamp }, { headers: corsHeaders });
         }
     }
 
-    // 3. تنفيذ الشراء (Order) مع احتساب السعر الدقيق بناءً على أسعار ونسب الربط
+    // 3. تنفيذ الشراء (Order)
     if (action === 'order') {
         if (!networkId || !classId) {
             return NextResponse.json({ success: false, code: 'SM_VALIDATION_ERROR', message: 'networkId and classId are required' }, { status: 400, headers: corsHeaders });
@@ -189,20 +149,8 @@ export async function POST(req: Request) {
             const catSnap = await getDoc(catRef);
             if (!catSnap.exists()) return NextResponse.json({ success: false, code: 'SM_NOT_FOUND', message: 'Category not found' }, { status: 404, headers: corsHeaders });
             
-            const rawPrice = Number(catSnap.data().price || 0);
-            const price = calculateFinalServicePrice(
-                rawPrice, 
-                systemConfig.networks, 
-                effectiveUserData?.networksDiscount
-            );
-
-            if ((effectiveUserData.balance || 0) < price) {
-                return NextResponse.json({ 
-                    success: false, 
-                    code: 'SM_INSUFFICIENT_BALANCE', 
-                    message: `رصيدك غير كافٍ لإتمام عملية الشراء. المطلوب: ${price} ر.ي، المتاح: ${effectiveUserData.balance || 0} ر.ي.` 
-                }, { status: 400, headers: corsHeaders });
-            }
+            const price = catSnap.data().price;
+            if ((effectiveUserData.balance || 0) < price) return NextResponse.json({ success: false, code: 'SM_INSUFFICIENT_BALANCE', message: 'Insufficient balance' }, { status: 400, headers: corsHeaders });
 
             const cardsQ = query(
                 collection(firestore, `networks/${networkId}/cards`),
@@ -212,7 +160,7 @@ export async function POST(req: Request) {
             );
             const cardsSnap = await getDocs(cardsQ);
 
-            if (cardsSnap.empty) return NextResponse.json({ success: false, code: 'SM_PROVIDER_ERROR', message: 'نفدت الكروت من هذه الفئة حالياً' }, { status: 400, headers: corsHeaders });
+            if (cardsSnap.empty) return NextResponse.json({ success: false, code: 'SM_PROVIDER_ERROR', message: 'Out of stock in local storage' }, { status: 400, headers: corsHeaders });
 
             const cardDoc = cardsSnap.docs[0];
             const cardData = cardDoc.data();
@@ -225,15 +173,15 @@ export async function POST(req: Request) {
                 transactionDate: timestamp,
                 amount: price,
                 transactionType: 'API: شراء كرت محلي',
-                notes: `شبكة: ${localSnap.data().name} - كرت: ${catSnap.data()?.name || ''} (سعر الكرت: ${rawPrice} ر.ي، سعر الربط: ${price} ر.ي)${isAdmin ? ' (عبر البوت)' : ''}`,
+                notes: `شبكة: ${localSnap.data().name}${isAdmin ? ' (عبر البوت)' : ''}`,
                 cardNumber: cardData.cardNumber
             });
 
             // تحويل أرباح الكرت تلقائياً لمالك الشبكة بعد خصم 10%
             const ownerId = localSnap.data()?.ownerId;
             if (ownerId && ownerId !== 'admin') {
-                const commission = Math.ceil(rawPrice * 0.10);
-                const payoutAmount = rawPrice - commission;
+                const commission = Math.ceil(price * 0.10);
+                const payoutAmount = price - commission;
                 batch.update(doc(firestore, 'users', ownerId), { balance: increment(payoutAmount) });
                 batch.set(doc(collection(firestore, `users/${ownerId}/transactions`)), {
                     userId: ownerId,
@@ -254,7 +202,6 @@ export async function POST(req: Request) {
                     cardNumber: cardData.cardNumber,
                     cardPassword: cardData.cardNumber,
                     price: price,
-                    originalPrice: rawPrice,
                     clientName: effectiveUserData.displayName
                 },
                 timestamp
@@ -274,19 +221,10 @@ export async function POST(req: Request) {
                 const classesRes = await fetch(`${origin}/services/networks-api/${networkId}/classes`);
                 const classesData = await classesRes.json();
                 const targetClass = classesData.find((c: any) => String(c.id) === String(classId));
-                const rawPrice = targetClass ? Number(targetClass.price || 0) : 0;
-                const price = calculateFinalServicePrice(
-                    rawPrice, 
-                    systemConfig.networks, 
-                    effectiveUserData?.networksDiscount
-                );
+                const price = targetClass ? targetClass.price : 0;
 
                 if (price > 0 && (effectiveUserData.balance || 0) < price) {
-                    return NextResponse.json({ 
-                        success: false, 
-                        code: 'SM_INSUFFICIENT_BALANCE', 
-                        message: `رصيدك غير كافٍ لإتمام عملية الشراء. المطلوب: ${price} ر.ي، المتاح: ${effectiveUserData.balance || 0} ر.ي.` 
-                    }, { status: 400, headers: corsHeaders });
+                    return NextResponse.json({ success: false, code: 'SM_INSUFFICIENT_BALANCE', message: 'Insufficient balance' }, { status: 400, headers: corsHeaders });
                 }
 
                 const batch = writeBatch(firestore);
@@ -296,7 +234,7 @@ export async function POST(req: Request) {
                     transactionDate: timestamp,
                     amount: price,
                     transactionType: 'API: شراء كرت خارجي',
-                    notes: `شبكة بيتي: ${networkId} (سعر الكرت: ${rawPrice} ر.ي، سعر الربط: ${price} ر.ي)${isAdmin ? ' (عبر البوت)' : ''}`,
+                    notes: `شبكة بيتي: ${networkId}${isAdmin ? ' (عبر البوت)' : ''}`,
                     cardNumber: card.cardID
                 });
                 await batch.commit();
@@ -309,7 +247,6 @@ export async function POST(req: Request) {
                         cardNumber: card.cardID,
                         cardPassword: card.cardPass || card.cardID,
                         price: price,
-                        originalPrice: rawPrice,
                         clientName: effectiveUserData.displayName
                     },
                     timestamp
@@ -319,7 +256,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ 
                 success: false, 
                 code: 'SM_PROVIDER_ERROR', 
-                message: result.message || 'فشلت عملية طلب الكرت من المزود الخارجي' 
+                message: result.message || 'Order failed at provider' 
             }, { status: 400, headers: corsHeaders });
         }
     }

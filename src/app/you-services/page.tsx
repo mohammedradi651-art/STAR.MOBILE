@@ -6,33 +6,33 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { 
-  Wallet, 
-  CheckCircle, 
-  Hash as HashIcon,
-  Calendar,
-  Smartphone,
-  Globe,
-  Mail,
-  Phone as PhoneIcon,
-  Clock,
-  Users
+import {
+    Wallet,
+    CheckCircle,
+    Hash as HashIcon,
+    Calendar,
+    Smartphone,
+    Globe,
+    Mail,
+    Phone as PhoneIcon,
+    Clock,
+    Users
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogFooter,
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogFooter,
 } from "@/components/ui/alert-dialog";
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, writeBatch, increment, collection as firestoreCollection } from 'firebase/firestore';
@@ -50,7 +50,7 @@ export const dynamic = 'force-dynamic';
 
 // --- TYPES ---
 type UserProfile = {
-  balance?: number;
+    balance?: number;
 };
 
 type FastOffer = {
@@ -68,8 +68,8 @@ type Offer = {
     sms?: string;
     minutes?: string;
     validity?: string;
-    offertype: string; 
-    id?: string; 
+    offertype: string;
+    id?: string;
 };
 
 // --- STYLES ---
@@ -95,78 +95,150 @@ const YOU_FAST_OFFERS: FastOffer[] = [
 ];
 
 const YOU_CATEGORIES = [
-  {
-    id: 'unified',
-    title: 'باقات السعر الموحد',
-    badge: 'YOU',
-    icon: Smartphone,
-    offers: [
-      { offerId: 'unified_300', offerName: 'باقة السعر الموحد 300', price: 2904, data: '500MB', minutes: '300', sms: '300', validity: 'شهر', offertype: 'Sawa_300_PRE' },
-      { offerId: 'unified_4gb', offerName: 'باقة السعر الموحد 4 جيجا فورجي', price: 2904, data: '4GB', minutes: '300', sms: '200', validity: 'شهر', offertype: 'Mix_4GB_4G_PRE' },
-      { offerId: '4g_5gb', offerName: 'باقة فورجي 5 قيقا', price: 5445, data: '5GB', validity: 'شهر', offertype: 'Mix_5Giga_4G_PRE' },
-      { offerId: 'smart_4g_weekly', offerName: 'باقة سمارت فورجي الاسبوعية', price: 2251, data: '4GB', validity: 'اسبوع', offertype: 'Smart4Giga_4G_PRE' },
-      { offerId: 'waffer_plus_10gb', offerName: 'باقة وفر بلس 10 جيجا', price: 2500, data: '10GB', validity: 'شهر', offertype: 'WafferPlus10_4G_PRE' },
-      { offerId: 'sawa_mix', offerName: 'سوا مكس 1200', price: 4901, data: '1GB', minutes: '1200', sms: '800', validity: 'شهر', offertype: 'Mix_5000_PRE' },
-      { offerId: '4g_mix_12gb', offerName: 'فورجي مكس 12جيجا', price: 9874, data: '12GB', minutes: '600', sms: '200', validity: 'شهر', offertype: 'Mix_12Giga_4G_PRE' },
-      { offerId: 'smart_4g_15gb', offerName: 'سمارت فورجي 15 جيجا', price: 12705, data: '15GB', minutes: '-', sms: '-', validity: 'شهر', offertype: 'Smart15Giga_4G_PRE' },
-      { offerId: 'smart_daily', offerName: 'باقة سمارت اليومية', price: 1815, data: '3GB', validity: 'شهر', offertype: 'Smart3Giga_3G_PRE' },
-    ]
-  }
+    {
+        id: 'unified',
+        title: 'باقات السعر الموحد',
+        badge: 'YOU',
+        icon: Smartphone,
+        offers: [
+            { offerId: 'unified_300', offerName: 'باقة السعر الموحد 300', price: 2904, data: '500MB', minutes: '300', sms: '300', validity: 'شهر', offertype: 'Sawa_300_PRE' },
+            { offerId: 'unified_4gb', offerName: 'باقة السعر الموحد 4 جيجا فورجي', price: 2904, data: '4GB', minutes: '300', sms: '200', validity: 'شهر', offertype: 'Mix_4GB_4G_PRE' },
+            { offerId: '4g_5gb', offerName: 'باقة فورجي 5 قيقا', price: 5445, data: '5GB', validity: 'شهر', offertype: 'Mix_5Giga_4G_PRE' },
+            { offerId: 'smart_4g_weekly', offerName: 'باقة سمارت فورجي الاسبوعية', price: 2251, data: '4GB', validity: 'اسبوع', offertype: 'Smart4Giga_4G_PRE' },
+            { offerId: 'waffer_plus_10gb', offerName: 'باقة وفر بلس 10 جيجا', price: 2500, data: '10GB', validity: 'شهر', offertype: 'WafferPlus10_4G_PRE' },
+            { offerId: 'sawa_mix', offerName: 'سوا مكس 1200', price: 4901, data: '1GB', minutes: '1200', sms: '800', validity: 'شهر', offertype: 'Mix_5000_PRE' },
+            { offerId: '4g_mix_12gb', offerName: 'فورجي مكس 12جيجا', price: 9874, data: '12GB', minutes: '600', sms: '200', validity: 'شهر', offertype: 'Mix_12Giga_4G_PRE' },
+            { offerId: 'smart_4g_15gb', offerName: 'سمارت فورجي 15 جيجا', price: 12705, data: '15GB', minutes: '-', sms: '-', validity: 'شهر', offertype: 'Smart15Giga_4G_PRE' },
+            { offerId: 'smart_daily', offerName: 'باقة سمارت اليومية', price: 1815, data: '3GB', validity: 'شهر', offertype: 'Smart3Giga_3G_PRE' },
+        ]
+    },
+    // ==================== خانة جديدة 1 ====================
+    {
+        id: 'category_custom_1',
+        title: 'خانة جديدة 1',
+        badge: 'باقات 1',
+        icon: Smartphone,
+        offers: [
+            { offerId: 'c1_pkg_1', offerName: 'باقة وهمية 1', price: 1000, data: '1GB', minutes: '100', sms: '50', validity: 'شهر', offertype: 'PRETawfeer' },
+            { offerId: 'c1_pkg_2', offerName: 'باقة وهمية 2', price: 2000, data: '2GB', minutes: '200', sms: '100', validity: 'شهر', offertype: 'DUMMY_CODE_1_2' },
+            { offerId: 'c1_pkg_3', offerName: 'باقة وهمية 3', price: 3000, data: '3GB', minutes: '300', sms: '150', validity: 'شهر', offertype: 'DUMMY_CODE_1_3' },
+        ]
+    },
+    // ==================== خانة جديدة 2 ====================
+    {
+        id: 'category_custom_2',
+        title: 'خانة جديدة 2',
+        badge: 'باقات 2',
+        icon: Smartphone,
+        offers: [
+            { offerId: 'c2_pkg_1', offerName: 'باقة وهمية 1', price: 1000, data: '1GB', minutes: '100', sms: '50', validity: 'شهر', offertype: 'DUMMY_CODE_2_1' },
+            { offerId: 'c2_pkg_2', offerName: 'باقة وهمية 2', price: 2000, data: '2GB', minutes: '200', sms: '100', validity: 'شهر', offertype: 'DUMMY_CODE_2_2' },
+            { offerId: 'c2_pkg_3', offerName: 'باقة وهمية 3', price: 3000, data: '3GB', minutes: '300', sms: '150', validity: 'شهر', offertype: 'DUMMY_CODE_2_3' },
+        ]
+    },
+    // ==================== خانة جديدة 3 ====================
+    {
+        id: 'category_custom_3',
+        title: 'خانة جديدة 3',
+        badge: 'باقات 3',
+        icon: Smartphone,
+        offers: [
+            { offerId: 'c3_pkg_1', offerName: 'باقة وهمية 1', price: 1000, data: '1GB', minutes: '100', sms: '50', validity: 'شهر', offertype: 'DUMMY_CODE_3_1' },
+            { offerId: 'c3_pkg_2', offerName: 'باقة وهمية 2', price: 2000, data: '2GB', minutes: '200', sms: '100', validity: 'شهر', offertype: 'DUMMY_CODE_3_2' },
+            { offerId: 'c3_pkg_3', offerName: 'باقة وهمية 3', price: 3000, data: '3GB', minutes: '300', sms: '150', validity: 'شهر', offertype: 'DUMMY_CODE_3_3' },
+        ]
+    },
+    // ==================== خانة جديدة 4 ====================
+    {
+        id: 'category_custom_4',
+        title: 'خانة جديدة 4',
+        badge: 'باقات 4',
+        icon: Smartphone,
+        offers: [
+            { offerId: 'c4_pkg_1', offerName: 'باقة وهمية 1', price: 1000, data: '1GB', minutes: '100', sms: '50', validity: 'شهر', offertype: 'DUMMY_CODE_4_1' },
+            { offerId: 'c4_pkg_2', offerName: 'باقة وهمية 2', price: 2000, data: '2GB', minutes: '200', sms: '100', validity: 'شهر', offertype: 'DUMMY_CODE_4_2' },
+            { offerId: 'c4_pkg_3', offerName: 'باقة وهمية 3', price: 3000, data: '3GB', minutes: '300', sms: '150', validity: 'شهر', offertype: 'DUMMY_CODE_4_3' },
+        ]
+    },
+    // ==================== خانة جديدة 5 ====================
+    {
+        id: 'category_custom_5',
+        title: 'خانة جديدة 5',
+        badge: 'باقات 5',
+        icon: Smartphone,
+        offers: [
+            { offerId: 'c5_pkg_1', offerName: 'باقة وهمية 1', price: 1000, data: '1GB', minutes: '100', sms: '50', validity: 'شهر', offertype: 'DUMMY_CODE_5_1' },
+            { offerId: 'c5_pkg_2', offerName: 'باقة وهمية 2', price: 2000, data: '2GB', minutes: '200', sms: '100', validity: 'شهر', offertype: 'DUMMY_CODE_5_2' },
+            { offerId: 'c5_pkg_3', offerName: 'باقة وهمية 3', price: 3000, data: '3GB', minutes: '300', sms: '150', validity: 'شهر', offertype: 'DUMMY_CODE_5_3' },
+        ]
+    },
+    // ==================== خانة جديدة 6 ====================
+    {
+        id: 'category_custom_6',
+        title: 'خانة جديدة 6',
+        badge: 'باقات 6',
+        icon: Smartphone,
+        offers: [
+            { offerId: 'c6_pkg_1', offerName: 'باقة وهمية 1', price: 1000, data: '1GB', minutes: '100', sms: '50', validity: 'شهر', offertype: 'DUMMY_CODE_6_1' },
+            { offerId: 'c6_pkg_2', offerName: 'باقة وهمية 2', price: 2000, data: '2GB', minutes: '200', sms: '100', validity: 'شهر', offertype: 'DUMMY_CODE_6_2' },
+            { offerId: 'c6_pkg_3', offerName: 'باقة وهمية 3', price: 3000, data: '3GB', minutes: '300', sms: '150', validity: 'شهر', offertype: 'DUMMY_CODE_6_3' },
+        ]
+    }
 ];
 
 // --- SUB-COMPONENTS ---
 
 const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) => (
-    <div 
-      className="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-sm relative border border-[#FECC4F]/20 mb-3 text-center cursor-pointer hover:bg-[#FECC4F]/5 transition-all active:scale-[0.98] group"
-      onClick={onClick}
+    <div
+        className="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-sm relative border border-[#FECC4F]/20 mb-3 text-center cursor-pointer hover:bg-[#FECC4F]/5 transition-all active:scale-[0.98] group"
+        onClick={onClick}
     >
-      <h4 className="text-sm font-black text-[#E6B000] mb-2 group-hover:text-[#FECC4F] transition-colors">{offer.offerName}</h4>
-      <div className="flex items-baseline justify-center mb-4">
-        <span className="text-2xl font-black text-[#4A3B00] dark:text-white">
-            {offer.price.toLocaleString('en-US')}
-        </span>
-      </div>
-      
-      <div className="grid grid-cols-4 gap-2 pt-3 mt-2 border-t border-[#FECC4F]/10 text-center">
-        <div className="space-y-1.5">
-            <Globe className="w-5 h-5 mx-auto text-[#FECC4F]" />
-            <p className="text-[11px] font-black text-foreground truncate">{offer.data || '-'}</p>
+        <h4 className="text-sm font-black text-[#E6B000] mb-2 group-hover:text-[#FECC4F] transition-colors">{offer.offerName}</h4>
+        <div className="flex items-baseline justify-center mb-4">
+            <span className="text-2xl font-black text-[#4A3B00] dark:text-white">
+                {offer.price.toLocaleString('en-US')}
+            </span>
         </div>
-        <div className="space-y-1.5">
-            <Mail className="w-5 h-5 mx-auto text-[#FECC4F]" />
-            <p className="text-[11px] font-black text-foreground truncate">{offer.sms || '-'}</p>
+
+        <div className="grid grid-cols-4 gap-2 pt-3 mt-2 border-t border-[#FECC4F]/10 text-center">
+            <div className="space-y-1.5">
+                <Globe className="w-5 h-5 mx-auto text-[#FECC4F]" />
+                <p className="text-[11px] font-black text-foreground truncate">{offer.data || '-'}</p>
+            </div>
+            <div className="space-y-1.5">
+                <Mail className="w-5 h-5 mx-auto text-[#FECC4F]" />
+                <p className="text-[11px] font-black text-foreground truncate">{offer.sms || '-'}</p>
+            </div>
+            <div className="space-y-1.5">
+                <PhoneIcon className="w-5 h-5 mx-auto text-[#FECC4F]" />
+                <p className="text-[11px] font-black text-foreground truncate">{offer.minutes || '-'}</p>
+            </div>
+            <div className="space-y-1.5">
+                <Clock className="w-5 h-5 mx-auto text-[#FECC4F]" />
+                <p className="text-[11px] font-black text-foreground truncate">{offer.validity || '-'}</p>
+            </div>
         </div>
-        <div className="space-y-1.5">
-            <PhoneIcon className="w-5 h-5 mx-auto text-[#FECC4F]" />
-            <p className="text-[11px] font-black text-foreground truncate">{offer.minutes || '-'}</p>
-        </div>
-        <div className="space-y-1.5">
-            <Clock className="w-5 h-5 mx-auto text-[#FECC4F]" />
-            <p className="text-[11px] font-black text-foreground truncate">{offer.validity || '-'}</p>
-        </div>
-      </div>
     </div>
 );
 
 const FastOfferCard = ({ offer, onClick }: { offer: FastOffer, onClick: () => void }) => (
-    <div 
-      className="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-sm border border-[#FECC4F]/10 mb-3 cursor-pointer hover:bg-[#FECC4F]/5 transition-all active:scale-[0.98] group flex items-center justify-between"
-      onClick={offer && onClick}
+    <div
+        className="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-sm border border-[#FECC4F]/10 mb-3 cursor-pointer hover:bg-[#FECC4F]/5 transition-all active:scale-[0.98] group flex items-center justify-between"
+        onClick={offer && onClick}
     >
-      <div className="flex items-center gap-4 text-right">
-          <div className="relative h-12 w-12 overflow-hidden rounded-2xl border border-[#FECC4F]/20 bg-white shrink-0">
-              <Image src="https://i.postimg.cc/Y9hz6kzg/shrkt-yw.jpg" alt="YOU" fill className="object-cover" />
-          </div>
-          <div className="flex flex-col items-start">
-              <h4 className="text-sm font-black text-foreground group-hover:text-[#E6B000] transition-colors">{offer.title}</h4>
-              <p className="text-[10px] font-bold text-muted-foreground">شحن فوري مباشر</p>
-          </div>
-      </div>
+        <div className="flex items-center gap-4 text-right">
+            <div className="relative h-12 w-12 overflow-hidden rounded-2xl border border-[#FECC4F]/20 bg-white shrink-0">
+                <Image src="https://i.postimg.cc/Y9hz6kzg/shrkt-yw.jpg" alt="YOU" fill className="object-cover" />
+            </div>
+            <div className="flex flex-col items-start">
+                <h4 className="text-sm font-black text-foreground group-hover:text-[#E6B000] transition-colors">{offer.title}</h4>
+                <p className="text-[10px] font-bold text-muted-foreground">شحن فوري مباشر</p>
+            </div>
+        </div>
 
-      <div className="flex items-baseline text-left shrink-0">
-        <span className="text-xl font-black text-[#4A3B00] dark:text-[#FECC4F]">{offer.price.toLocaleString('en-US')}</span>
-      </div>
+        <div className="flex items-baseline text-left shrink-0">
+            <span className="text-xl font-black text-[#4A3B00] dark:text-[#FECC4F]">{offer.price.toLocaleString('en-US')}</span>
+        </div>
     </div>
 );
 
@@ -198,7 +270,7 @@ export default function YouServicesPage() {
     const handlePhoneChange = (val: string, element: HTMLInputElement) => {
         const cleaned = val.replace(/\D/g, '').slice(0, 9);
         setPhone(cleaned);
-        
+
         if (cleaned.length === 9) {
             element.blur();
             if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -225,14 +297,14 @@ export default function YouServicesPage() {
             const props = ['tel'];
             const opts = { multiple: false };
             const contacts = await (navigator as any).contacts.select(props, opts);
-            
+
             if (contacts.length > 0 && contacts[0].tel && contacts[0].tel.length > 0) {
                 let selectedNumber = contacts[0].tel[0];
                 selectedNumber = selectedNumber.replace(/[\s\-\(\)]/g, '');
                 if (selectedNumber.startsWith('+967')) selectedNumber = selectedNumber.substring(4);
                 if (selectedNumber.startsWith('00967')) selectedNumber = selectedNumber.substring(5);
                 if (selectedNumber.startsWith('07')) selectedNumber = selectedNumber.substring(1);
-                
+
                 const inputElement = document.querySelector('input[type="tel"]') as HTMLInputElement;
                 if (inputElement) handlePhoneChange(selectedNumber, inputElement);
                 else setPhone(selectedNumber.slice(0, 9));
@@ -250,7 +322,7 @@ export default function YouServicesPage() {
 
     const handleProcessPayment = async (payAmount: number, typeLabel: string, numCode: string = '0') => {
         if (!phone || !user || !userDocRef || !firestore) return;
-        
+
         if (!phone.startsWith('73')) {
             toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'رقم شركة YOU يجب أن يبدأ بـ 73' });
             return;
@@ -273,7 +345,7 @@ export default function YouServicesPage() {
             };
 
             if (typeLabel === 'رصيد') {
-                apiPayload.num = payAmount; 
+                apiPayload.num = payAmount;
                 apiPayload.israsid = '1';
             } else {
                 apiPayload.num = numCode;
@@ -314,7 +386,7 @@ export default function YouServicesPage() {
 
     const handleActivateOffer = async () => {
         if (!selectedOffer || !phone || !user || !userDocRef || !firestore) return;
-        
+
         if (!phone.startsWith('73')) {
             toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'رقم شركة YOU يجب أن يبدأ بـ 73' });
             return;
@@ -353,12 +425,12 @@ export default function YouServicesPage() {
                 userId: user.uid,
                 transid,
                 amount: totalToDeduct,
-                telecomPayload: { 
-                    mobile: phone, 
-                    action: 'billoffer', 
-                    service: 'you', 
-                    num: selectedOffer.offertype, 
-                    amount: selectedOffer.price, 
+                telecomPayload: {
+                    mobile: phone,
+                    action: 'billoffer',
+                    service: 'you',
+                    num: selectedOffer.offertype,
+                    amount: selectedOffer.price,
                     type: lineType
                 },
                 backpass
@@ -434,7 +506,7 @@ export default function YouServicesPage() {
 
             <SimpleHeader title="خدمات YOU" />
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                
+
                 <Card className="overflow-hidden rounded-[28px] shadow-lg border-none mb-4" style={YOU_GRADIENT}>
                     <CardContent className="p-6 flex items-center justify-between">
                         <div className="text-right">
@@ -464,7 +536,7 @@ export default function YouServicesPage() {
                             onChange={(e) => handlePhoneChange(e.target.value, e.target)}
                             className="text-center font-bold text-lg h-12 rounded-2xl border-none bg-muted/20 focus-visible:ring-[#FECC4F] transition-all pr-12 pl-12"
                         />
-                        <button 
+                        <button
                             onClick={handleContactPick}
                             className="absolute left-3 top-1/2 -translate-y-1/2 p-2 text-[#E6B000] hover:bg-[#FECC4F]/10 rounded-xl transition-colors"
                             title="جهات الاتصال"
@@ -476,7 +548,7 @@ export default function YouServicesPage() {
 
                 {phone.length === 9 && phone.startsWith('73') && (
                     <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
-                        
+
                         <div className="flex justify-center mt-2">
                             <Tabs value={lineType} onValueChange={setLineType} className="w-full max-w-[240px]">
                                 <TabsList className="grid w-full grid-cols-2 bg-white dark:bg-slate-900 rounded-xl h-10 p-1 shadow-sm border border-[#FECC4F]/10">
@@ -528,12 +600,12 @@ export default function YouServicesPage() {
                                     <div className="w-full text-center">
                                         <Label className="text-sm font-black text-muted-foreground block mb-4">ادخل المبلغ</Label>
                                         <div className="relative max-w-[240px] mx-auto">
-                                            <Input 
-                                                type="number" 
-                                                placeholder="0.00" 
-                                                value={amount} 
-                                                onChange={(e) => setAmount(e.target.value)} 
-                                                className="text-center font-black text-3xl h-16 rounded-2xl bg-muted/20 border-none text-[#E6B000] placeholder:text-[#FECC4F]/20 focus-visible:ring-[#FECC4F]" 
+                                            <Input
+                                                type="number"
+                                                placeholder="0.00"
+                                                value={amount}
+                                                onChange={(e) => setAmount(e.target.value)}
+                                                className="text-center font-black text-3xl h-16 rounded-2xl bg-muted/20 border-none text-[#E6B000] placeholder:text-[#FECC4F]/20 focus-visible:ring-[#FECC4F]"
                                             />
                                             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#FECC4F]/40 font-black text-sm">ر.ي</div>
                                         </div>
@@ -544,13 +616,13 @@ export default function YouServicesPage() {
                                             <p className="text-xl font-black text-[#E6B000]">{(parseFloat(amount) * 0.828).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ريال</p>
                                         </div>
                                     )}
-                                    <Button 
-                                        className="w-full h-14 rounded-2xl text-lg font-black mt-8 shadow-lg bg-[#FECC4F] text-[#4A3B00] hover:bg-[#E6B000]" 
+                                    <Button
+                                        className="w-full h-14 rounded-2xl text-lg font-black mt-8 shadow-lg bg-[#FECC4F] text-[#4A3B00] hover:bg-[#E6B000]"
                                         onClick={() => {
                                             const val = parseFloat(amount);
                                             if (isNaN(val) || val < 200) { toast({ variant: 'destructive', title: 'خطأ في المبلغ', description: 'أقل مبلغ للسداد هو 200 ريال.' }); return; }
                                             setIsConfirmingBalance(true);
-                                        }} 
+                                        }}
                                         disabled={!amount}
                                     >
                                         تنفيذ السداد
