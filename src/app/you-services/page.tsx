@@ -120,7 +120,7 @@ const YOU_CATEGORIES = [
         icon: Smartphone,
         offers: [
             { offerId: 'c1_pkg_1', offerName: 'باقة وهمية 1', price: 1000, data: '1GB', minutes: '100', sms: '50', validity: 'شهر', offertype: 'PRETawfeer' },
-            { offerId: 'c1_pkg_2', offerName: 'باقة وهمية 2', price: 2000, data: '2GB', minutes: '200', sms: '100', validity: 'شهر', offertype: 'DUMMY_CODE_1_2' },
+            { offerId: 'c1_pkg_2', offerName: 'هلال 2', price: 2000, data: '2GB', minutes: '200', sms: '100', validity: 'شهر', offertype: 'Helal1Giga4G_PRE' },
             { offerId: 'c1_pkg_3', offerName: 'باقة وهمية 3', price: 3000, data: '3GB', minutes: '300', sms: '150', validity: 'شهر', offertype: 'DUMMY_CODE_1_3' },
         ]
     },
