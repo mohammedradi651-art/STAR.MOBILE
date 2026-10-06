@@ -276,10 +276,6 @@ export default function YouServicesPage() {
             if (typeof navigator !== 'undefined' && navigator.vibrate) {
                 navigator.vibrate(50);
             }
-
-            if (!cleaned.startsWith('73')) {
-                toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'رقم شركة YOU يجب أن يبدأ بـ 73' });
-            }
         }
     };
 
@@ -323,8 +319,8 @@ export default function YouServicesPage() {
     const handleProcessPayment = async (payAmount: number, typeLabel: string, numCode: string = '0') => {
         if (!phone || !user || !userDocRef || !firestore) return;
 
-        if (!phone.startsWith('73')) {
-            toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'رقم شركة YOU يجب أن يبدأ بـ 73' });
+        if (phone.length !== 9) {
+            toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'يرجى إدخال رقم هاتف مكون من 9 أرقام' });
             return;
         }
 
@@ -387,8 +383,8 @@ export default function YouServicesPage() {
     const handleActivateOffer = async () => {
         if (!selectedOffer || !phone || !user || !userDocRef || !firestore) return;
 
-        if (!phone.startsWith('73')) {
-            toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'رقم شركة YOU يجب أن يبدأ بـ 73' });
+        if (phone.length !== 9) {
+            toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'يرجى إدخال رقم هاتف مكون من 9 أرقام' });
             return;
         }
 
@@ -531,7 +527,7 @@ export default function YouServicesPage() {
                     <div className="relative">
                         <Input
                             type="tel"
-                            placeholder="73xxxxxxx"
+                            placeholder="7xxxxxxxx"
                             value={phone}
                             onChange={(e) => handlePhoneChange(e.target.value, e.target)}
                             className="text-center font-bold text-lg h-12 rounded-2xl border-none bg-muted/20 focus-visible:ring-[#FECC4F] transition-all pr-12 pl-12"
@@ -546,7 +542,7 @@ export default function YouServicesPage() {
                     </div>
                 </div>
 
-                {phone.length === 9 && phone.startsWith('7') && (
+                {phone.length === 9 && (
                     <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
 
                         <div className="flex justify-center mt-2">
