@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
-import { collection, query, where, getDocs, doc, writeBatch, increment } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, writeBatch, increment, getDoc } from 'firebase/firestore';
+import { DEFAULT_SERVICES_CONFIG, SystemServicesConfig, calculateFinalServicePrice } from '@/lib/services-config';
 
 /**
  * @fileOverview نقطة نهاية منظومة الوادي v1.7.5 (نسخة الذكاء والحماية القصوى)
+ * - تعتمد على أسعار ونسب الربط البرمجي (System Config) وخصومات العميل (alwadiDiscount).
  * - مطابقة ذكية: التأكد من أن المعرف يخص رقم الكرت فعلياً.
  * - حماية الفئات: قبول الباقات الرسمية فقط.
  * - تعريب كامل لرسائل الخطأ.
@@ -52,9 +54,52 @@ export async function POST(req: Request) {
     const userData = userDoc.data();
     const userId = userDoc.id;
 
+    // جلب إعدادات أسعار المنظومة والربط البرمجي
+    let systemConfig: SystemServicesConfig = DEFAULT_SERVICES_CONFIG;
+    try {
+      const configSnap = await getDoc(doc(firestore, 'system_settings', 'telecom_config'));
+      if (configSnap.exists()) {
+        systemConfig = { ...DEFAULT_SERVICES_CONFIG, ...(configSnap.data() as any) };
+      }
+    } catch (e) {
+      console.warn("Could not read telecom_config in v1/alwadi:", e);
+    }
+
+    if (systemConfig.alwadi && systemConfig.alwadi.enabled === false) {
+      return NextResponse.json({
+        success: false,
+        code: 'SM_SERVICE_DISABLED',
+        message: 'خدمة منظومة الوادي معطلة حالياً في النظام',
+        timestamp
+      }, { status: 403, headers: corsHeaders });
+    }
+
     const body = await req.json();
     const { action, number, packageId, subscriberId } = body;
     const origin = new URL(req.url).origin;
+
+    const originalPrices: Record<string, number> = {
+      "1": systemConfig.alwadi?.packages?.twoMonths || 3000,
+      "3": systemConfig.alwadi?.packages?.fourMonths || 6000,
+      "7": systemConfig.alwadi?.packages?.sixMonths || 9000,
+      "9": systemConfig.alwadi?.packages?.oneYear || 15000
+    };
+
+    // --- جلب قائمة الباقات والأسعار المعتمدة للعميل ---
+    if (action === 'packages' || action === 'pricing') {
+      const pkgs = [
+        { id: "1", name: "باقة شهرين", originalPrice: originalPrices["1"], price: calculateFinalServicePrice(originalPrices["1"], systemConfig.alwadi, userData.alwadiDiscount) },
+        { id: "3", name: "باقة 4 أشهر", originalPrice: originalPrices["3"], price: calculateFinalServicePrice(originalPrices["3"], systemConfig.alwadi, userData.alwadiDiscount) },
+        { id: "7", name: "باقة 6 أشهر", originalPrice: originalPrices["7"], price: calculateFinalServicePrice(originalPrices["7"], systemConfig.alwadi, userData.alwadiDiscount) },
+        { id: "9", name: "باقة سنة كاملة", originalPrice: originalPrices["9"], price: calculateFinalServicePrice(originalPrices["9"], systemConfig.alwadi, userData.alwadiDiscount) }
+      ];
+      return NextResponse.json({
+        success: true,
+        code: 'SM_SUCCESS',
+        data: pkgs,
+        timestamp
+      }, { headers: corsHeaders });
+    }
 
     // --- 1. عملية الاستعلام (Lookup) ---
     if (action === 'lookup') {
@@ -110,19 +155,23 @@ export async function POST(req: Request) {
             }, { status: 400, headers: corsHeaders });
         }
 
-        // ب. التحقق من صحة رقم الباقة (حماية الفئات)
-        const discountedPrices: Record<string, number> = { "1": 2925, "3": 5850, "7": 8775, "9": 14625 };
-        const originalPrices: Record<string, number> = { "1": 3000, "3": 6000, "7": 9000, "9": 15000 };
-        
-        const price = discountedPrices[packageId];
-        if (!price) {
+        // ب. التحقق من صحة رقم الباقة واحتساب السعر الدقيق بناءً على إعدادات الـ API والنسب
+        const pkgIdStr = String(packageId).trim();
+        const basePrice = originalPrices[pkgIdStr];
+        if (!basePrice) {
             return NextResponse.json({ 
                 success: false, 
                 code: 'SM_VALIDATION_ERROR', 
-                message: 'الباقة غير موجودة', 
+                message: 'الباقة غير موجودة. الفئات المتاحة: 1 (شهرين), 3 (4 أشهر), 7 (6 أشهر), 9 (سنة)', 
                 timestamp 
             }, { status: 400, headers: corsHeaders });
         }
+
+        const price = calculateFinalServicePrice(
+            basePrice,
+            systemConfig.alwadi,
+            userData.alwadiDiscount
+        );
 
         // ج. المطابقة الذكية: التحقق من أن subscriberId المرسل يطابق رقم الكرت فعلياً
         try {
@@ -155,7 +204,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ 
                 success: false, 
                 code: 'SM_INSUFFICIENT_BALANCE', 
-                message: 'رصيدك الحالي في ستار موبايل لا يكفي', 
+                message: `رصيدك الحالي في ستار موبايل لا يكفي. المطلوب: ${price} ر.ي، المتاح: ${userData.balance || 0} ر.ي`, 
                 timestamp 
             }, { status: 400, headers: corsHeaders });
         }
@@ -178,7 +227,7 @@ export async function POST(req: Request) {
                 code: 'SM_SUCCESS',
                 message: 'نجحت محاكاة التجديد (وضع التجربة)',
                 transactionId: `TEST-${Date.now()}`,
-                data: { cardNumber: number, subscriberId: subscriberId, amount: price, mode: 'demo' },
+                data: { cardNumber: number, subscriberId: subscriberId, amount: price, originalPrice: basePrice, mode: 'demo' },
                 timestamp
             }, { headers: corsHeaders });
         }
@@ -203,7 +252,7 @@ export async function POST(req: Request) {
                 transactionDate: timestamp,
                 amount: price,
                 transactionType: `تجديد منظومة الوادي (API)`,
-                notes: `كرت: ${number} - باقة: ${originalPrices[packageId]} ر.ي (خصم الربط 2.5%)`,
+                notes: `كرت: ${number} - باقة: ${basePrice} ر.ي (سعر الربط البرمجي: ${price} ر.ي)`,
                 status: 'success'
             });
 
@@ -214,7 +263,7 @@ export async function POST(req: Request) {
                 code: 'SM_SUCCESS',
                 message: 'تم التجديد بنجاح وخصم المبلغ من رصيدك',
                 transactionId: `ALW-API-${Date.now()}`,
-                data: { cardNumber: number, subscriberId: subscriberId, amount: price, client: userData.displayName },
+                data: { cardNumber: number, subscriberId: subscriberId, amount: price, originalPrice: basePrice, client: userData.displayName },
                 timestamp
             }, { headers: corsHeaders });
         }

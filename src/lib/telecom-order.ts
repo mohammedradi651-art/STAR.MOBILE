@@ -356,6 +356,9 @@ export async function executeTelecomRequestWithTimeout({
     // فشل من المزود خلال الـ 10 ثوانٍ -> إرجاع الفلوس وتحديث الملاحظات
     const providerError = data?.resultDesc || data?.message || 'تم رفض العملية من قبل مزود الخدمة.';
     await markPaymentFailedAndRefund(firestore, userId, transid, amount, providerError);
-    throw new Error(providerError);
+    const refundNote = (providerError.includes('تمت إعادة') || providerError.includes('إعادة المبلغ'))
+      ? providerError 
+      : `${providerError} (تمت إعادة المبلغ إلى رصيدك)`;
+    throw new Error(refundNote);
   }
 }

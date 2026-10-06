@@ -156,26 +156,37 @@ export function calculateFinalServicePrice(
   userDiscountPercent?: number
 ): number {
   if (!basePrice || isNaN(basePrice) || basePrice <= 0) return 0;
-  if (!setting && (!userDiscountPercent || userDiscountPercent <= 0)) return roundCurrency(basePrice);
 
-  let finalRate = setting?.rate;
+  const userDiscount = Number(userDiscountPercent || 0);
+  let effectiveRate = setting?.rate;
 
-  // إذا كان لدى العميل نسبة خصم مخصصة (مثال: 3 تعني خصم 3%)
-  if (userDiscountPercent !== undefined && userDiscountPercent > 0) {
-    const customUserRate = (100 - userDiscountPercent) / 100;
-    finalRate = (finalRate !== undefined && finalRate > 0)
-      ? Math.min(finalRate, customUserRate)
+  // إذا كان للعميل نسبة خصم مخصصة (مثال: 5 تعني خصم 5%)
+  if (userDiscount > 0) {
+    const customUserRate = (100 - userDiscount) / 100;
+    effectiveRate = (effectiveRate !== undefined && effectiveRate > 0 && effectiveRate !== 1)
+      ? Math.min(effectiveRate, customUserRate)
       : customUserRate;
   }
 
-  if (finalRate !== undefined && finalRate > 0) {
-    return roundCurrency(basePrice * finalRate);
+  // إذا كانت النسبة/المعامل مخصصة (تختلف عن 1)
+  if (effectiveRate !== undefined && effectiveRate > 0 && effectiveRate !== 1) {
+    return roundCurrency(basePrice * effectiveRate);
   }
 
+  // في حال وجود نسبة مئوية (percentage) أو رسوم إضافية (fixedFee)
   const percent = setting?.percentage || 0;
   const fixed = setting?.fixedFee || 0;
-  const total = basePrice + (basePrice * (percent / 100)) + fixed;
-  return roundCurrency(total);
+  if (percent !== 0 || fixed !== 0) {
+    const total = basePrice + (basePrice * (percent / 100)) + fixed;
+    return roundCurrency(total);
+  }
+
+  // إذا كانت النسبة 1 ولا يوجد أي خصم أو تعديل
+  if (effectiveRate !== undefined && effectiveRate > 0) {
+    return roundCurrency(basePrice * effectiveRate);
+  }
+
+  return roundCurrency(basePrice);
 }
 
 /**
@@ -337,6 +348,7 @@ export function calculateApiTransactionCost(
   const telecomDiscount = Number(userDiscounts?.telecomDiscount || 0);
   const networksDiscount = Number(userDiscounts?.networksDiscount || 0);
   const gamesDiscount = Number(userDiscounts?.gamesDiscount || 0);
+  const alwadiDiscount = Number(userDiscounts?.alwadiDiscount || 0);
 
   // 1. يمن موبايل
   if (service === 'yemen' || service === 'yem') {
@@ -429,6 +441,28 @@ export function calculateApiTransactionCost(
   // 11. الألعاب وبطاقات الشحن
   if (service === 'games') {
     return calculateFinalServicePrice(rawAmount, config.networks, gamesDiscount || telecomDiscount);
+  }
+
+  // 12. منظومة الوادي (Al-Wadi)
+  if (service === 'alwadi' || service === 'alwaadi') {
+    const pkgKey = String(payload.packageId || payload.packageid || payload.num || payload.offerid || '').trim();
+    const pkgMap: Record<string, number> = {
+      '1': config.alwadi?.packages?.twoMonths || 3000,
+      '3': config.alwadi?.packages?.fourMonths || 6000,
+      '7': config.alwadi?.packages?.sixMonths || 9000,
+      '9': config.alwadi?.packages?.oneYear || 15000,
+      'twoMonths': config.alwadi?.packages?.twoMonths || 3000,
+      'fourMonths': config.alwadi?.packages?.fourMonths || 6000,
+      'sixMonths': config.alwadi?.packages?.sixMonths || 9000,
+      'oneYear': config.alwadi?.packages?.oneYear || 15000,
+    };
+    const basePrice = rawAmount > 0 ? rawAmount : (pkgMap[pkgKey] || 3000);
+    return calculateFinalServicePrice(basePrice, config.alwadi, alwadiDiscount);
+  }
+
+  // 13. كروت شبكات الواي فاي (Networks)
+  if (service === 'networks' || service === 'cards' || service === 'shabakat') {
+    return calculateFinalServicePrice(rawAmount, config.networks, networksDiscount);
   }
 
   // افتراضي لأي خدمة غير محددة

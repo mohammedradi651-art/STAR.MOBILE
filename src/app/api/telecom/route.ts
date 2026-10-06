@@ -153,7 +153,7 @@ export async function POST(request: Request) {
     }
 
     // 4. معالجة طلب فحص الرصيد للعميل (إذا كان الأكشن balance)
-    const isBillingAction = !action || action === 'bill' || action === 'billoffer' || service === 'sabaunits' || service === 'sabaoffer';
+    const isBillingAction = !action || action === 'bill' || action === 'billoffer' || action === 'renew' || action === 'order' || service === 'sabaunits' || service === 'sabaoffer';
 
     if (action === 'balance' && !isInternalAppRequest) {
       if (service === 'info' && payload.type === 'provider') {
@@ -418,15 +418,19 @@ export async function POST(request: Request) {
           initialBalance += requiredCost;
         }
 
+        const formattedMessage = (shouldPerformImmediateDeduction && requiredCost > 0)
+          ? `${failReason} (تمت إعادة المبلغ إلى رصيدك)`
+          : failReason;
+
         return NextResponse.json({
           ...data,
           resultCode: data.resultCode || "-1",
           status: "failed",
-          refunded: shouldPerformImmediateDeduction,
+          refunded: Boolean(shouldPerformImmediateDeduction && requiredCost > 0),
           transid: transid,
           currentBalance: initialBalance,
-          message: `${failReason} (تمت إعادة المبلغ إلى رصيدك)`,
-          resultDesc: `${failReason} (تمت إعادة المبلغ إلى رصيدك)`
+          message: formattedMessage,
+          resultDesc: formattedMessage
         }, { status: 400 });
       }
 

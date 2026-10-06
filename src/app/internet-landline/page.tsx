@@ -274,7 +274,10 @@ export default function LandlinePage() {
                         }
                     }
                 } else {
-                    throw new Error(result.resultDesc || 'الرقم غير مسجل أو هناك خطأ في الاستعلام.');
+                    const err = (result.resultDesc || result.message || 'الرقم غير مسجل أو ليس لديه نقطة نت.')
+                        .replace(/\s*\(?تمت?\s*إعادة\s*(المبلغ|الرصيد)\s*(إلى|الى)\s*رصيدك\)?/gi, '')
+                        .trim();
+                    throw new Error(err || 'الرقم غير مسجل أو ليس لديه نقطة نت.');
                 }
             } else {
                 // منطق الهاتف الثابت فقط
@@ -331,16 +334,19 @@ export default function LandlinePage() {
                     } else {
                         errorMsg = 'لم يتم العثور على مبلغ الفاتورة.';
                     }
+
+                    errorMsg = errorMsg.replace(/\s*\(?تمت?\s*إعادة\s*(المبلغ|الرصيد)\s*(إلى|الى)\s*رصيدك\)?/gi, '').trim();
                     
                     toast({
                         variant: 'destructive',
                         title: 'تنبيه من المزود',
-                        description: errorMsg
+                        description: errorMsg || 'لم يتم العثور على مبلغ الفاتورة.'
                     });
                 }
             }
         } catch (error: any) {
-            toast({ variant: 'destructive', title: 'تنبيه من المزود', description: error.message });
+            const cleanErr = (error.message || '').replace(/\s*\(?تمت?\s*إعادة\s*(المبلغ|الرصيد)\s*(إلى|الى)\s*رصيدك\)?/gi, '').trim();
+            toast({ variant: 'destructive', title: 'تنبيه من المزود', description: cleanErr || error.message });
         } finally {
             setIsSearching(false);
         }
