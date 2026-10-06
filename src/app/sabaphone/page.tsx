@@ -111,12 +111,6 @@ export const PREPAID_PACKAGE_SECTIONS = [
     badge: 'الأكثر طلباً',
     offers: [
       { num: '68', name: 'يابلاش اليومية', price: 1446, data: '100 MB', minutes: '30 دقيقة', sms: '30', validity: '24 ساعة' },
-      { num: '69', name: 'يابلاش الأسبوعية', price: 1446, data: '300 MB', minutes: '80 دقيقة', sms: '80', validity: '7 أيام' },
-      { num: '70', name: 'يابلاش الشهرية', price: 3615, data: '1 GB', minutes: '300 دقيقة', sms: '300', validity: '30 يوم' },
-      { num: '71', name: 'يابلاش 10 أيام', price: 2169, data: '300 MB', minutes: '100 دقيقة', sms: '100', validity: '10 أيام' },
-      { num: '72', name: 'يابلاش سوبر بلاس', price: 10845, data: '3 GB', minutes: '800 دقيقة', sms: '800', validity: '30 يوم' },
-      { num: '73', name: 'يابلاش كلام - 400 دقيقة', price: 3615, data: '-', minutes: '400 دقيقة', sms: '100', validity: '30 يوم' },
-      { num: '74', name: 'يابلاش بلاس', price: 4518, data: '1.5 GB', minutes: '400 دقيقة', sms: '400', validity: '30 يوم' },
     ]
   },
   {
@@ -124,10 +118,7 @@ export const PREPAID_PACKAGE_SECTIONS = [
     title: 'باقات فورجي',
     badge: '4G',
     offers: [
-      { num: '110', name: 'فورجي يومية 500MB', price: 1050, data: '512 MB', minutes: '20 دقيقة', sms: '30', validity: 'يوم' },
-      { num: '111', name: 'فورجي أسبوعية 2GB', price: 4200, data: '2 GB', minutes: '150 دقيقة', sms: '150', validity: '7 أيام' },
-      { num: '112', name: 'فورجي شهرية 5GB', price: 9600, data: '5 GB', minutes: '400 دقيقة', sms: '400', validity: '30 يوم' },
-      { num: '113', name: 'سوبر فورجي 12GB', price: 19500, data: '12 GB', minutes: '800 دقيقة', sms: '800', validity: '30 يوم' },
+
     ]
   },
   {
@@ -135,9 +126,7 @@ export const PREPAID_PACKAGE_SECTIONS = [
     title: 'باقات التواصل الاجتماعي',
     badge: 'سوشيال',
     offers: [
-      { num: '75', name: 'واتساب الأسبوعية', price: 1446, data: 'واتساب بلا حدود', minutes: '-', sms: '-', validity: '7 أيام' },
-      { num: '76', name: 'واتساب بلاس الشهرية', price: 4518, data: 'واتساب + تصفح', minutes: '-', sms: '-', validity: '30 يوم' },
-      { num: '77', name: 'سوشيال ميديا الشهرية', price: 6000, data: 'سوشيال 2GB', minutes: '-', sms: '-', validity: '30 يوم' },
+
     ]
   },
   {
@@ -145,11 +134,7 @@ export const PREPAID_PACKAGE_SECTIONS = [
     title: 'باقات سوبر نت',
     badge: 'إنترنت',
     offers: [
-      { num: '81', name: 'سوبرنت اليومية 200MB', price: 1446, data: '200 MB', minutes: '-', sms: '-', validity: '24 ساعة' },
-      { num: '82', name: 'سوبرنت الشهرية 250MB', price: 3615, data: '250 MB', minutes: '-', sms: '-', validity: '30 يوم' },
-      { num: '83', name: 'سوبرنت الشهرية 500MB', price: 5424, data: '500 MB', minutes: '-', sms: '-', validity: '30 يوم' },
-      { num: '84', name: 'سوبرنت الشهرية 1GB', price: 9039, data: '1 GB', minutes: '-', sms: '-', validity: '30 يوم' },
-      { num: '85', name: 'سوبرنت الشهرية 4GB', price: 14460, data: '4 GB', minutes: '-', sms: '-', validity: '30 يوم' },
+
     ]
   },
   {
@@ -157,9 +142,7 @@ export const PREPAID_PACKAGE_SECTIONS = [
     title: 'باقات الرسائل',
     badge: 'SMS',
     offers: [
-      { num: '95', name: 'باقة 250 رسالة', price: 1500, data: '-', minutes: '-', sms: '250 SMS', validity: '30 يوم' },
-      { num: '96', name: 'باقة 600 رسالة', price: 3000, data: '-', minutes: '-', sms: '600 SMS', validity: '30 يوم' },
-      { num: '97', name: 'باقة 1500 رسالة', price: 6000, data: '-', minutes: '-', sms: '1500 SMS', validity: '30 يوم' },
+
     ]
   },
   {
@@ -167,9 +150,7 @@ export const PREPAID_PACKAGE_SECTIONS = [
     title: 'باقات جي اس ام',
     badge: 'دقائق GSM',
     offers: [
-      { num: '101', name: 'دقائق GSM أسبوعية (150 دقيقة)', price: 1800, data: '-', minutes: '150 دقيقة', sms: '50', validity: '7 أيام' },
-      { num: '102', name: 'دقائق GSM شهرية (500 دقيقة)', price: 5400, data: '-', minutes: '500 دقيقة', sms: '150', validity: '30 يوم' },
-      { num: '103', name: 'دقائق GSM أعمال (1200 دقيقة)', price: 12000, data: '-', minutes: '1200 دقيقة', sms: '300', validity: '30 يوم' },
+
     ]
   },
   {
@@ -177,10 +158,7 @@ export const PREPAID_PACKAGE_SECTIONS = [
     title: 'باقات الجنوب',
     badge: 'عدن والجنوب',
     offers: [
-      { num: '120', name: 'باقة عدن اليومية', price: 300, data: '250 MB', minutes: '30 دقيقة', sms: '30', validity: 'يوم' },
-      { num: '121', name: 'باقة عدن الأسبوعية', price: 1000, data: '1.5 GB', minutes: '150 دقيقة', sms: '100', validity: '7 أيام' },
-      { num: '122', name: 'باقة الجنوب الشهرية 3GB', price: 2500, data: '3 GB', minutes: '350 دقيقة', sms: '250', validity: '30 يوم' },
-      { num: '123', name: 'باقة الجنوب سوبر 8GB', price: 5500, data: '8 GB', minutes: '700 دقيقة', sms: '500', validity: '30 يوم' },
+
     ]
   }
 ];
@@ -199,10 +177,7 @@ export const POSTPAID_PACKAGE_SECTIONS = [
     title: 'باقات يابلاش + واحد',
     badge: 'الأكثر طلباً',
     offers: [
-      { num: '70', name: 'يابلاش الشهرية', price: 3615, data: '1 GB', minutes: '300 دقيقة', sms: '300', validity: '30 يوم' },
-      { num: '72', name: 'يابلاش سوبر بلاس', price: 10845, data: '3 GB', minutes: '800 دقيقة', sms: '800', validity: '30 يوم' },
-      { num: '73', name: 'يابلاش كلام - 400 دقيقة', price: 3615, data: '-', minutes: '400 دقيقة', sms: '100', validity: '30 يوم' },
-      { num: '74', name: 'يابلاش بلاس', price: 4518, data: '1.5 GB', minutes: '400 دقيقة', sms: '400', validity: '30 يوم' },
+
     ]
   },
   {
@@ -210,8 +185,7 @@ export const POSTPAID_PACKAGE_SECTIONS = [
     title: 'باقات فورجي',
     badge: '4G',
     offers: [
-      { num: '112', name: 'فورجي شهرية 5GB', price: 9600, data: '5 GB', minutes: '400 دقيقة', sms: '400', validity: '30 يوم' },
-      { num: '113', name: 'سوبر فورجي 12GB', price: 19500, data: '12 GB', minutes: '800 دقيقة', sms: '800', validity: '30 يوم' },
+
     ]
   },
   {
@@ -219,8 +193,7 @@ export const POSTPAID_PACKAGE_SECTIONS = [
     title: 'باقات التواصل الاجتماعي',
     badge: 'سوشيال',
     offers: [
-      { num: '76', name: 'واتساب بلاس الشهرية', price: 4518, data: 'واتساب + تصفح', minutes: '-', sms: '-', validity: '30 يوم' },
-      { num: '77', name: 'سوشيال ميديا الشهرية', price: 6000, data: 'سوشيال 2GB', minutes: '-', sms: '-', validity: '30 يوم' },
+
     ]
   },
   {
@@ -228,10 +201,7 @@ export const POSTPAID_PACKAGE_SECTIONS = [
     title: 'باقات سوبر نت',
     badge: 'إنترنت',
     offers: [
-      { num: '82', name: 'سوبرنت الشهرية 250MB', price: 3615, data: '250 MB', minutes: '-', sms: '-', validity: '30 يوم' },
-      { num: '83', name: 'سوبرنت الشهرية 500MB', price: 5424, data: '500 MB', minutes: '-', sms: '-', validity: '30 يوم' },
-      { num: '84', name: 'سوبرنت الشهرية 1GB', price: 9039, data: '1 GB', minutes: '-', sms: '-', validity: '30 يوم' },
-      { num: '85', name: 'سوبرنت الشهرية 4GB', price: 14460, data: '4 GB', minutes: '-', sms: '-', validity: '30 يوم' },
+
     ]
   },
   {
@@ -239,9 +209,7 @@ export const POSTPAID_PACKAGE_SECTIONS = [
     title: 'باقات الرسائل',
     badge: 'SMS',
     offers: [
-      { num: '95', name: 'باقة 250 رسالة', price: 1500, data: '-', minutes: '-', sms: '250 SMS', validity: '30 يوم' },
-      { num: '96', name: 'باقة 600 رسالة', price: 3000, data: '-', minutes: '-', sms: '600 SMS', validity: '30 يوم' },
-      { num: '97', name: 'باقة 1500 رسالة', price: 6000, data: '-', minutes: '-', sms: '1500 SMS', validity: '30 يوم' },
+
     ]
   },
   {
@@ -249,8 +217,7 @@ export const POSTPAID_PACKAGE_SECTIONS = [
     title: 'باقات جي اس ام',
     badge: 'دقائق GSM',
     offers: [
-      { num: '102', name: 'دقائق GSM شهرية (500 دقيقة)', price: 5400, data: '-', minutes: '500 دقيقة', sms: '150', validity: '30 يوم' },
-      { num: '103', name: 'دقائق GSM أعمال (1200 دقيقة)', price: 12000, data: '-', minutes: '1200 دقيقة', sms: '300', validity: '30 يوم' },
+
     ]
   },
   {
@@ -258,8 +225,7 @@ export const POSTPAID_PACKAGE_SECTIONS = [
     title: 'باقات الجنوب',
     badge: 'عدن والجنوب',
     offers: [
-      { num: '122', name: 'باقة الجنوب الشهرية 3GB', price: 2500, data: '3 GB', minutes: '350 دقيقة', sms: '250', validity: '30 يوم' },
-      { num: '123', name: 'باقة الجنوب سوبر 8GB', price: 5500, data: '8 GB', minutes: '700 دقيقة', sms: '500', validity: '30 يوم' },
+
     ]
   }
 ];

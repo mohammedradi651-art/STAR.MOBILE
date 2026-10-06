@@ -115,73 +115,61 @@ const YOU_CATEGORIES = [
     // ==================== خانة جديدة 1 ====================
     {
         id: 'category_custom_1',
-        title: 'خانة جديدة 1',
-        badge: 'باقات 1',
+        title: 'باقات سوى',
+        badge: 'سوى',
         icon: Smartphone,
         offers: [
-            { offerId: 'c1_pkg_1', offerName: 'باقة وهمية 1', price: 1000, data: '1GB', minutes: '100', sms: '50', validity: 'شهر', offertype: 'PRETawfeer' },
-            { offerId: 'c1_pkg_2', offerName: 'هلال 2', price: 2000, data: '2GB', minutes: '200', sms: '100', validity: 'شهر', offertype: 'Helal1Giga4G_PRE' },
-            { offerId: 'c1_pkg_3', offerName: 'باقة وهمية 3', price: 3000, data: '3GB', minutes: '300', sms: '150', validity: 'شهر', offertype: 'DUMMY_CODE_1_3' },
+           
         ]
     },
     // ==================== خانة جديدة 2 ====================
     {
         id: 'category_custom_2',
-        title: 'خانة جديدة 2',
-        badge: 'باقات 2',
+        title: 'باقات التواصل الاجتماعي',
+        badge: 'سوشيال',
         icon: Smartphone,
         offers: [
-            { offerId: 'c2_pkg_1', offerName: 'باقة وهمية 1', price: 1000, data: '1GB', minutes: '100', sms: '50', validity: 'شهر', offertype: 'DUMMY_CODE_2_1' },
-            { offerId: 'c2_pkg_2', offerName: 'باقة وهمية 2', price: 2000, data: '2GB', minutes: '200', sms: '100', validity: 'شهر', offertype: 'DUMMY_CODE_2_2' },
-            { offerId: 'c2_pkg_3', offerName: 'باقة وهمية 3', price: 3000, data: '3GB', minutes: '300', sms: '150', validity: 'شهر', offertype: 'DUMMY_CODE_2_3' },
+
         ]
     },
     // ==================== خانة جديدة 3 ====================
     {
         id: 'category_custom_3',
-        title: 'خانة جديدة 3',
-        badge: 'باقات 3',
+        title: 'باقات ماكس الشهرية',
+        badge: 'ماكس',
         icon: Smartphone,
         offers: [
-            { offerId: 'c3_pkg_1', offerName: 'باقة وهمية 1', price: 1000, data: '1GB', minutes: '100', sms: '50', validity: 'شهر', offertype: 'DUMMY_CODE_3_1' },
-            { offerId: 'c3_pkg_2', offerName: 'باقة وهمية 2', price: 2000, data: '2GB', minutes: '200', sms: '100', validity: 'شهر', offertype: 'DUMMY_CODE_3_2' },
-            { offerId: 'c3_pkg_3', offerName: 'باقة وهمية 3', price: 3000, data: '3GB', minutes: '300', sms: '150', validity: 'شهر', offertype: 'DUMMY_CODE_3_3' },
+
         ]
     },
     // ==================== خانة جديدة 4 ====================
     {
         id: 'category_custom_4',
-        title: 'خانة جديدة 4',
-        badge: 'باقات 4',
+        title: 'باقات اتصال مكالمات',
+        badge: 'مكالمات',
         icon: Smartphone,
         offers: [
-            { offerId: 'c4_pkg_1', offerName: 'باقة وهمية 1', price: 1000, data: '1GB', minutes: '100', sms: '50', validity: 'شهر', offertype: 'DUMMY_CODE_4_1' },
-            { offerId: 'c4_pkg_2', offerName: 'باقة وهمية 2', price: 2000, data: '2GB', minutes: '200', sms: '100', validity: 'شهر', offertype: 'DUMMY_CODE_4_2' },
-            { offerId: 'c4_pkg_3', offerName: 'باقة وهمية 3', price: 3000, data: '3GB', minutes: '300', sms: '150', validity: 'شهر', offertype: 'DUMMY_CODE_4_3' },
+
         ]
     },
     // ==================== خانة جديدة 5 ====================
     {
         id: 'category_custom_5',
-        title: 'خانة جديدة 5',
-        badge: 'باقات 5',
+        title: 'باقات رسائل',
+        badge: 'رسائل',
         icon: Smartphone,
         offers: [
-            { offerId: 'c5_pkg_1', offerName: 'باقة وهمية 1', price: 1000, data: '1GB', minutes: '100', sms: '50', validity: 'شهر', offertype: 'DUMMY_CODE_5_1' },
-            { offerId: 'c5_pkg_2', offerName: 'باقة وهمية 2', price: 2000, data: '2GB', minutes: '200', sms: '100', validity: 'شهر', offertype: 'DUMMY_CODE_5_2' },
-            { offerId: 'c5_pkg_3', offerName: 'باقة وهمية 3', price: 3000, data: '3GB', minutes: '300', sms: '150', validity: 'شهر', offertype: 'DUMMY_CODE_5_3' },
+
         ]
     },
     // ==================== خانة جديدة 6 ====================
     {
         id: 'category_custom_6',
-        title: 'خانة جديدة 6',
-        badge: 'باقات 6',
+        title: 'باقات هلال فورجي',
+        badge: 'هلال',
         icon: Smartphone,
         offers: [
-            { offerId: 'c6_pkg_1', offerName: 'باقة وهمية 1', price: 1000, data: '1GB', minutes: '100', sms: '50', validity: 'شهر', offertype: 'DUMMY_CODE_6_1' },
-            { offerId: 'c6_pkg_2', offerName: 'باقة وهمية 2', price: 2000, data: '2GB', minutes: '200', sms: '100', validity: 'شهر', offertype: 'DUMMY_CODE_6_2' },
-            { offerId: 'c6_pkg_3', offerName: 'باقة وهمية 3', price: 3000, data: '3GB', minutes: '300', sms: '150', validity: 'شهر', offertype: 'DUMMY_CODE_6_3' },
+
         ]
     }
 ];
@@ -276,6 +264,13 @@ export default function YouServicesPage() {
             if (typeof navigator !== 'undefined' && navigator.vibrate) {
                 navigator.vibrate(50);
             }
+            if (!cleaned.startsWith('73')) {
+                toast({
+                    variant: 'destructive',
+                    title: 'رقم غير صحيح',
+                    description: 'رقم يو (YOU) يجب أن يبدأ بـ 73'
+                });
+            }
         }
     };
 
@@ -299,11 +294,22 @@ export default function YouServicesPage() {
                 selectedNumber = selectedNumber.replace(/[\s\-\(\)]/g, '');
                 if (selectedNumber.startsWith('+967')) selectedNumber = selectedNumber.substring(4);
                 if (selectedNumber.startsWith('00967')) selectedNumber = selectedNumber.substring(5);
-                if (selectedNumber.startsWith('07')) selectedNumber = selectedNumber.substring(1);
+                if (selectedNumber.startsWith('0')) selectedNumber = selectedNumber.substring(1);
+                if (selectedNumber.length > 9) selectedNumber = selectedNumber.slice(-9);
 
                 const inputElement = document.querySelector('input[type="tel"]') as HTMLInputElement;
                 if (inputElement) handlePhoneChange(selectedNumber, inputElement);
-                else setPhone(selectedNumber.slice(0, 9));
+                else {
+                    const finalNum = selectedNumber.slice(0, 9);
+                    setPhone(finalNum);
+                    if (finalNum.length === 9 && !finalNum.startsWith('73')) {
+                        toast({
+                            variant: 'destructive',
+                            title: 'رقم غير صحيح',
+                            description: 'رقم يو (YOU) يجب أن يبدأ بـ 73'
+                        });
+                    }
+                }
             }
         } catch (err) {
             console.error("Contacts selection failed:", err);
@@ -319,8 +325,8 @@ export default function YouServicesPage() {
     const handleProcessPayment = async (payAmount: number, typeLabel: string, numCode: string = '0') => {
         if (!phone || !user || !userDocRef || !firestore) return;
 
-        if (phone.length !== 9) {
-            toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'يرجى إدخال رقم هاتف مكون من 9 أرقام' });
+        if (phone.length !== 9 || !phone.startsWith('73')) {
+            toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'رقم يو (YOU) يجب أن يبدأ بـ 73 ويتكون من 9 أرقام' });
             return;
         }
 
@@ -383,8 +389,8 @@ export default function YouServicesPage() {
     const handleActivateOffer = async () => {
         if (!selectedOffer || !phone || !user || !userDocRef || !firestore) return;
 
-        if (phone.length !== 9) {
-            toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'يرجى إدخال رقم هاتف مكون من 9 أرقام' });
+        if (phone.length !== 9 || !phone.startsWith('73')) {
+            toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'رقم يو (YOU) يجب أن يبدأ بـ 73 ويتكون من 9 أرقام' });
             return;
         }
 
@@ -527,7 +533,7 @@ export default function YouServicesPage() {
                     <div className="relative">
                         <Input
                             type="tel"
-                            placeholder="7xxxxxxxx"
+                            placeholder="73xxxxxxx"
                             value={phone}
                             onChange={(e) => handlePhoneChange(e.target.value, e.target)}
                             className="text-center font-bold text-lg h-12 rounded-2xl border-none bg-muted/20 focus-visible:ring-[#FECC4F] transition-all pr-12 pl-12"
@@ -540,9 +546,16 @@ export default function YouServicesPage() {
                             <Users className="h-5 w-5" />
                         </button>
                     </div>
+                    {phone.length === 9 && !phone.startsWith('73') && (
+                        <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-2xl text-center animate-in fade-in-0">
+                            <p className="text-xs font-bold text-red-500">
+                                رقم يو (YOU) غير صحيح، يجب أن يبدأ الرقم بـ 73
+                            </p>
+                        </div>
+                    )}
                 </div>
 
-                {phone.length === 9 && (
+                {phone.length === 9 && phone.startsWith('73') && (
                     <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
 
                         <div className="flex justify-center mt-2">
