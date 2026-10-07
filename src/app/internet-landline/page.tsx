@@ -50,6 +50,8 @@ import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import Image from 'next/image';
 import { initiateTelecomPayment, executeTelecomRequestWithTimeout } from '@/lib/telecom-order';
+import { useServicesConfig } from '@/hooks/use-services-config';
+import { isUserApiCustomer, calculateFinalServicePrice } from '@/lib/services-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -135,6 +137,8 @@ export default function LandlinePage() {
         [firestore, user]
     );
     const { data: userProfile } = useDoc<any>(userDocRef);
+    const { config } = useServicesConfig();
+    const isApiUser = isUserApiCustomer(userProfile);
 
     useEffect(() => {
         if (showSuccess && audioRef.current) {
@@ -383,8 +387,12 @@ export default function LandlinePage() {
         if (!phone || !amount || !user || !userDocRef || !firestore) return;
         const baseAmount = parseFloat(amount);
         if (isNaN(baseAmount) || baseAmount <= 0) return;
-        const commission = Math.ceil(baseAmount * 0.05);
-        const totalToDeduct = baseAmount + commission;
+
+        const totalToDeduct = isApiUser
+            ? calculateFinalServicePrice(baseAmount, config.landline_adsl)
+            : baseAmount + Math.ceil(baseAmount * 0.05);
+
+        const feeOrDiscount = totalToDeduct - baseAmount;
 
         if ((userProfile?.balance ?? 0) < totalToDeduct) {
             toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لإتمام هذه العملية.' });
@@ -403,7 +411,7 @@ export default function LandlinePage() {
                 amount: totalToDeduct,
                 transactionType: txType,
                 recipientPhoneNumber: phone,
-                notes: `رقم: ${phone}`,
+                notes: `رقم: ${phone}${isApiUser ? ' (سعر API معتمد)' : ` + عمولة: ${feeOrDiscount}`}`,
                 serviceCategory: 'الثابت والانترنت الارضي'
             });
 
@@ -576,8 +584,21 @@ export default function LandlinePage() {
                         <div className="space-y-3 pt-4 text-right text-sm">
                             <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">رقم الهاتف:</span><span className="font-bold">{phone}</span></div>
                             <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">المبلغ:</span><span className="font-bold">{parseFloat(amount || '0').toLocaleString('en-US')} ريال</span></div>
-                            <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">العمولة الإدارية (5%):</span><span className="font-bold text-orange-600">{Math.ceil(parseFloat(amount || '0') * 0.05).toLocaleString('en-US')} ريال</span></div>
-                            <div className="flex justify-between items-center py-3 bg-muted/50 rounded-xl px-2 mt-2"><span className="font-black">إجمالي الخصم النهائي:</span><span className="font-black text-lg" style={{ color: currentTheme.primary }}>{(parseFloat(amount || '0') + Math.ceil(parseFloat(amount || '0') * 0.05)).toLocaleString('en-US')} ريال</span></div>
+                            {!isApiUser && (
+                                <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">العمولة الإدارية (5%):</span><span className="font-bold text-orange-600">{Math.ceil(parseFloat(amount || '0') * 0.05).toLocaleString('en-US')} ريال</span></div>
+                            )}
+                            {isApiUser && (
+                                <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">فئة العميل:</span><span className="font-bold text-amber-600 dark:text-amber-400">عميل API (نسب معتمدة)</span></div>
+                            )}
+                            <div className="flex justify-between items-center py-3 bg-muted/50 rounded-xl px-2 mt-2">
+                                <span className="font-black">إجمالي الخصم النهائي:</span>
+                                <span className="font-black text-lg" style={{ color: currentTheme.primary }}>
+                                    {(isApiUser
+                                        ? calculateFinalServicePrice(parseFloat(amount || '0'), config.landline_adsl)
+                                        : (parseFloat(amount || '0') + Math.ceil(parseFloat(amount || '0') * 0.05))
+                                    ).toLocaleString('en-US')} ريال
+                                </span>
+                            </div>
                         </div>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-6 sm:space-x-0">

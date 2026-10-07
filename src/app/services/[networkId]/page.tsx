@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useFirestore, useUser, useDoc } from '@/firebase';
 import { doc, writeBatch, increment, collection } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Calendar, CheckCircle, Copy, AlertCircle, Database, MessageSquare, Smartphone } from 'lucide-react';
+import { Calendar, CheckCircle, Copy, AlertCircle, Database, MessageSquare, Smartphone, Loader2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,6 +35,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { useServicesConfig } from '@/hooks/use-services-config';
+import { roundCurrency, isUserApiCustomer } from '@/lib/services-config';
+import { Sparkles, Loader2 as SpinnerIcon } from 'lucide-react';
 
 type CardCategory = {
     id: number;
@@ -63,6 +66,7 @@ type UserProfile = {
   balance?: number;
   displayName?: string;
   phoneNumber?: string;
+  apiKey?: string | null;
 };
 
 function NetworkPurchasePageComponent() {
@@ -75,6 +79,17 @@ function NetworkPurchasePageComponent() {
   const firestore = useFirestore();
   const { toast } = useToast();
   const router = useRouter();
+
+  const userDocRef = useMemo(() => (user && firestore ? doc(firestore, 'users', user.uid) : null), [firestore, user]);
+  const { data: userProfile } = useDoc<any>(userDocRef);
+  const { config } = useServicesConfig();
+  const isApiUser = isUserApiCustomer(userProfile);
+
+  const getEffectiveCardPrice = (basePrice: number) => {
+    if (!isApiUser) return basePrice;
+    const rate = config.networks?.rate ?? 0.95;
+    return roundCurrency(basePrice * rate);
+  };
 
   const [categories, setCategories] = useState<CardCategory[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
@@ -111,13 +126,6 @@ function NetworkPurchasePageComponent() {
     fetchCategories();
   }, [networkId]);
 
-
-  const userDocRef = useMemo(
-    () => (user && firestore ? doc(firestore, 'users', user.uid) : null),
-    [user, firestore]
-  );
-  const { data: userProfile } = useDoc<UserProfile>(userDocRef);
-  
   useEffect(() => {
     if (purchasedCard) {
         audioRef.current?.play().catch(e => console.error("Audio playback failed:", e));
@@ -129,9 +137,10 @@ function NetworkPurchasePageComponent() {
 
     setIsProcessing(true);
     const categoryPrice = selectedCategory.price;
+    const effectivePrice = getEffectiveCardPrice(categoryPrice);
     const userBalance = userProfile?.balance ?? 0;
 
-    if (userBalance < categoryPrice) {
+    if (userBalance < effectivePrice) {
         toast({
             variant: "destructive",
             title: "رصيد غير كافٍ",
@@ -165,15 +174,15 @@ function NetworkPurchasePageComponent() {
         const now = new Date().toISOString();
         const formattedDate = new Date().toLocaleDateString('ar-YE');
 
-        batch.update(userDocRef!, { balance: increment(-categoryPrice) });
+        batch.update(userDocRef!, { balance: increment(-effectivePrice) });
 
         const buyerTransactionRef = doc(collection(firestore, `users/${user.uid}/transactions`));
         const transactionPayload: any = {
             userId: user.uid,
             transactionDate: now,
-            amount: categoryPrice,
+            amount: effectivePrice,
             transactionType: `شراء كرت ${selectedCategory.name}`,
-            notes: `شبكة: ${networkName}`,
+            notes: `شبكة: ${networkName}${isApiUser ? ' (سعر API مخفض)' : ''}`,
             cardNumber: cardData.cardID,
         };
 
@@ -281,7 +290,25 @@ function NetworkPurchasePageComponent() {
                                 <div className='flex items-start justify-between gap-2'>
                                     <div className='space-y-1 text-right'>
                                         <h3 className="font-bold text-base">{category.name}</h3>
-                                        <p className="font-semibold text-primary dark:text-primary-foreground">{category.price.toLocaleString('en-US')} ريال</p>
+                                        {(() => {
+                                            const finalPrice = getEffectiveCardPrice(category.price);
+                                            const isDiscounted = finalPrice < category.price;
+                                            return (
+                                                <div className="flex items-center gap-2">
+                                                    {isDiscounted && (
+                                                        <span className="text-xs text-muted-foreground line-through font-bold">
+                                                            {category.price.toLocaleString('en-US')}
+                                                        </span>
+                                                    )}
+                                                    <p className="font-black text-primary text-base">{finalPrice.toLocaleString('en-US')} ريال</p>
+                                                    {isDiscounted && (
+                                                        <span className="text-[8px] font-black bg-blue-500/10 text-blue-600 px-1.5 py-0.5 rounded border border-blue-500/20">
+                                                            سعر API
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                     <Button 
                                         size="default" 
@@ -398,7 +425,24 @@ function NetworkPurchasePageComponent() {
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-center font-black">تأكيد عملية الشراء</AlertDialogTitle>
                         <AlertDialogDescription className="text-center pt-2">
-                            هل أنت متأكد من رغبتك في شراء كرت "{selectedCategory.name}"؟ سيتم خصم <span className="font-bold text-primary dark:text-primary-foreground">{selectedCategory.price.toLocaleString('en-US')} ريال</span> من رصيدك.
+                            {(() => {
+                                const finalPrice = getEffectiveCardPrice(selectedCategory.price);
+                                const isDiscounted = finalPrice < selectedCategory.price;
+                                return (
+                                    <>
+                                        هل أنت متأكد من رغبتك في شراء كرت "{selectedCategory.name}"؟ سيتم خصم{' '}
+                                        <span className="font-bold text-primary dark:text-primary-foreground">
+                                            {finalPrice.toLocaleString('en-US')} ريال
+                                        </span>{' '}
+                                        من رصيدك.
+                                        {isDiscounted && (
+                                            <span className="block text-xs font-black text-blue-600 dark:text-blue-400 mt-1">
+                                                (تم تطبيق سعر مفتاح الـ API المعتمد)
+                                            </span>
+                                        )}
+                                    </>
+                                );
+                            })()}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-4 sm:space-x-0">

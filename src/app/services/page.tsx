@@ -43,6 +43,9 @@ import {
   limit as firestoreLimit 
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { useServicesConfig } from '@/hooks/use-services-config';
+import { roundCurrency, isUserApiCustomer } from '@/lib/services-config';
+import { Sparkles } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
 import {
@@ -91,6 +94,7 @@ type UserProfile = {
   balance?: number;
   displayName?: string;
   phoneNumber?: string;
+  apiKey?: string | null;
 };
 
 const CARD_GRADIENTS = [
@@ -198,6 +202,14 @@ export default function CombinedNetworksPage() {
     [firestore, user]
   );
   const { data: userProfile } = useDoc<UserProfile>(userDocRef);
+  const { config } = useServicesConfig();
+  const isApiUser = isUserApiCustomer(userProfile);
+
+  const getEffectiveCardPrice = (basePrice: number) => {
+    if (!isApiUser) return basePrice;
+    const rate = config.networks?.rate ?? 0.95;
+    return roundCurrency(basePrice * rate);
+  };
 
   const favoritesQuery = useMemoFirebase(
     () =>
@@ -289,9 +301,10 @@ export default function CombinedNetworksPage() {
     
     setIsProcessing(true);
     const categoryPrice = selectedCategory.price;
+    const effectivePrice = getEffectiveCardPrice(categoryPrice);
     const userBalance = userProfile?.balance ?? 0;
 
-    if (userBalance < categoryPrice) {
+    if (userBalance < effectivePrice) {
         toast({ variant: "destructive", title: "رصيد غير كافٍ", description: "رصيدك الحالي لا يكفي لإتمام عملية الشراء." });
         setIsProcessing(false);
         return;
@@ -318,13 +331,13 @@ export default function CombinedNetworksPage() {
             const ownerId = selectedNetwork.ownerId || 'admin';
 
             batch.update(cardToPurchaseDoc.ref, { status: 'sold', soldTo: user.uid, soldTimestamp: now });
-            batch.update(userDocRef, { balance: increment(-selectedCategory.price) });
+            batch.update(userDocRef, { balance: increment(-effectivePrice) });
             batch.set(doc(collection(firestore, `users/${user.uid}/transactions`)), {
                 userId: user.uid, 
                 transactionDate: now, 
-                amount: selectedCategory.price,
+                amount: effectivePrice,
                 transactionType: `شراء كرت ${selectedCategory.name}`, 
-                notes: `شبكة: ${selectedNetwork.name}`,
+                notes: `شبكة: ${selectedNetwork.name}${isApiUser ? ' (سعر API مخفض)' : ''}`,
                 cardNumber: cardData.cardNumber,
             });
 
@@ -379,11 +392,11 @@ export default function CombinedNetworksPage() {
             const cardData = result.data.order.card;
             finalCardID = cardData.cardID;
             
-            batch.update(userDocRef, { balance: increment(-categoryPrice) });
+            batch.update(userDocRef, { balance: increment(-effectivePrice) });
             
             const transactionPayload: any = {
-                userId: user.uid, transactionDate: now, amount: categoryPrice,
-                transactionType: `شراء كرت ${selectedCategory.name}`, notes: `شبكة: ${selectedNetwork.name}`,
+                userId: user.uid, transactionDate: now, amount: effectivePrice,
+                transactionType: `شراء كرت ${selectedCategory.name}`, notes: `شبكة: ${selectedNetwork.name}${isApiUser ? ' (سعر API مخفض)' : ''}`,
                 cardNumber: cardData.cardID,
             };
             
@@ -561,10 +574,28 @@ export default function CombinedNetworksPage() {
                                         </div>
 
                                         <div className="flex flex-col items-end gap-1.5">
-                                            <div className="flex flex-col items-end leading-tight">
-                                                <span className="text-xl font-black tracking-tighter text-primary">{cat.price.toLocaleString('en-US')}</span>
-                                                <span className="text-[7px] font-black text-muted-foreground uppercase opacity-60">ريال</span>
-                                            </div>
+                                            {(() => {
+                                                const finalPrice = getEffectiveCardPrice(cat.price);
+                                                const isDiscounted = finalPrice < cat.price;
+                                                return (
+                                                    <>
+                                                        <div className="flex flex-col items-end leading-tight">
+                                                            {isDiscounted && (
+                                                                <span className="text-[9px] font-bold text-muted-foreground line-through opacity-60">
+                                                                    {cat.price.toLocaleString('en-US')}
+                                                                </span>
+                                                            )}
+                                                            <span className="text-xl font-black tracking-tighter text-primary">{finalPrice.toLocaleString('en-US')}</span>
+                                                            <span className="text-[7px] font-black text-muted-foreground uppercase opacity-60">ريال</span>
+                                                        </div>
+                                                        {isDiscounted && (
+                                                            <span className="text-[7px] font-black text-blue-600 bg-blue-500/10 px-1.5 py-0.5 rounded-full border border-blue-500/20">
+                                                                سعر API
+                                                            </span>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
                                             <Button size="sm" className="h-7 rounded-lg text-[9px] font-black px-4 bg-primary shadow-md shadow-primary/20">شراء</Button>
                                         </div>
                                     </div>
@@ -592,10 +623,26 @@ export default function CombinedNetworksPage() {
               هل أنت متأكد من شراء كرت <span className="text-primary">"{showConfirmPurchase?.name}"</span>؟
             </DialogDescription>
           </DialogHeader>
-          <div className="py-6 bg-muted/30 rounded-[28px] border-2 border-dashed border-primary/10 space-y-2 mt-4">
-            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">سيتم خصم المبلغ من رصيدك</p>
-            <p className="text-3xl font-black text-primary">{showConfirmPurchase?.price.toLocaleString('en-US')} <span className="text-sm">ريال</span></p>
-          </div>
+          {(() => {
+            const finalPrice = showConfirmPurchase ? getEffectiveCardPrice(showConfirmPurchase.price) : 0;
+            const isDiscounted = showConfirmPurchase ? finalPrice < showConfirmPurchase.price : false;
+            return (
+              <div className="py-6 bg-muted/30 rounded-[28px] border-2 border-dashed border-primary/10 space-y-2 mt-4">
+                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                  {isDiscounted ? 'سيتم خصم السعر المعتمد للـ API من رصيدك' : 'سيتم خصم المبلغ من رصيدك'}
+                </p>
+                {isDiscounted && (
+                  <p className="text-xs text-muted-foreground line-through font-bold">السعر الأصلي: {showConfirmPurchase?.price.toLocaleString('en-US')} ريال</p>
+                )}
+                <p className="text-3xl font-black text-primary">{finalPrice.toLocaleString('en-US')} <span className="text-sm">ريال</span></p>
+                {isDiscounted && (
+                  <span className="inline-block text-[9px] font-black text-blue-600 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
+                    تم تطبيق نسبة الـ API تلقائياً
+                  </span>
+                )}
+              </div>
+            );
+          })()}
           <DialogFooter className="grid grid-cols-2 gap-3 mt-6">
             <Button className="w-full h-12 rounded-2xl font-black text-base shadow-lg shadow-primary/20" onClick={handlePurchase} disabled={isProcessing}>
                 {isProcessing ? <Loader2 className="animate-spin h-5 w-5" /> : 'تأكيد الشراء'}

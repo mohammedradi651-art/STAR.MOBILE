@@ -44,6 +44,8 @@ import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { initiateTelecomPayment, executeTelecomRequestWithTimeout } from '@/lib/telecom-order';
+import { useServicesConfig } from '@/hooks/use-services-config';
+import { isUserApiCustomer, calculateFinalServicePrice } from '@/lib/services-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,6 +87,7 @@ export default function GamesPage() {
     const { toast } = useToast();
     const firestore = useFirestore();
     const { user } = useUser();
+    const { config } = useServicesConfig();
 
     const [activeGame, setActiveGame] = useState<'pubg' | 'freefire' | null>(null);
     const [selectedOffer, setSelectedOffer] = useState<GameOffer | null>(null);
@@ -100,6 +103,7 @@ export default function GamesPage() {
         [firestore, user]
     );
     const { data: userProfile } = useDoc<any>(userDocRef);
+    const isApiUser = isUserApiCustomer(userProfile);
 
     useEffect(() => {
         if (showSuccess && audioRef.current) {
@@ -113,7 +117,9 @@ export default function GamesPage() {
             return;
         }
 
-        const totalToDeduct = selectedOffer.price;
+        const totalToDeduct = isApiUser
+            ? calculateFinalServicePrice(selectedOffer.price, config.networks)
+            : selectedOffer.price;
 
         if ((userProfile?.balance ?? 0) < totalToDeduct) {
             toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لإتمام هذه العملية.' });
@@ -123,7 +129,7 @@ export default function GamesPage() {
         setIsProcessing(true);
         try {
             const txType = `شحن ${activeGame === 'pubg' ? 'شدات' : 'جواهر'}: ${selectedOffer.amount}`;
-            const txNotes = `رقم اللاعب: ${playerId}. اللعبة: ${activeGame === 'pubg' ? 'ببجي' : 'فري فاير'}`;
+            const txNotes = `رقم اللاعب: ${playerId}. اللعبة: ${activeGame === 'pubg' ? 'ببجي' : 'فري فاير'}${isApiUser ? ' (سعر API معتمد)' : ''}`;
 
             // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
             const { transid, backpass } = await initiateTelecomPayment({
@@ -304,37 +310,54 @@ export default function GamesPage() {
                         <div className="space-y-3">
                             <h3 className="text-xs font-black text-muted-foreground uppercase tracking-widest px-1">اختر فئة الشحن</h3>
                             <div className="grid grid-cols-1 gap-3">
-                                {currentPackages.map((pkg) => (
-                                    <Card 
-                                        key={pkg.code} 
-                                        className="cursor-pointer hover:bg-primary/5 transition-all active:scale-[0.98] border-none shadow-sm rounded-3xl overflow-hidden group"
-                                        onClick={() => setSelectedOffer(pkg)}
-                                    >
-                                        <CardContent className="p-4 flex items-center justify-between">
-                                            <div className="flex items-center gap-4">
-                                                <div className="relative h-12 w-12 shrink-0 rounded-2xl overflow-hidden bg-muted p-1 group-hover:scale-110 transition-transform">
-                                                    <Image 
-                                                        src={currentGameInfo?.icon || ''}
-                                                        alt="Icon"
-                                                        fill
-                                                        className="object-contain"
-                                                    />
+                                {currentPackages.map((pkg) => {
+                                    const effectivePrice = isApiUser
+                                        ? calculateFinalServicePrice(pkg.price, config.networks)
+                                        : pkg.price;
+                                    return (
+                                        <Card 
+                                            key={pkg.code} 
+                                            className="cursor-pointer hover:bg-primary/5 transition-all active:scale-[0.98] border-none shadow-sm rounded-3xl overflow-hidden group"
+                                            onClick={() => setSelectedOffer(pkg)}
+                                        >
+                                            <CardContent className="p-4 flex items-center justify-between">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="relative h-12 w-12 shrink-0 rounded-2xl overflow-hidden bg-muted p-1 group-hover:scale-110 transition-transform">
+                                                        <Image 
+                                                            src={currentGameInfo?.icon || ''}
+                                                            alt="Icon"
+                                                            fill
+                                                            className="object-contain"
+                                                        />
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="flex items-center gap-2">
+                                                            <h4 className="font-black text-sm text-foreground">{pkg.amount}</h4>
+                                                            {isApiUser && (
+                                                                <span className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold px-1.5 py-0.5 rounded-full border border-amber-500/20">
+                                                                    سعر API
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-[10px] font-bold text-muted-foreground">تفعيل فوري</p>
+                                                    </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <h4 className="font-black text-sm text-foreground">{pkg.amount}</h4>
-                                                    <p className="text-[10px] font-bold text-muted-foreground">تفعيل فوري</p>
+                                                <div className="text-left">
+                                                    <div className="flex items-baseline gap-1 justify-end">
+                                                        <span className="text-lg font-black text-primary">{effectivePrice.toLocaleString('en-US')}</span>
+                                                        <span className="text-[10px] font-bold text-primary opacity-70">ر.ي</span>
+                                                    </div>
+                                                    {isApiUser && effectivePrice < pkg.price && (
+                                                        <p className="text-[10px] text-muted-foreground line-through font-bold text-left">
+                                                            {pkg.price.toLocaleString('en-US')} ر.ي
+                                                        </p>
+                                                    )}
+                                                    <Button size="sm" className="h-7 rounded-lg text-[10px] font-black px-4 mt-1">شراء</Button>
                                                 </div>
-                                            </div>
-                                            <div className="text-left">
-                                                <div className="flex items-baseline gap-1 justify-end">
-                                                    <span className="text-lg font-black text-primary">{pkg.price.toLocaleString('en-US')}</span>
-                                                    <span className="text-[10px] font-bold text-primary opacity-70">ر.ي</span>
-                                                </div>
-                                                <Button size="sm" className="h-7 rounded-lg text-[10px] font-black px-4 mt-1">شراء</Button>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                ))}
+                                            </CardContent>
+                                        </Card>
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>
@@ -376,9 +399,16 @@ export default function GamesPage() {
                         </div>
 
                         <div className="bg-muted/50 p-5 rounded-[28px] border-2 border-dashed border-primary/10 space-y-2 text-center">
-                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">المبلغ المخصوم من رصيدك</p>
+                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                                {isApiUser ? 'المبلغ المخصوم (سعر API معتمد)' : 'المبلغ المخصوم من رصيدك'}
+                            </p>
                             <div className="flex items-baseline justify-center gap-1">
-                                <span className="text-3xl font-black text-primary">{selectedOffer?.price.toLocaleString('en-US')}</span>
+                                <span className="text-3xl font-black text-primary">
+                                    {(isApiUser && selectedOffer
+                                        ? calculateFinalServicePrice(selectedOffer.price, config.networks)
+                                        : (selectedOffer?.price || 0)
+                                    ).toLocaleString('en-US')}
+                                </span>
                                 <span className="text-xs font-bold text-primary/70">ريال</span>
                             </div>
                         </div>

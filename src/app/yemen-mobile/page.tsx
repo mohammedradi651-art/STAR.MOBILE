@@ -53,8 +53,9 @@ import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 import Image from 'next/image';
-import { cn } from '@/lib/utils';
 import { initiateTelecomPayment, executeTelecomRequestWithTimeout } from '@/lib/telecom-order';
+import { useServicesConfig } from '@/hooks/use-services-config';
+import { roundCurrency, isUserApiCustomer, getUserServicePrice } from '@/lib/services-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,7 +97,7 @@ const YEMEN_MOBILE_GRADIENT = {
     `
 };
 
-export const PREPAID_CATEGORIES = [
+const PREPAID_CATEGORIES = [
   {
     id: 'mazaya',
     title: 'باقات مزايا',
@@ -185,7 +186,7 @@ export const PREPAID_CATEGORIES = [
   }
 ];
 
-export const POSTPAID_CATEGORIES = [
+const POSTPAID_CATEGORIES = [
   {
     id: 'mazaya',
     title: 'باقات هدايا',
@@ -277,11 +278,30 @@ export const POSTPAID_CATEGORIES = [
   }
 ];
 
-const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) => (
+const PackageItemCard = ({ 
+  offer, 
+  onClick, 
+  effectivePrice, 
+  isApiUser 
+}: { 
+  offer: Offer; 
+  onClick: () => void; 
+  effectivePrice?: number; 
+  isApiUser?: boolean; 
+}) => {
+  const displayPrice = effectivePrice !== undefined ? effectivePrice : offer.price;
+  const hasDiscount = Boolean(isApiUser && effectivePrice !== undefined && effectivePrice < offer.price);
+
+  return (
     <div 
       className="bg-[#fad9b2] rounded-3xl p-5 shadow-sm relative border border-[#B32C4C]/10 mb-3 text-center cursor-pointer hover:bg-[#B32C4C]/5 transition-all active:scale-[0.98] group"
       onClick={onClick}
     >
+      {hasDiscount && (
+        <span className="absolute top-3 right-3 text-[10px] font-black bg-blue-600 text-white px-2 py-0.5 rounded-full shadow-xs">
+          سعر API
+        </span>
+      )}
       <div className="flex justify-center mb-3">
           <div className="relative w-12 h-12 rounded-2xl overflow-hidden border-2 border-white dark:border-slate-800 shadow-md">
               <Image 
@@ -293,10 +313,18 @@ const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void
           </div>
       </div>
       <h4 className="text-sm font-black text-[#B32C4C] mb-1 group-hover:text-[#B32C4C]/80 transition-colors">{offer.offerName}</h4>
-      <div className="flex items-baseline justify-center mb-4">
-        <span className="text-2xl font-black text-foreground">
-            {offer.price.toLocaleString('en-US')}
-        </span>
+      <div className="flex flex-col items-center justify-center mb-4">
+        <div className="flex items-baseline justify-center gap-1">
+          <span className="text-2xl font-black text-foreground">
+              {displayPrice.toLocaleString('en-US')}
+          </span>
+          <span className="text-xs font-black text-foreground/70">ريال</span>
+        </div>
+        {hasDiscount && (
+          <span className="text-xs line-through text-muted-foreground/80 font-bold">
+            {offer.price.toLocaleString('en-US')} ريال
+          </span>
+        )}
       </div>
       
       <div className="grid grid-cols-4 gap-2 pt-3 mt-2 border-t border-[#B32C4C]/10 text-center">
@@ -318,7 +346,8 @@ const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void
         </div>
       </div>
     </div>
-);
+  );
+};
 
 export default function YemenMobilePage() {
   const router = useRouter();
@@ -348,6 +377,16 @@ export default function YemenMobilePage() {
     [firestore, user]
   );
   const { data: userProfile } = useDoc<any>(userDocRef);
+  const { config } = useServicesConfig();
+  const isApiUser = isUserApiCustomer(userProfile);
+
+  const getEffectiveOfferPrice = (basePrice: number) => {
+    return getUserServicePrice(basePrice, config.yemen_mobile, isApiUser);
+  };
+
+  const getEffectiveCreditCost = (amountVal: number) => {
+    return getUserServicePrice(amountVal, config.yemen_mobile, isApiUser);
+  };
 
   const parseTelecomDate = (dateStr: string) => {
     if (!dateStr || typeof dateStr !== 'string' || dateStr.length < 8) return null;
@@ -532,7 +571,8 @@ export default function YemenMobilePage() {
     if (!phone || !amount || !user || !userDocRef || !firestore) return;
     const val = parseFloat(amount);
     if (isNaN(val) || val <= 0) return;
-    if ((userProfile?.balance ?? 0) < val) {
+    const costToDeduct = getEffectiveCreditCost(val);
+    if ((userProfile?.balance ?? 0) < costToDeduct) {
         toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لإتمام عملية السداد.' });
         return;
     }
@@ -542,21 +582,21 @@ export default function YemenMobilePage() {
         const { transid, backpass } = await initiateTelecomPayment({
             firestore,
             userId: user.uid,
-            amount: val,
+            amount: costToDeduct,
             transactionType: 'سداد يمن موبايل (رصيد)',
             recipientPhoneNumber: phone,
-            notes: `إلى رقم: ${phone}. مبلغ السداد: ${val}.`,
+            notes: `إلى رقم: ${phone}. مبلغ السداد: ${val}${isApiUser ? ` (سعر API: ${costToDeduct})` : ''}.`,
             serviceCategory: 'يمن موبايل'
         });
 
-        setLastTxDetails({ type: 'سداد رصيد يمن موبايل', phone: phone, amount: val, transid: transid });
+        setLastTxDetails({ type: 'سداد رصيد يمن موبايل', phone: phone, amount: costToDeduct, transid: transid });
 
         // 2. إرسال الطلب للمزود مع مؤقت 10 ثوانٍ (إذا تأخر الرد تظهر نفس المنبثق تماماً)
         await executeTelecomRequestWithTimeout({
             firestore,
             userId: user.uid,
             transid,
-            amount: val,
+            amount: costToDeduct,
             telecomPayload: { mobile: phone, amount: val, action: 'bill' },
             backpass
         });
@@ -574,7 +614,8 @@ export default function YemenMobilePage() {
     if (!selectedOffer || !phone || !user || !userDocRef || !firestore) return;
     const hasLoan = billingInfo?.isLoan && (billingInfo?.loanAmount || 0) > 0;
     const loanAmt = hasLoan ? (billingInfo?.loanAmount || 0) : 0;
-    const totalToDeduct = selectedOffer.price + loanAmt;
+    const effectiveOfferPrice = getEffectiveOfferPrice(selectedOffer.price);
+    const totalToDeduct = effectiveOfferPrice + loanAmt;
     if ((userProfile?.balance ?? 0) < totalToDeduct) {
         toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لتفعيل الباقة شاملة سداد السلفة.' });
         return;
@@ -588,7 +629,7 @@ export default function YemenMobilePage() {
             amount: totalToDeduct,
             transactionType: `تفعيل ${selectedOffer.offerName}`,
             recipientPhoneNumber: phone,
-            notes: `للرقم: ${phone}${hasLoan ? ` (شامل سداد سلفة: ${loanAmt})` : ''}`,
+            notes: `للرقم: ${phone}${hasLoan ? ` (شامل سداد سلفة: ${loanAmt})` : ''}${isApiUser ? ` (سعر API: ${effectiveOfferPrice})` : ''}`,
             serviceCategory: 'يمن موبايل'
         });
 
@@ -778,7 +819,13 @@ export default function YemenMobilePage() {
                                             <AccordionContent className="p-4 bg-white dark:bg-slate-900 border-x border-b border-[#B32C4C]/10 rounded-b-2xl shadow-sm">
                                                 <div className="grid grid-cols-1 gap-3">
                                                     {cat.offers.map((o) => (
-                                                        <PackageItemCard key={o.offerId} offer={o} onClick={() => setSelectedOffer(o)} />
+                                                        <PackageItemCard 
+                                                            key={o.offerId} 
+                                                            offer={o} 
+                                                            effectivePrice={getEffectiveOfferPrice(o.price)}
+                                                            isApiUser={isApiUser}
+                                                            onClick={() => setSelectedOffer(o)} 
+                                                        />
                                                     ))}
                                                 </div>
                                             </AccordionContent>
@@ -802,7 +849,15 @@ export default function YemenMobilePage() {
                 <div className="space-y-3 pt-4 text-right text-sm">
                     <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">رقم الهاتف:</span><span className="font-bold">{phone}</span></div>
                     <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">المبلغ:</span><span className="font-bold">{parseFloat(amount || '0').toLocaleString()} ريال</span></div>
-                    <div className="flex justify-between items-center py-3 bg-muted/50 rounded-xl px-2"><span className="font-black">إجمالي الخصم:</span><span className="font-black text-[#B32C4C] text-lg">{parseFloat(amount || '0').toLocaleString()} ريال</span></div>
+                    <div className="flex justify-between items-center py-3 bg-muted/50 rounded-xl px-2">
+                        <span className="font-black">إجمالي الخصم من الرصيد:</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-black text-[#B32C4C] text-lg">{getEffectiveCreditCost(parseFloat(amount || '0')).toLocaleString()} ريال</span>
+                            {isApiUser && config.yemen_mobile?.rate !== undefined && config.yemen_mobile.rate < 1 && (
+                                <span className="text-[9px] font-black bg-blue-500/10 text-blue-600 px-1.5 py-0.5 rounded">سعر API</span>
+                            )}
+                        </div>
+                    </div>
                 </div>
             </AlertDialogHeader>
             <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-6 sm:space-x-0">
@@ -818,13 +873,26 @@ export default function YemenMobilePage() {
                   <AlertDialogTitle className="text-center font-black">تأكيد تفعيل الباقة</AlertDialogTitle>
                   <div className="py-4 space-y-3 text-right text-sm">
                       <p className="text-center text-lg font-black text-[#B32C4C] mb-2">{selectedOffer?.offerName}</p>
-                      <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">سعر الباقة:</span><span className="font-bold">{selectedOffer?.price.toLocaleString()} ريال</span></div>
+                      <div className="flex justify-between items-center py-2 border-b border-dashed">
+                        <span className="text-muted-foreground">سعر الباقة:</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold">{getEffectiveOfferPrice(selectedOffer?.price || 0).toLocaleString()} ريال</span>
+                          {isApiUser && getEffectiveOfferPrice(selectedOffer?.price || 0) < (selectedOffer?.price || 0) && (
+                            <span className="text-[9px] font-black bg-blue-500/10 text-blue-600 px-1.5 py-0.5 rounded">سعر API</span>
+                          )}
+                        </div>
+                      </div>
                       {billingInfo?.isLoan && (billingInfo?.loanAmount || 0) > 0 && (
                         <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-destructive font-bold flex items-center gap-1"><AlertCircle className="w-3 h-3" /> سداد سلفة الرقم:</span><span className="font-black text-destructive">{(billingInfo.loanAmount || 0).toLocaleString()} ريال</span></div>
                       )}
                       <div className="flex justify-between items-center py-3 bg-muted/50 rounded-xl px-3 mt-4">
                         <span className="font-black">إجمالي الخصم النهائي:</span>
-                        <div className="flex items-baseline gap-1"><p className="text-2xl font-black text-[#B32C4C]">{((selectedOffer?.price || 0) + (billingInfo?.isLoan ? (billingInfo?.loanAmount || 0) : 0)).toLocaleString()}</p><span className="text-[10px] font-black text-[#B32C4C]">ريال</span></div>
+                        <div className="flex items-baseline gap-1">
+                          <p className="text-2xl font-black text-[#B32C4C]">
+                            {(getEffectiveOfferPrice(selectedOffer?.price || 0) + (billingInfo?.isLoan ? (billingInfo?.loanAmount || 0) : 0)).toLocaleString()}
+                          </p>
+                          <span className="text-[10px] font-black text-[#B32C4C]">ريال</span>
+                        </div>
                       </div>
                   </div>
               </AlertDialogHeader>

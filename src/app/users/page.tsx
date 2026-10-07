@@ -139,15 +139,6 @@ export default function UsersPage() {
   const [isAddingDebt, setIsAddingDebt] = useState(false);
   const [isClearingDebts, setIsClearingDebts] = useState(false);
 
-  // Discount States
-  const [isDiscountDialogOpen, setIsDiscountDialogOpen] = useState(false);
-  const [discounts, setDiscounts] = useState({
-    alwadi: 0,
-    networks: 0,
-    telecom: 0,
-    games: 0
-  });
-
   const [agentBalance, setAgentBalance] = useState<string | null>(null);
   const [baityBalance, setBaityBalance] = useState<string | null>(null);
   const [isFetchingBalances, setIsFetchingBalances] = useState(false);
@@ -586,37 +577,6 @@ export default function UsersPage() {
     }
     setIsApiKeyDialogOpen(false);
   };
-
-  const handleDiscountClick = (user: User) => {
-    setSelectedUser(user);
-    setDiscounts({
-        alwadi: user.alwadiDiscount || 0,
-        networks: user.networksDiscount || 0,
-        telecom: user.telecomDiscount || 0,
-        games: user.gamesDiscount || 0
-    });
-    setIsDiscountDialogOpen(true);
-  };
-
-  const handleSaveDiscounts = () => {
-    if (!selectedUser || !firestore) return;
-    const docRef = doc(firestore, 'users', selectedUser.id);
-    updateDocumentNonBlocking(docRef, {
-        alwadiDiscount: Number(discounts.alwadi),
-        networksDiscount: Number(discounts.networks),
-        telecomDiscount: Number(discounts.telecom),
-        gamesDiscount: Number(discounts.games)
-    });
-    setSearchedUsers(prev => prev.map(u => u.id === selectedUser.id ? {
-        ...u,
-        alwadiDiscount: Number(discounts.alwadi),
-        networksDiscount: Number(discounts.networks),
-        telecomDiscount: Number(discounts.telecom),
-        gamesDiscount: Number(discounts.games)
-    } : u));
-    toast({ title: "تم الحفظ", description: "تم تحديث خصومات المستخدم بنجاح." });
-    setIsDiscountDialogOpen(false);
-  };
   
   const handleSaveChanges = () => {
     if (!editingUser || !firestore) return;
@@ -958,11 +918,16 @@ export default function UsersPage() {
                                 <UserIcon className="h-5 w-5 text-primary" />
                             </div>
                             <div className="text-right space-y-0.5">
-                                <div className='flex items-center gap-2'>
+                                <div className='flex items-center gap-2 flex-wrap'>
                                     <p className="font-black text-sm text-foreground">{user.displayName}</p>
                                     {user.accountType === 'network-owner' && (
                                         <Badge className="bg-primary/10 text-primary border-none text-[8px] font-black h-4 px-1.5 rounded-md">
                                             مالك
+                                        </Badge>
+                                    )}
+                                    {Boolean(user.apiKey && user.apiKey.trim().length > 0) && (
+                                        <Badge className="bg-blue-500/10 text-blue-600 border border-blue-500/20 text-[8px] font-black h-4 px-1.5 rounded-md">
+                                            عميل API (نسب معتمدة)
                                         </Badge>
                                     )}
                                 </div>
@@ -1010,10 +975,6 @@ export default function UsersPage() {
 
                         <Button variant="ghost" size="icon" onClick={() => handleEditClick(user)} className="h-9 w-9 rounded-xl bg-muted/30 text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all">
                             <Edit className="h-4 w-4" />
-                        </Button>
-
-                        <Button variant="ghost" size="icon" onClick={() => handleDiscountClick(user)} className="h-9 w-9 rounded-xl bg-orange-100 text-orange-600 hover:bg-orange-200 transition-all">
-                            <Percent className="h-4 w-4" />
                         </Button>
 
                         <Button variant="ghost" size="icon" onClick={() => { setSelectedUser(user); setIsWithdrawDialogOpen(true); }} className="h-9 w-9 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all">
@@ -1074,8 +1035,11 @@ export default function UsersPage() {
                     </Button>
                 </div>
 
-                <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-2xl border border-blue-100 dark:border-blue-800">
-                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-bold leading-relaxed">
+                <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-2xl border border-blue-100 dark:border-blue-800 space-y-1.5">
+                    <p className="text-[11px] text-blue-700 dark:text-blue-400 font-black leading-relaxed">
+                        ⚡ بمجرد تفعيل مفتاح الـ API، يطبق النظام تلقائياً على هذا العميل كافة نسب وأسعار الـ API المعتمدة (كروت الشبكات، منظومة الوادي، الرصيد والباقات) في التطبيق مباشرة.
+                    </p>
+                    <p className="text-[10px] text-blue-600/80 dark:text-blue-400/80 font-bold">
                         ملاحظة: التغييرات لن تُحفظ إلا عند الضغط على "حفظ وإرسال".
                     </p>
                 </div>
@@ -1226,37 +1190,7 @@ export default function UsersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Discount Dialog */}
-      <Dialog open={isDiscountDialogOpen} onOpenChange={setIsDiscountDialogOpen}>
-        <DialogContent className="rounded-[32px] max-sm p-6 [&>button]:hidden">
-            <DialogHeader>
-                <DialogTitle className="text-center font-black">تعديل تسعيرة العميل</DialogTitle>
-                <DialogDescription className="text-center">حدد نسبة الخصم لكل خدمة (مثال: 2 تعني خصم 2%)</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-5 py-6">
-                <div className="space-y-2">
-                    <Label className="flex items-center gap-2 text-[11px] font-black text-muted-foreground uppercase"><SatelliteDish className="w-3.5 h-3.5" /> منظومة الوادي (%)</Label>
-                    <Input type="number" value={discounts.alwadi} onChange={e => setDiscounts({...discounts, alwadi: parseFloat(e.target.value) || 0})} className="h-12 rounded-2xl text-center text-lg font-black" />
-                </div>
-                <div className="space-y-2">
-                    <Label className="flex items-center gap-2 text-[11px] font-black text-muted-foreground uppercase"><Wifi className="w-3.5 h-3.5" /> الشبكات (%)</Label>
-                    <Input type="number" value={discounts.networks} onChange={e => setDiscounts({...discounts, networks: parseFloat(e.target.value) || 0})} className="h-12 rounded-2xl text-center text-lg font-black" />
-                </div>
-                <div className="space-y-2">
-                    <Label className="flex items-center gap-2 text-[11px] font-black text-muted-foreground uppercase"><Smartphone className="w-3.5 h-3.5" /> الرصيد والاتصالات (%)</Label>
-                    <Input type="number" value={discounts.telecom} onChange={e => setDiscounts({...discounts, telecom: parseFloat(e.target.value) || 0})} className="h-12 rounded-2xl text-center text-lg font-black" />
-                </div>
-                <div className="space-y-2">
-                    <Label className="flex items-center gap-2 text-[11px] font-black text-muted-foreground uppercase"><Gamepad2 className="w-3.5 h-3.5" /> الألعاب وشحن الشدات (%)</Label>
-                    <Input type="number" value={discounts.games} onChange={e => setDiscounts({...discounts, games: parseFloat(e.target.value) || 0})} className="h-12 rounded-2xl text-center text-lg font-black" />
-                </div>
-            </div>
-            <DialogFooter className="grid grid-cols-2 gap-3">
-                <Button onClick={handleSaveDiscounts} className="w-full h-12 rounded-2xl font-black">حفظ التغييرات</Button>
-                <Button variant="outline" onClick={() => setIsDiscountDialogOpen(false)} className="w-full h-12 rounded-2xl font-black">إلغاء</Button>
-            </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
 
       {/* Edit User Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>

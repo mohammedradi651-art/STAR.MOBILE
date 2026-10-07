@@ -49,8 +49,10 @@ import Image from 'next/image';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
-import { cn } from '@/lib/utils';
 import { initiateTelecomPayment, executeTelecomRequestWithTimeout } from '@/lib/telecom-order';
+import { useServicesConfig } from '@/hooks/use-services-config';
+import { roundCurrency, isUserApiCustomer } from '@/lib/services-config';
+import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,7 +71,7 @@ const LOGO_URL = "https://i.postimg.cc/5NDY8cjk/unnamed.png";
  * فئات شحن فوري شمال (Sabaphone North) - السعر النهائي المباشر (الأساسي × 3)
  * بدون توضيح أي نسب أو معاملات للعميل
  */
-export const NORTH_INSTANT_OFFERS = [
+const NORTH_INSTANT_OFFERS = [
   { num: '24', category: '22', price: 813, days: '5', unit: 'أيام', validity: '5 أيام' },
   { num: '16', category: '40', price: 1446, days: '8', unit: 'أيام', validity: '8 أيام' },
   { num: '20', category: '45', price: 1626, days: '8', unit: 'أيام', validity: '8 أيام' },
@@ -87,7 +89,7 @@ export const NORTH_INSTANT_OFFERS = [
 /**
  * فئات شحن فوري جنوب (SBAY South) - 6 فئات محددة مع الصلاحيات
  */
-export const SOUTH_INSTANT_OFFERS = [
+const SOUTH_INSTANT_OFFERS = [
   { num: '3', category: '600', price: 960, days: '7', unit: 'أيام', validity: '7 أيام' },
   { num: '1000', category: '1000', price: 1600, days: '15', unit: 'يوم', validity: '15 يوم' },
   { num: '1650', category: '1650', price: 2640, days: '30', unit: 'يوم', validity: '30 يوم' },
@@ -104,7 +106,7 @@ export const SOUTH_INSTANT_OFFERS = [
  * - name: اسم الباقة الظاهر للعميل
  * - price: السعر النهائي المخصوم بالريال
  */
-export const PREPAID_PACKAGE_SECTIONS = [
+const PREPAID_PACKAGE_SECTIONS = [
   {
     id: 'yabalash',
     title: 'باقات يابلاش + واحد',
@@ -342,6 +344,8 @@ export default function SabaphonePage() {
         [firestore, user]
     );
     const { data: userProfile } = useDoc<any>(userDocRef);
+    const { config } = useServicesConfig();
+    const isApiUser = isUserApiCustomer(userProfile);
 
     useEffect(() => {
         if (showSuccess && audioRef.current) {
@@ -399,9 +403,10 @@ export default function SabaphonePage() {
         } catch (err) { console.error(err); }
     };
 
-    // حساب تكلفة الوحدات: 100 وحدة بـ 4300 ريال (43 ريال لكل وحدة)
+    // حساب تكلفة الوحدات
     const calculateUnitsCost = (count: number) => {
-        return Math.ceil(count * 43);
+        const unitRate = isApiUser ? (config.sabafon?.unitsRate ?? 45) : 43;
+        return roundCurrency(count * unitRate);
     };
 
     // معالجة الضغط على سداد الوحدات
@@ -433,10 +438,12 @@ export default function SabaphonePage() {
             toast({ variant: 'destructive', title: 'رقم ناقص', description: 'يرجى إدخال رقم الهاتف أولاً.' });
             return;
         }
+        const rate = isApiUser ? (config.sabafon?.instantNorthRate ?? 1) : 1;
+        const finalCost = roundCurrency(item.price * rate);
         setConfirmData({
             title: `شحن فوري شمال`,
             item: `فئة ${item.category}`,
-            amount: item.price,
+            amount: finalCost,
             service: 'sabaphone',
             num: item.num,
             action: 'bill'
@@ -450,10 +457,12 @@ export default function SabaphonePage() {
             toast({ variant: 'destructive', title: 'رقم ناقص', description: 'يرجى إدخال رقم الهاتف أولاً.' });
             return;
         }
+        const rate = isApiUser ? (config.sabafon?.instantSouthRate ?? config.sabafon?.balanceRate ?? 3.0) : 3.0;
+        const finalCost = roundCurrency(item.price * rate);
         setConfirmData({
             title: `شحن فوري جنوب`,
             item: `فئة ${item.category}`,
-            amount: item.price,
+            amount: finalCost,
             service: 'sbay',
             num: item.num,
             action: 'bill'
@@ -467,10 +476,12 @@ export default function SabaphonePage() {
             toast({ variant: 'destructive', title: 'رقم ناقص', description: 'يرجى إدخال رقم الهاتف أولاً.' });
             return;
         }
+        const rate = isApiUser ? (config.sabafon?.packagesRate ?? config.sabafon?.rate ?? 1) : 1;
+        const finalCost = roundCurrency(pkg.price * rate);
         setConfirmData({
             title: `تفعيل ${pkg.name}`,
             item: pkg.name,
-            amount: pkg.price,
+            amount: finalCost,
             service: 'sabaoffer',
             num: pkg.num
         });

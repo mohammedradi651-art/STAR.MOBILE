@@ -459,21 +459,51 @@ export default function ApiServicesManagementPage() {
               </div>
 
               <CardContent className="p-3 space-y-3">
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-black">نسبة / معامل المنظومة (افتراضي 1)</Label>
-                  <Input 
-                    type="text"
-                    inputMode="decimal"
-                    dir="ltr"
-                    value={config.alwadi.rate !== undefined ? String(config.alwadi.rate) : '1'}
-                    onChange={(e) => {
-                      const formatted = e.target.value.replace('،', '.').replace(/[^0-9.]/g, '');
-                      const parsed = parseFloat(formatted);
-                      updateServiceSetting('alwadi', 'rate', isNaN(parsed) ? 1 : parsed);
-                    }}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[11px] font-black">نسبة / معامل المنظومة (مثلاً 0.95 أو 1):</Label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => updateServiceSetting('alwadi', 'rate', 0.95)}
+                        className={cn(
+                          "text-[9px] font-black px-1.5 py-0.5 rounded border transition-all",
+                          (config.alwadi.rate ?? 1) === 0.95 ? "bg-primary text-white border-primary" : "bg-card text-muted-foreground"
+                        )}
+                      >
+                        0.95 (خصم 5%)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateServiceSetting('alwadi', 'rate', 1)}
+                        className={cn(
+                          "text-[9px] font-black px-1.5 py-0.5 rounded border transition-all",
+                          (config.alwadi.rate ?? 1) === 1 ? "bg-primary text-white border-primary" : "bg-card text-muted-foreground"
+                        )}
+                      >
+                        1 (بدون خصم)
+                      </button>
+                    </div>
+                  </div>
+
+                  <RateDecimalInput 
+                    value={config.alwadi.rate}
+                    onChange={(val) => updateServiceSetting('alwadi', 'rate', val)}
+                    defaultValue={1}
                     className="rounded-lg font-black h-8 text-center text-xs"
-                    placeholder="مثال: 0.954"
+                    placeholder="مثال: 0.95"
                   />
+                </div>
+
+                {/* سطر توضيحي لحسبة أسعار باقات منظومة الوادي بعد تطبيق النسبة */}
+                <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 dark:text-emerald-300 p-2 rounded-xl text-[10px] flex items-center justify-between font-black">
+                  <span>سعر باقة شهرين (3,000) للعميل بالـ API:</span>
+                  <span className="text-primary text-xs font-black">
+                    {Math.ceil(3000 * (config.alwadi.rate ?? 1)).toLocaleString()} ر.ي 
+                    <span className="text-[9px] text-muted-foreground mr-1">
+                      ({(config.alwadi.rate ?? 1) === 1 ? 'بدون خصم' : `خصم: ${3000 - Math.ceil(3000 * (config.alwadi.rate ?? 1))} ر.ي`})
+                    </span>
+                  </span>
                 </div>
 
                 <div className="pt-2 border-t">
@@ -584,16 +614,10 @@ export default function ApiServicesManagementPage() {
                     </div>
                   </div>
 
-                  <Input 
-                    type="text"
-                    inputMode="decimal"
-                    dir="ltr"
-                    value={config.networks.rate !== undefined ? String(config.networks.rate) : '0.95'}
-                    onChange={(e) => {
-                      const formatted = e.target.value.replace('،', '.').replace(/[^0-9.]/g, '');
-                      const parsed = parseFloat(formatted);
-                      updateServiceSetting('networks', 'rate', isNaN(parsed) ? 0.95 : parsed);
-                    }}
+                  <RateDecimalInput 
+                    value={config.networks.rate}
+                    onChange={(val) => updateServiceSetting('networks', 'rate', val)}
+                    defaultValue={0.95}
                     className="rounded-lg font-black h-8 text-center text-xs"
                     placeholder="مثال: 0.95"
                   />
@@ -771,6 +795,73 @@ export default function ApiServicesManagementPage() {
 
       <Toaster />
     </div>
+  );
+}
+
+// حقل إدخال الكسور العشرية والنسب بدقة وسلاسة دون حذف الفاصلة (0.)
+interface RateDecimalInputProps {
+  value: number | undefined;
+  onChange: (val: number) => void;
+  defaultValue?: number;
+  placeholder?: string;
+  className?: string;
+  dir?: string;
+}
+
+function RateDecimalInput({
+  value,
+  onChange,
+  defaultValue = 1,
+  placeholder = "مثال: 0.95",
+  className,
+  dir = "ltr"
+}: RateDecimalInputProps) {
+  const currentNum = value !== undefined ? value : defaultValue;
+  const [text, setText] = useState<string>(String(currentNum));
+
+  useEffect(() => {
+    const parsed = parseFloat(text);
+    if (!isNaN(parsed) && parsed === currentNum) return;
+    if (text.endsWith('.') || text.endsWith('.0') || text === '0' || text === '') return;
+    setText(String(currentNum));
+  }, [currentNum]);
+
+  const handleChange = (raw: string) => {
+    let formatted = raw.replace('،', '.').replace(/[^0-9.]/g, '');
+    const parts = formatted.split('.');
+    if (parts.length > 2) {
+      formatted = parts[0] + '.' + parts.slice(1).join('');
+    }
+    setText(formatted);
+
+    const parsed = parseFloat(formatted);
+    if (!isNaN(parsed) && parsed >= 0) {
+      onChange(parsed);
+    }
+  };
+
+  const handleBlur = () => {
+    const parsed = parseFloat(text);
+    if (isNaN(parsed) || parsed < 0) {
+      setText(String(defaultValue));
+      onChange(defaultValue);
+    } else {
+      setText(String(parsed));
+      onChange(parsed);
+    }
+  };
+
+  return (
+    <Input
+      type="text"
+      inputMode="decimal"
+      dir={dir}
+      value={text}
+      onChange={(e) => handleChange(e.target.value)}
+      onBlur={handleBlur}
+      className={className}
+      placeholder={placeholder}
+    />
   );
 }
 

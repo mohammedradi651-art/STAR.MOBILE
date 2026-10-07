@@ -36,11 +36,14 @@ import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import Image from 'next/image';
 import { initiateTelecomPayment, executeTelecomRequestWithTimeout } from '@/lib/telecom-order';
+import { useServicesConfig } from '@/hooks/use-services-config';
+import { isUserApiCustomer, calculateFinalServicePrice } from '@/lib/services-config';
 
 export const dynamic = 'force-dynamic';
 
 type UserProfile = {
   balance?: number;
+  apiKey?: string | null;
 };
 
 type Offer = {
@@ -69,7 +72,19 @@ const ADEN_NET_OFFERS: Offer[] = [
     { offerId: '120gb', offerName: 'عدن نت 120 جيجا (تجارية)', price: 30000, data: '120 GB', validity: 'شهر', num: '30000' },
 ];
 
-const PackageCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) => (
+const PackageCard = ({ 
+    offer, 
+    onClick, 
+    effectivePrice, 
+    isApiUser 
+}: { 
+    offer: Offer; 
+    onClick: () => void; 
+    effectivePrice?: number; 
+    isApiUser?: boolean; 
+}) => {
+    const displayPrice = effectivePrice !== undefined ? effectivePrice : offer.price;
+    return (
     <div 
       className="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-sm border border-[#1FB8C0]/5 mb-3 cursor-pointer hover:bg-[#1FB8C0]/5 transition-all active:scale-[0.98] group flex items-center justify-between"
       onClick={onClick}
@@ -84,7 +99,14 @@ const PackageCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) 
               />
           </div>
           <div className="flex flex-col items-start">
-              <h4 className="text-sm font-black text-foreground group-hover:text-[#1FB8C0] transition-colors">{offer.offerName}</h4>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-black text-foreground group-hover:text-[#1FB8C0] transition-colors">{offer.offerName}</h4>
+                {isApiUser && (
+                  <span className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold px-1.5 py-0.5 rounded-full border border-amber-500/20">
+                    سعر API
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-3 mt-1">
                 <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1"><Globe className="w-3 h-3 text-[#1FB8C0]"/> {offer.data}</span>
                 <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3 text-[#1FB8C0]"/> {offer.validity}</span>
@@ -94,18 +116,26 @@ const PackageCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) 
 
       <div className="flex flex-col items-end text-left shrink-0">
         <div className="flex items-baseline gap-1">
-            <span className="text-xl font-black text-[#1FB8C0]">{offer.price.toLocaleString('en-US')}</span>
+            <span className="text-xl font-black text-[#1FB8C0]">{displayPrice.toLocaleString('en-US')}</span>
+            <span className="text-[10px] font-bold text-muted-foreground">ر.ي</span>
         </div>
+        {isApiUser && effectivePrice !== undefined && effectivePrice < offer.price && (
+          <span className="text-[10px] text-muted-foreground line-through font-bold">
+            {offer.price.toLocaleString('en-US')} ر.ي
+          </span>
+        )}
         <Button size="sm" className="h-7 rounded-lg text-[10px] font-black px-4 mt-1 bg-[#1FB8C0] hover:bg-[#1FB8C0]/90">سداد</Button>
       </div>
     </div>
-);
+    );
+};
 
 export default function AdenNetPage() {
     const router = useRouter();
     const { toast } = useToast();
     const firestore = useFirestore();
     const { user } = useUser();
+    const { config } = useServicesConfig();
 
     const [phone, setPhone] = useState('');
     const [selectedOffer, setSelectedOffer] = useState<Offer | null>(null);
@@ -119,6 +149,7 @@ export default function AdenNetPage() {
         [firestore, user]
     );
     const { data: userProfile } = useDoc<UserProfile>(userDocRef);
+    const isApiUser = isUserApiCustomer(userProfile);
 
     useEffect(() => {
         if (showSuccess && audioRef.current) {
@@ -182,11 +213,14 @@ export default function AdenNetPage() {
         }
 
         const basePrice = selectedOffer.price;
-        const commission = Math.ceil(basePrice * 0.05);
-        const totalToDeduct = basePrice + commission;
+        const totalToDeduct = isApiUser
+            ? calculateFinalServicePrice(basePrice, config.aden_net)
+            : basePrice + Math.ceil(basePrice * 0.05);
+
+        const feeOrDiscount = totalToDeduct - basePrice;
 
         if ((userProfile?.balance ?? 0) < totalToDeduct) {
-            toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك لا يكفي لتفعيل الباقة شاملة العمولة.' });
+            toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك لا يكفي لتفعيل الباقة.' });
             return;
         }
 
@@ -199,7 +233,7 @@ export default function AdenNetPage() {
                 amount: totalToDeduct,
                 transactionType: `تفعيل ${selectedOffer.offerName}`,
                 recipientPhoneNumber: phone,
-                notes: `للرقم: ${phone}. سعر: ${basePrice} + عمولة: ${commission}.`,
+                notes: `للرقم: ${phone}. سعر: ${basePrice}${isApiUser ? ' (سعر API معتمد)' : ` + عمولة: ${feeOrDiscount}`}.`,
                 serviceCategory: 'عدن نت'
             });
 
@@ -337,13 +371,20 @@ export default function AdenNetPage() {
                         <div className="pt-2 pb-10">
                             <h3 className="text-xs font-black text-muted-foreground uppercase tracking-widest mb-4 px-1">باقات عدن نت المتوفرة</h3>
                             <div className="grid grid-cols-1 gap-1">
-                                {ADEN_NET_OFFERS.map((offer) => (
-                                    <PackageCard 
-                                        key={offer.offerId} 
-                                        offer={offer} 
-                                        onClick={() => setSelectedOffer(offer)} 
-                                    />
-                                ))}
+                                {ADEN_NET_OFFERS.map((offer) => {
+                                    const effectiveOfferPrice = isApiUser
+                                        ? calculateFinalServicePrice(offer.price, config.aden_net)
+                                        : offer.price;
+                                    return (
+                                        <PackageCard 
+                                            key={offer.offerId} 
+                                            offer={offer} 
+                                            effectivePrice={effectiveOfferPrice}
+                                            isApiUser={isApiUser}
+                                            onClick={() => setSelectedOffer(offer)} 
+                                        />
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>
@@ -363,16 +404,29 @@ export default function AdenNetPage() {
                                 <span className="font-bold">{phone}</span>
                             </div>
                             <div className="flex justify-between items-center py-2 border-b border-dashed">
-                                <span className="text-muted-foreground">سعر الباقة:</span>
-                                <span className="font-bold">{selectedOffer?.price.toLocaleString('en-US')} ريال</span>
+                                <span className="text-muted-foreground">سعر الباقة الرسمي:</span>
+                                <span className="font-bold">{(selectedOffer?.price || 0).toLocaleString('en-US')} ريال</span>
                             </div>
-                            <div className="flex justify-between items-center py-2 border-b border-dashed">
-                                <span className="text-muted-foreground">النسبة (5%):</span>
-                                <span className="font-bold text-orange-600">{Math.ceil((selectedOffer?.price || 0) * 0.05).toLocaleString('en-US')} ريال</span>
-                            </div>
+                            {!isApiUser && (
+                                <div className="flex justify-between items-center py-2 border-b border-dashed">
+                                    <span className="text-muted-foreground">النسبة (5%):</span>
+                                    <span className="font-bold text-orange-600">{Math.ceil((selectedOffer?.price || 0) * 0.05).toLocaleString('en-US')} ريال</span>
+                                </div>
+                            )}
+                            {isApiUser && (
+                                <div className="flex justify-between items-center py-2 border-b border-dashed">
+                                    <span className="text-muted-foreground">فئة العميل:</span>
+                                    <span className="font-bold text-amber-600 dark:text-amber-400">عميل API (نسب معتمدة)</span>
+                                </div>
+                            )}
                             <div className="flex justify-between items-center py-3 bg-muted/50 rounded-xl px-2 mt-2">
                                 <span className="font-black">إجمالي الخصم:</span>
-                                <span className="font-black text-[#1FB8C0] text-lg">{((selectedOffer?.price || 0) + Math.ceil((selectedOffer?.price || 0) * 0.05)).toLocaleString('en-US')} ريال</span>
+                                <span className="font-black text-[#1FB8C0] text-lg">
+                                    {(isApiUser
+                                        ? calculateFinalServicePrice(selectedOffer?.price || 0, config.aden_net)
+                                        : ((selectedOffer?.price || 0) + Math.ceil((selectedOffer?.price || 0) * 0.05))
+                                    ).toLocaleString('en-US')} ريال
+                                </span>
                             </div>
                         </div>
                     </AlertDialogHeader>

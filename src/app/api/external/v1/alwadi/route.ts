@@ -85,13 +85,13 @@ export async function POST(req: Request) {
       "9": systemConfig.alwadi?.packages?.oneYear || 15000
     };
 
-    // --- جلب قائمة الباقات والأسعار المعتمدة للعميل ---
+    // --- جلب قائمة الباقات والأسعار المعتمدة للعميل بناءً على نسب الـ API المعتمدة ---
     if (action === 'packages' || action === 'pricing') {
       const pkgs = [
-        { id: "1", name: "باقة شهرين", originalPrice: originalPrices["1"], price: calculateFinalServicePrice(originalPrices["1"], systemConfig.alwadi, userData.alwadiDiscount) },
-        { id: "3", name: "باقة 4 أشهر", originalPrice: originalPrices["3"], price: calculateFinalServicePrice(originalPrices["3"], systemConfig.alwadi, userData.alwadiDiscount) },
-        { id: "7", name: "باقة 6 أشهر", originalPrice: originalPrices["7"], price: calculateFinalServicePrice(originalPrices["7"], systemConfig.alwadi, userData.alwadiDiscount) },
-        { id: "9", name: "باقة سنة كاملة", originalPrice: originalPrices["9"], price: calculateFinalServicePrice(originalPrices["9"], systemConfig.alwadi, userData.alwadiDiscount) }
+        { id: "1", name: "باقة شهرين", originalPrice: originalPrices["1"], price: calculateFinalServicePrice(originalPrices["1"], systemConfig.alwadi) },
+        { id: "3", name: "باقة 4 أشهر", originalPrice: originalPrices["3"], price: calculateFinalServicePrice(originalPrices["3"], systemConfig.alwadi) },
+        { id: "7", name: "باقة 6 أشهر", originalPrice: originalPrices["7"], price: calculateFinalServicePrice(originalPrices["7"], systemConfig.alwadi) },
+        { id: "9", name: "باقة سنة كاملة", originalPrice: originalPrices["9"], price: calculateFinalServicePrice(originalPrices["9"], systemConfig.alwadi) }
       ];
       return NextResponse.json({
         success: true,
@@ -169,8 +169,7 @@ export async function POST(req: Request) {
 
         const price = calculateFinalServicePrice(
             basePrice,
-            systemConfig.alwadi,
-            userData.alwadiDiscount
+            systemConfig.alwadi
         );
 
         // ج. المطابقة الذكية: التحقق من أن subscriberId المرسل يطابق رقم الكرت فعلياً

@@ -39,8 +39,15 @@ import { ar } from 'date-fns/locale';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 import { cn } from '@/lib/utils';
 import { initiateTelecomPayment, executeTelecomRequestWithTimeout } from '@/lib/telecom-order';
+import { useServicesConfig } from '@/hooks/use-services-config';
+import { isUserApiCustomer, roundCurrency } from '@/lib/services-config';
 
 export const dynamic = 'force-dynamic';
+
+type UserProfile = {
+  balance?: number;
+  apiKey?: string | null;
+};
 
 type Offer = {
     offerName: string;
@@ -71,8 +78,18 @@ const WHY_OFFERS: Offer[] = [
     { offerName: 'باقة كرم 2000', price: 2000, data: '1GB', validity: '60 يوم', packageid: '94', num: '2000', sms: '500', minutes: '200' },
 ];
 
-const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) => {
-    const finalPrice = Math.ceil(offer.price * 3.8);
+const PackageItemCard = ({ 
+    offer, 
+    onClick, 
+    rate = 3.8, 
+    isApiUser 
+}: { 
+    offer: Offer; 
+    onClick: () => void; 
+    rate?: number; 
+    isApiUser?: boolean; 
+}) => {
+    const finalPrice = roundCurrency(offer.price * rate);
 
     return (
         <div 
@@ -84,11 +101,19 @@ const PackageItemCard = ({ offer, onClick }: { offer: Offer, onClick: () => void
                   <Image src={LOGO_URL} alt="Why Logo" fill className="object-cover" />
               </div>
           </div>
-          <h4 className="text-sm font-black text-[#7c3aed] mb-1 group-hover:text-[#7c3aed]/80 transition-colors">{offer.offerName}</h4>
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <h4 className="text-sm font-black text-[#7c3aed] group-hover:text-[#7c3aed]/80 transition-colors">{offer.offerName}</h4>
+            {isApiUser && (
+              <span className="text-[9px] bg-purple-500/10 text-purple-600 dark:text-purple-400 font-bold px-1.5 py-0.5 rounded-full border border-purple-500/20">
+                سعر API
+              </span>
+            )}
+          </div>
           <div className="flex items-baseline justify-center mb-4">
             <span className="text-2xl font-black text-foreground">
                 {finalPrice.toLocaleString('en-US')}
             </span>
+            <span className="text-[10px] font-bold text-muted-foreground mr-1">ر.ي</span>
           </div>
           
           <div className="grid grid-cols-4 gap-2 pt-3 mt-2 border-t border-[#7c3aed]/10 text-center">
@@ -118,6 +143,7 @@ export default function WhyPage() {
     const { toast } = useToast();
     const firestore = useFirestore();
     const { user } = useUser();
+    const { config } = useServicesConfig();
 
     const [phone, setPhone] = useState('');
     const [activeTab, setActiveTab] = useState("packages");
@@ -135,6 +161,8 @@ export default function WhyPage() {
         [firestore, user]
     );
     const { data: userProfile } = useDoc<any>(userDocRef);
+    const isApiUser = isUserApiCustomer(userProfile);
+    const whyEffectiveRate = isApiUser ? (config.why?.balanceRate ?? config.why?.rate ?? 3.8) : 3.8;
 
     const handlePhoneChange = (val: string, element: HTMLInputElement) => {
         const cleaned = val.replace(/\D/g, '').slice(0, 9);
@@ -169,7 +197,7 @@ export default function WhyPage() {
     const handleProcessPayment = async (payAmount: number, typeLabel: string, extraPayload: any) => {
         if (!phone || !user || !userDocRef || !firestore) return;
         
-        const finalToDeduct = Math.ceil(payAmount * 3.8);
+        const finalToDeduct = roundCurrency(payAmount * whyEffectiveRate);
 
         if ((userProfile?.balance ?? 0) < finalToDeduct) {
             toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لإتمام هذه العملية.' });
@@ -185,7 +213,7 @@ export default function WhyPage() {
                 amount: finalToDeduct,
                 transactionType: `سداد واي (${typeLabel})`,
                 recipientPhoneNumber: phone,
-                notes: `للرقم: ${phone}`,
+                notes: `للرقم: ${phone}${isApiUser ? ' (سعر API معتمد)' : ''}`,
                 serviceCategory: 'واي'
             });
 
@@ -259,7 +287,13 @@ export default function WhyPage() {
                             <TabsContent value="packages" className="pt-2">
                                 <div className="grid grid-cols-1 gap-1">
                                     {WHY_OFFERS.map((offer) => (
-                                        <PackageItemCard key={offer.packageid} offer={offer} onClick={() => setSelectedOffer(offer)} />
+                                        <PackageItemCard 
+                                            key={offer.packageid} 
+                                            offer={offer} 
+                                            rate={whyEffectiveRate}
+                                            isApiUser={isApiUser}
+                                            onClick={() => setSelectedOffer(offer)} 
+                                        />
                                     ))}
                                 </div>
                             </TabsContent>
@@ -272,8 +306,15 @@ export default function WhyPage() {
                                         <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#7c3aed]/30 font-black text-sm">ر.ي</div>
                                     </div>
                                     <div className="mt-4 p-3 bg-[#7c3aed]/5 rounded-2xl border border-dashed border-[#7c3aed]/20">
-                                        <p className="text-[10px] font-black text-muted-foreground uppercase mb-1">المبلغ المطلوب</p>
-                                        <p className="text-lg font-black text-[#7c3aed]">{amount ? Math.ceil(parseFloat(amount) * 3.8).toLocaleString() : '0'}</p>
+                                        <div className="flex justify-between items-center mb-1">
+                                            <p className="text-[10px] font-black text-muted-foreground uppercase">المبلغ المطلوب</p>
+                                            {isApiUser && (
+                                                <span className="text-[9px] bg-purple-500/10 text-purple-600 dark:text-purple-400 font-bold px-1.5 py-0.5 rounded-full">
+                                                    سعر API (معامل {whyEffectiveRate})
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-lg font-black text-[#7c3aed]">{amount ? roundCurrency(parseFloat(amount) * whyEffectiveRate).toLocaleString() : '0'} ريال</p>
                                     </div>
                                     <Button className="w-full h-14 rounded-2xl text-lg font-black mt-8 shadow-lg text-white" onClick={() => setIsConfirmingBalance(true)} disabled={!amount} style={{ backgroundColor: WHY_PRIMARY }}>شحن رصيد</Button>
                                 </div>
@@ -292,7 +333,11 @@ export default function WhyPage() {
                         <AlertDialogTitle className="text-center font-black">تأكيد تفعيل الباقة</AlertDialogTitle>
                         <div className="space-y-3 pt-4 text-right text-sm">
                             <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">اسم الباقة:</span><span className="font-bold">{selectedOffer?.offerName}</span></div>
-                            <div className="flex justify-between items-center py-3 bg-[#7c3aed]/10 rounded-xl px-2 mt-2"><span className="font-black text-[#7c3aed]">المبلغ المخصوم:</span><span className="font-black text-[#7c3aed] text-lg">{selectedOffer && Math.ceil(selectedOffer.price * 3.8).toLocaleString()}</span></div>
+                            <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">قيمة الباقة الأساسية:</span><span className="font-bold">{selectedOffer?.price.toLocaleString('en-US')} ريال</span></div>
+                            {isApiUser && (
+                                <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">فئة العميل:</span><span className="font-bold text-purple-600 dark:text-purple-400">عميل API (معامل {whyEffectiveRate})</span></div>
+                            )}
+                            <div className="flex justify-between items-center py-3 bg-[#7c3aed]/10 rounded-xl px-2 mt-2"><span className="font-black text-[#7c3aed]">المبلغ المخصوم:</span><span className="font-black text-[#7c3aed] text-lg">{selectedOffer && roundCurrency(selectedOffer.price * whyEffectiveRate).toLocaleString()} ريال</span></div>
                         </div>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-6 sm:space-x-0">
@@ -308,8 +353,11 @@ export default function WhyPage() {
                         <AlertDialogTitle className="text-center font-black">تأكيد شحن الرصيد</AlertDialogTitle>
                         <div className="space-y-3 pt-4 text-right text-sm">
                             <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">رقم الهاتف:</span><span className="font-bold">{phone}</span></div>
-                            <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">مبلغ الشحن:</span><span className="font-bold">{parseFloat(amount || '0').toLocaleString('en-US')}</span></div>
-                            <div className="flex justify-between items-center py-3 bg-[#7c3aed]/10 rounded-xl px-2 mt-2"><span className="font-black text-[#7c3aed]">إجمالي الخصم:</span><span className="font-black text-[#7c3aed] text-lg">{Math.ceil(parseFloat(amount || '0') * 3.8).toLocaleString('en-US')}</span></div>
+                            <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">مبلغ الشحن:</span><span className="font-bold">{parseFloat(amount || '0').toLocaleString('en-US')} ريال</span></div>
+                            {isApiUser && (
+                                <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">فئة العميل:</span><span className="font-bold text-purple-600 dark:text-purple-400">عميل API (معامل {whyEffectiveRate})</span></div>
+                            )}
+                            <div className="flex justify-between items-center py-3 bg-[#7c3aed]/10 rounded-xl px-2 mt-2"><span className="font-black text-[#7c3aed]">إجمالي الخصم:</span><span className="font-black text-[#7c3aed] text-lg">{roundCurrency(parseFloat(amount || '0') * whyEffectiveRate).toLocaleString('en-US')} ريال</span></div>
                         </div>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-6 sm:space-x-0">

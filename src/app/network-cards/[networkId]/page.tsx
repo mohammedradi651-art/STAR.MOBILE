@@ -33,10 +33,11 @@ import { Separator } from '@/components/ui/separator';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { useServicesConfig } from '@/hooks/use-services-config';
+import { roundCurrency, isUserApiCustomer } from '@/lib/services-config';
 
 type CardCategory = {
     id: string;
@@ -57,6 +58,7 @@ type UserProfile = {
   balance?: number;
   displayName?: string;
   phoneNumber?: string;
+  apiKey?: string | null;
 };
 
 type Network = {
@@ -109,6 +111,14 @@ function NetworkPurchasePageComponent() {
     [user, firestore]
   );
   const { data: userProfile } = useDoc<UserProfile>(userDocRef);
+  const { config } = useServicesConfig();
+  const isApiUser = isUserApiCustomer(userProfile);
+
+  const getEffectiveCardPrice = (basePrice: number) => {
+    if (!isApiUser) return basePrice;
+    const rate = config.networks?.rate ?? 0.95;
+    return roundCurrency(basePrice * rate);
+  };
 
   const handlePurchase = async () => {
     if (!selectedCategory || !user || !userProfile || !firestore || !userDocRef || !networkId || !networkData) {
@@ -119,9 +129,10 @@ function NetworkPurchasePageComponent() {
   
     setIsProcessing(true);
     const categoryPrice = selectedCategory.price;
+    const effectivePrice = getEffectiveCardPrice(categoryPrice);
     const userBalance = userProfile?.balance ?? 0;
   
-    if (userBalance < categoryPrice) {
+    if (userBalance < effectivePrice) {
         toast({ variant: "destructive", title: "رصيد غير كافٍ", description: "رصيدك الحالي لا يكفي لإتمام الشراء." });
         setIsProcessing(false);
         setIsConfirming(false);
@@ -147,15 +158,15 @@ function NetworkPurchasePageComponent() {
         const ownerId = networkData.ownerId;
   
         batch.update(cardToPurchaseDoc.ref, { status: 'sold', soldTo: user.uid, soldTimestamp: now });
-        batch.update(userDocRef, { balance: increment(-categoryPrice) });
+        batch.update(userDocRef, { balance: increment(-effectivePrice) });
         
         const buyerTransactionRef = doc(collection(firestore, `users/${user.uid}/transactions`));
         batch.set(buyerTransactionRef, {
             userId: user.uid,
             transactionDate: now,
-            amount: categoryPrice,
+            amount: effectivePrice,
             transactionType: `شراء كرت ${selectedCategory.name}`,
-            notes: `شبكة: ${networkName}`,
+            notes: `شبكة: ${networkName}${isApiUser ? ' (سعر API مخفض)' : ''}`,
             cardNumber: cardToPurchaseData.cardNumber,
         });
 
@@ -272,7 +283,25 @@ function NetworkPurchasePageComponent() {
                             <div className='flex items-start justify-between gap-2'>
                                 <div className='space-y-1 text-right'>
                                     <h3 className="font-bold text-base">{category.name}</h3>
-                                    <p className="font-semibold text-primary">{category.price.toLocaleString('en-US')} ريال</p>
+                                    {(() => {
+                                        const finalPrice = getEffectiveCardPrice(category.price);
+                                        const isDiscounted = finalPrice < category.price;
+                                        return (
+                                            <div className="flex items-center gap-2">
+                                                {isDiscounted && (
+                                                    <span className="text-xs text-muted-foreground line-through font-bold">
+                                                        {category.price.toLocaleString('en-US')}
+                                                    </span>
+                                                )}
+                                                <p className="font-black text-primary text-base">{finalPrice.toLocaleString('en-US')} ريال</p>
+                                                {isDiscounted && (
+                                                    <span className="text-[8px] font-black bg-blue-500/10 text-blue-600 px-1.5 py-0.5 rounded border border-blue-500/20">
+                                                        سعر API
+                                                    </span>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                                 <button 
                                     className="h-10 py-2 px-5 text-sm font-bold rounded-lg bg-primary text-white hover:bg-primary/90"
@@ -311,7 +340,24 @@ function NetworkPurchasePageComponent() {
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-center">تأكيد عملية الشراء</AlertDialogTitle>
                         <AlertDialogDescription className="text-center pt-2">
-                            هل أنت متأكد من رغبتك في شراء كرت "{selectedCategory.name}"؟ سيتم خصم <span className="font-bold text-primary">{selectedCategory.price.toLocaleString('en-US')} ريال</span> من رصيدك.
+                            {(() => {
+                                const finalPrice = getEffectiveCardPrice(selectedCategory.price);
+                                const isDiscounted = finalPrice < selectedCategory.price;
+                                return (
+                                    <>
+                                        هل أنت متأكد من رغبتك في شراء كرت "{selectedCategory.name}"؟ سيتم خصم{' '}
+                                        <span className="font-bold text-primary">
+                                            {finalPrice.toLocaleString('en-US')} ريال
+                                        </span>{' '}
+                                        من رصيدك.
+                                        {isDiscounted && (
+                                            <span className="block text-xs font-black text-blue-600 dark:text-blue-400 mt-1">
+                                                (تم تطبيق سعر مفتاح الـ API المعتمد)
+                                            </span>
+                                        )}
+                                    </>
+                                );
+                            })()}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-4">

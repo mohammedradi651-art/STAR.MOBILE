@@ -43,8 +43,10 @@ import Image from 'next/image';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
-import { cn } from '@/lib/utils';
 import { initiateTelecomPayment, executeTelecomRequestWithTimeout } from '@/lib/telecom-order';
+import { useServicesConfig } from '@/hooks/use-services-config';
+import { roundCurrency, isUserApiCustomer } from '@/lib/services-config';
+import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -253,7 +255,9 @@ export default function YouServicesPage() {
         () => (user && firestore ? doc(firestore, 'users', user.uid) : null),
         [firestore, user]
     );
-    const { data: userProfile } = useDoc<UserProfile>(userDocRef);
+    const { data: userProfile } = useDoc<any>(userDocRef);
+    const { config } = useServicesConfig();
+    const isApiUser = isUserApiCustomer(userProfile);
 
     const handlePhoneChange = (val: string, element: HTMLInputElement) => {
         const cleaned = val.replace(/\D/g, '').slice(0, 9);
@@ -330,7 +334,11 @@ export default function YouServicesPage() {
             return;
         }
 
-        const finalToDeduct = typeLabel.includes('شحن') ? payAmount : payAmount * 3;
+        const multiplier = isApiUser ? (config.you?.balanceRate ?? 3.0) : 3.0;
+        const packageRate = isApiUser ? (config.you?.rate ?? 1.0) : 1.0;
+        const finalToDeduct = typeLabel.includes('شحن') 
+            ? roundCurrency(payAmount * packageRate) 
+            : roundCurrency(payAmount * multiplier);
 
         if ((userProfile?.balance ?? 0) < finalToDeduct) {
             toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لإتمام هذه العملية.' });
@@ -394,7 +402,8 @@ export default function YouServicesPage() {
             return;
         }
 
-        const totalToDeduct = selectedOffer.price;
+        const packageRate = isApiUser ? (config.you?.rate ?? 1.0) : 1.0;
+        const totalToDeduct = roundCurrency(selectedOffer.price * packageRate);
 
         if ((userProfile?.balance ?? 0) < totalToDeduct) {
             toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لتفعيل هذه الباقة.' });

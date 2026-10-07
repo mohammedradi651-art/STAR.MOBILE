@@ -39,11 +39,14 @@ import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import Image from 'next/image';
 import { initiateTelecomPayment, executeTelecomRequestWithTimeout } from '@/lib/telecom-order';
+import { useServicesConfig } from '@/hooks/use-services-config';
+import { isUserApiCustomer, calculateFinalServicePrice, roundCurrency } from '@/lib/services-config';
 
 export const dynamic = 'force-dynamic';
 
 type UserProfile = {
   balance?: number;
+  apiKey?: string | null;
 };
 
 type QueryResult = {
@@ -80,7 +83,19 @@ const YEMEN_4G_OFFERS: Offer[] = [
     { offerId: '4g_500gb', offerName: 'يمن فورجي 500 جيجا', price: 46000, data: '500 GB', validity: 'يوم 30', offertype: '4G_500GB' },
 ];
 
-const PackageCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) => (
+const PackageCard = ({ 
+    offer, 
+    onClick, 
+    effectivePrice, 
+    isApiUser 
+}: { 
+    offer: Offer; 
+    onClick: () => void; 
+    effectivePrice?: number; 
+    isApiUser?: boolean; 
+}) => {
+    const displayPrice = effectivePrice !== undefined ? effectivePrice : offer.price;
+    return (
     <div 
       className="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-sm border border-[#106BA2]/10 mb-3 cursor-pointer hover:bg-[#106BA2]/5 transition-all active:scale-[0.98] group flex items-center justify-between"
       onClick={onClick}
@@ -95,7 +110,14 @@ const PackageCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) 
               />
           </div>
           <div className="flex flex-col items-start">
-              <h4 className="text-sm font-black text-foreground group-hover:text-[#106BA2] transition-colors">{offer.offerName}</h4>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-black text-foreground group-hover:text-[#106BA2] transition-colors">{offer.offerName}</h4>
+                {isApiUser && (
+                  <span className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold px-1.5 py-0.5 rounded-full border border-amber-500/20">
+                    سعر API
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-3 mt-1">
                 <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1"><Globe className="w-3 h-3 text-[#106BA2]"/> {offer.data}</span>
                 <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3 text-[#106BA2]"/> {offer.validity}</span>
@@ -105,18 +127,26 @@ const PackageCard = ({ offer, onClick }: { offer: Offer, onClick: () => void }) 
 
       <div className="flex flex-col items-end text-left shrink-0">
         <div className="flex items-baseline gap-1">
-            <span className="text-xl font-black text-[#106BA2]">{offer.price.toLocaleString('en-US')}</span>
+            <span className="text-xl font-black text-[#106BA2]">{displayPrice.toLocaleString('en-US')}</span>
+            <span className="text-[10px] font-bold text-muted-foreground">ر.ي</span>
         </div>
+        {isApiUser && effectivePrice !== undefined && effectivePrice < offer.price && (
+          <span className="text-[10px] text-muted-foreground line-through font-bold">
+            {offer.price.toLocaleString('en-US')} ر.ي
+          </span>
+        )}
         <Button size="sm" className="h-7 rounded-lg text-[10px] font-black px-4 mt-1 bg-[#106BA2] hover:bg-[#106BA2]/90">سداد</Button>
       </div>
     </div>
-);
+    );
+};
 
 export default function Yemen4GPage() {
     const router = useRouter();
     const { toast } = useToast();
     const firestore = useFirestore();
     const { user } = useUser();
+    const { config } = useServicesConfig();
 
     const [phone, setPhone] = useState('');
     const [activeTab, setActiveTab] = useState("packages");
@@ -136,6 +166,7 @@ export default function Yemen4GPage() {
         [firestore, user]
     );
     const { data: userProfile } = useDoc<UserProfile>(userDocRef);
+    const isApiUser = isUserApiCustomer(userProfile);
 
     useEffect(() => {
         if (showSuccess && audioRef.current) {
@@ -265,11 +296,15 @@ export default function Yemen4GPage() {
         const baseAmount = parseFloat(amount);
         if (isNaN(baseAmount) || baseAmount <= 0) return;
 
-        const commission = Math.ceil(baseAmount * 0.05);
-        const totalToDeduct = baseAmount + commission;
+        // عملاء الـ API يعتمد لهم السعر الدقيق من الإعدادات بدون عمولة عادية
+        const totalToDeduct = isApiUser 
+            ? calculateFinalServicePrice(baseAmount, config.yemen_4g)
+            : baseAmount + Math.ceil(baseAmount * 0.05);
+
+        const feeOrDiscount = totalToDeduct - baseAmount;
 
         if ((userProfile?.balance ?? 0) < totalToDeduct) {
-            toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لإتمام هذه العملية شاملة العمولة.' });
+            toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لإتمام هذه العملية.' });
             return;
         }
 
@@ -282,7 +317,7 @@ export default function Yemen4GPage() {
                 amount: totalToDeduct,
                 transactionType: 'سداد يمن فورجي',
                 recipientPhoneNumber: phone,
-                notes: `إلى رقم: ${phone}. مبلغ: ${baseAmount} + عمولة: ${commission}.`,
+                notes: `إلى رقم: ${phone}. مبلغ: ${baseAmount}${isApiUser ? ' (سعر API معتمد)' : ` + عمولة: ${feeOrDiscount}`}.`,
                 serviceCategory: 'يمن فورجي'
             });
 
@@ -322,11 +357,15 @@ export default function Yemen4GPage() {
         }
 
         const basePrice = selectedOffer.price;
-        const commission = Math.ceil(basePrice * 0.05);
-        const totalToDeduct = basePrice + commission;
+        // لعملاء الـ API تطبق النسبة الدقيقة للباقات
+        const totalToDeduct = isApiUser
+            ? calculateFinalServicePrice(basePrice, config.yemen_4g)
+            : basePrice + Math.ceil(basePrice * 0.05);
+
+        const feeOrDiscount = totalToDeduct - basePrice;
 
         if ((userProfile?.balance ?? 0) < totalToDeduct) {
-            toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لتفعيل هذه الباقة شاملة العمولة.' });
+            toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لتفعيل هذه الباقة.' });
             return;
         }
 
@@ -339,7 +378,7 @@ export default function Yemen4GPage() {
                 amount: totalToDeduct,
                 transactionType: `تفعيل ${selectedOffer.offerName}`,
                 recipientPhoneNumber: phone,
-                notes: `للرقم: ${phone}. سعر: ${basePrice} + عمولة: ${commission}.`,
+                notes: `للرقم: ${phone}. سعر: ${basePrice}${isApiUser ? ' (سعر API معتمد)' : ` + عمولة: ${feeOrDiscount}`}.`,
                 serviceCategory: 'يمن فورجي'
             });
 
@@ -447,13 +486,20 @@ export default function Yemen4GPage() {
 
                             <TabsContent value="packages" className="pt-2 animate-in fade-in-0 duration-300">
                                 <div className="grid grid-cols-1 gap-1">
-                                    {YEMEN_4G_OFFERS.map((offer) => (
-                                        <PackageCard 
-                                            key={offer.offerId} 
-                                            offer={offer} 
-                                            onClick={() => setSelectedOffer(offer)} 
-                                        />
-                                    ))}
+                                    {YEMEN_4G_OFFERS.map((offer) => {
+                                        const effectiveOfferPrice = isApiUser
+                                            ? calculateFinalServicePrice(offer.price, config.yemen_4g)
+                                            : offer.price;
+                                        return (
+                                            <PackageCard 
+                                                key={offer.offerId} 
+                                                offer={offer} 
+                                                effectivePrice={effectiveOfferPrice}
+                                                isApiUser={isApiUser}
+                                                onClick={() => setSelectedOffer(offer)} 
+                                            />
+                                        );
+                                    })}
                                 </div>
                             </TabsContent>
 
@@ -500,13 +546,26 @@ export default function Yemen4GPage() {
                                 <span className="text-muted-foreground">المبلغ:</span>
                                 <span className="font-bold">{parseFloat(amount || '0').toLocaleString('en-US')} ريال</span>
                             </div>
-                            <div className="flex justify-between items-center py-2 border-b border-dashed">
-                                <span className="text-muted-foreground">النسبة (5%):</span>
-                                <span className="font-bold text-orange-600">{Math.ceil(parseFloat(amount || '0') * 0.05).toLocaleString('en-US')} ريال</span>
-                            </div>
+                            {!isApiUser && (
+                                <div className="flex justify-between items-center py-2 border-b border-dashed">
+                                    <span className="text-muted-foreground">النسبة (5%):</span>
+                                    <span className="font-bold text-orange-600">{Math.ceil(parseFloat(amount || '0') * 0.05).toLocaleString('en-US')} ريال</span>
+                                </div>
+                            )}
+                            {isApiUser && (
+                                <div className="flex justify-between items-center py-2 border-b border-dashed">
+                                    <span className="text-muted-foreground">فئة العميل:</span>
+                                    <span className="font-bold text-amber-600 dark:text-amber-400">عميل API (نسب معتمدة)</span>
+                                </div>
+                            )}
                             <div className="flex justify-between items-center py-3 bg-muted/50 rounded-xl px-2 mt-2">
                                 <span className="font-black">إجمالي المطلوب:</span>
-                                <span className="font-black text-[#106BA2] text-lg">{(parseFloat(amount || '0') + Math.ceil(parseFloat(amount || '0') * 0.05)).toLocaleString('en-US')} ريال</span>
+                                <span className="font-black text-[#106BA2] text-lg">
+                                    {(isApiUser 
+                                        ? calculateFinalServicePrice(parseFloat(amount || '0'), config.yemen_4g)
+                                        : (parseFloat(amount || '0') + Math.ceil(parseFloat(amount || '0') * 0.05))
+                                    ).toLocaleString('en-US')} ريال
+                                </span>
                             </div>
                         </div>
                     </AlertDialogHeader>
@@ -524,16 +583,29 @@ export default function Yemen4GPage() {
                         <div className="py-4 space-y-3 text-right text-sm">
                             <p className="text-center text-lg font-black text-[#106BA2] mb-2">{selectedOffer?.offerName}</p>
                             <div className="flex justify-between items-center py-2 border-b border-dashed">
-                                <span className="text-muted-foreground">سعر الباقة:</span>
+                                <span className="text-muted-foreground">سعر الباقة الرسمي:</span>
                                 <span className="font-bold">{(selectedOffer?.price || 0).toLocaleString('en-US')} ريال</span>
                             </div>
-                            <div className="flex justify-between items-center py-2 border-b border-dashed">
-                                <span className="text-muted-foreground">النسبة (5%):</span>
-                                <span className="font-bold text-orange-600">{Math.ceil((selectedOffer?.price || 0) * 0.05).toLocaleString('en-US')} ريال</span>
-                            </div>
+                            {!isApiUser && (
+                                <div className="flex justify-between items-center py-2 border-b border-dashed">
+                                    <span className="text-muted-foreground">النسبة (5%):</span>
+                                    <span className="font-bold text-orange-600">{Math.ceil((selectedOffer?.price || 0) * 0.05).toLocaleString('en-US')} ريال</span>
+                                </div>
+                            )}
+                            {isApiUser && (
+                                <div className="flex justify-between items-center py-2 border-b border-dashed">
+                                    <span className="text-muted-foreground">فئة العميل:</span>
+                                    <span className="font-bold text-amber-600 dark:text-amber-400">عميل API (نسب معتمدة)</span>
+                                </div>
+                            )}
                             <div className="flex justify-between items-center py-3 bg-muted/50 rounded-xl px-2 mt-2">
                                 <span className="font-black">إجمالي الخصم:</span>
-                                <span className="font-black text-[#106BA2] text-lg">{((selectedOffer?.price || 0) + Math.ceil((selectedOffer?.price || 0) * 0.05)).toLocaleString('en-US')} ريال</span>
+                                <span className="font-black text-[#106BA2] text-lg">
+                                    {(isApiUser
+                                        ? calculateFinalServicePrice(selectedOffer?.price || 0, config.yemen_4g)
+                                        : ((selectedOffer?.price || 0) + Math.ceil((selectedOffer?.price || 0) * 0.05))
+                                    ).toLocaleString('en-US')} ريال
+                                </span>
                             </div>
                         </div>
                     </AlertDialogHeader>

@@ -33,6 +33,9 @@ import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import Lottie from 'lottie-react';
+import { useServicesConfig } from '@/hooks/use-services-config';
+import { roundCurrency, isUserApiCustomer } from '@/lib/services-config';
+import { Sparkles } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,6 +86,7 @@ export default function AlwadiPage() {
   const { toast } = useToast();
   const router = useRouter();
   const audioRef = useRef<HTMLAudioElement>(null);
+  const { config } = useServicesConfig();
 
   const [cardNumber, setCardNumber] = useState('');
   const [isInquiring, setIsInquiring] = useState(false);
@@ -98,9 +102,13 @@ export default function AlwadiPage() {
   );
   const { data: userProfile } = useDoc<any>(userDocRef);
 
+  const isApiUser = isUserApiCustomer(userProfile);
+
+  // احتساب السعر النهائي بدقة: إذا كان المستخدم صاحب مفتاح API تطبق نسبة API، وإلا السعر الرسمي الكامل
   const getFinalPrice = (price: number) => {
-    const discountPercent = userProfile?.alwadiDiscount || 0;
-    return price * (1 - discountPercent / 100);
+    if (!isApiUser) return price;
+    const rate = config.alwadi?.rate ?? 1;
+    return roundCurrency(price * rate);
   };
 
   useEffect(() => {
@@ -312,6 +320,13 @@ export default function AlwadiPage() {
                     </div>
                 </div>
 
+                {isApiUser && (
+                    <div className="p-2.5 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-between text-blue-700 dark:text-blue-300 text-[11px] font-black">
+                        <span className="flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5" /> أسعار خاصة بمفتاح الـ API مطبقة تلقائياً</span>
+                        <span className="text-[9px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-black">خصم معتمد</span>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                     {PROVIDER_OPTIONS.map((opt) => {
                         const finalPrice = getFinalPrice(opt.price);
@@ -339,6 +354,11 @@ export default function AlwadiPage() {
                                     )}
                                     <p className="text-base font-black text-primary">{finalPrice.toLocaleString('en-US')} <span className="text-[8px]">ر.ي</span></p>
                                 </div>
+                                {isDiscounted && (
+                                    <span className="text-[8px] font-black text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
+                                        سعر API
+                                    </span>
+                                )}
                             </button>
                         );
                     })}
