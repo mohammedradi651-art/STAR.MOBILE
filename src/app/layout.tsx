@@ -147,7 +147,16 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl">
       <head>
-        <title>ستار موبايل</title>
+        <title>ستار موبايل | خدمات السداد الإلكتروني</title>
+<meta
+  name="description"
+  content="ستار موبايل لخدمات السداد الإلكتروني وشحن الاتصالات والإنترنت في اليمن."
+/>
+<meta
+  name="keywords"
+  content="ستار موبايل, Star Mobile, السداد الإلكتروني, شحن رصيد, اليمن"
+/>
+
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <link rel="icon" href="/logo.jpg" />
         <link rel="manifest" href={`/manifest.json?v=${APP_VERSION}`} />
