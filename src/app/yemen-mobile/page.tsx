@@ -497,8 +497,36 @@ export default function YemenMobilePage() {
           const baseType = isPostpaid ? 'فوترة' : 'دفع مسبق';
           const detectedTypeLabel = simGeneration ? `${baseType} - \u200E${simGeneration}` : baseType;
 
-          const isLoan = solfaResult.status === "1" || solfaResult.status === 1;
-          const loanAmt = isLoan ? parseFloat(solfaResult.loan_amount || "0") : 0;
+          // فحص حالة السلفة بدقة متناهية ودعم كافة أشكال الردود وحمايتها من أخطاء المزود
+          const solfaDesc = String(solfaResult?.resultDesc || solfaResult?.message || '').toLowerCase();
+          const hasNegation = solfaDesc.includes('غير متسلف') || 
+                              solfaDesc.includes('لا توجد سلفة') || 
+                              solfaDesc.includes('ليس متسلف') || 
+                              solfaDesc.includes('غير مشترك') ||
+                              solfaResult?.status === "0" || 
+                              solfaResult?.status === 0;
+
+          const parsedLoanAmt = parseFloat(
+            String(
+              solfaResult?.loanAmount ?? 
+              solfaResult?.loan_amount ?? 
+              solfaResult?.amount ?? 
+              (typeof solfaResult?.resultDesc === 'string' ? solfaResult.resultDesc.match(/(\d+(?:\.\d+)?)/)?.[0] : 0) ?? 
+              0
+            )
+          ) || 0;
+
+          const isLoan = !hasNegation && Boolean(
+            solfaResult?.isLoan === true ||
+            solfaResult?.status === "1" ||
+            solfaResult?.status === 1 ||
+            solfaResult?.providerStatus === "1" ||
+            solfaResult?.providerStatus === 1 ||
+            parsedLoanAmt > 0 ||
+            (solfaDesc.includes('متسلف') && !hasNegation)
+          );
+
+          const loanAmt = isLoan ? (parsedLoanAmt > 0 ? parsedLoanAmt : 0) : 0;
 
           setBillingInfo({ 
               balance: parseFloat(queryResult.balance || "0"), 
@@ -612,8 +640,8 @@ export default function YemenMobilePage() {
 
   const handleActivateOffer = async () => {
     if (!selectedOffer || !phone || !user || !userDocRef || !firestore) return;
-    const hasLoan = billingInfo?.isLoan && (billingInfo?.loanAmount || 0) > 0;
-    const loanAmt = hasLoan ? (billingInfo?.loanAmount || 0) : 0;
+    const isNumberLoaned = Boolean(billingInfo?.isLoan);
+    const loanAmt = isNumberLoaned ? (billingInfo?.loanAmount || 0) : 0;
     const effectiveOfferPrice = getEffectiveOfferPrice(selectedOffer.price);
     const totalToDeduct = effectiveOfferPrice + loanAmt;
     if ((userProfile?.balance ?? 0) < totalToDeduct) {
@@ -629,7 +657,7 @@ export default function YemenMobilePage() {
             amount: totalToDeduct,
             transactionType: `تفعيل ${selectedOffer.offerName}`,
             recipientPhoneNumber: phone,
-            notes: `للرقم: ${phone}${hasLoan ? ` (شامل سداد سلفة: ${loanAmt})` : ''}${isApiUser ? ` (سعر API: ${effectiveOfferPrice})` : ''}`,
+            notes: `للرقم: ${phone}${isNumberLoaned ? ` (شامل سداد سلفة: ${loanAmt > 0 ? loanAmt : 'نعم'})` : ''}${isApiUser ? ` (سعر API: ${effectiveOfferPrice})` : ''}`,
             serviceCategory: 'يمن موبايل'
         });
 
@@ -647,7 +675,7 @@ export default function YemenMobilePage() {
                 service: 'yemen',
                 offerid: selectedOffer.offertype, 
                 method: 'Renew',
-                solfa: hasLoan ? 'Y' : 'N',
+                solfa: isNumberLoaned ? 'Y' : 'N',
                 amount: selectedOffer.price
             },
             backpass
@@ -882,8 +910,8 @@ export default function YemenMobilePage() {
                           )}
                         </div>
                       </div>
-                      {billingInfo?.isLoan && (billingInfo?.loanAmount || 0) > 0 && (
-                        <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-destructive font-bold flex items-center gap-1"><AlertCircle className="w-3 h-3" /> سداد سلفة الرقم:</span><span className="font-black text-destructive">{(billingInfo.loanAmount || 0).toLocaleString()} ريال</span></div>
+                      {billingInfo?.isLoan && (
+                        <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-destructive font-bold flex items-center gap-1"><AlertCircle className="w-3 h-3" /> سداد سلفة الرقم:</span><span className="font-black text-destructive">{(billingInfo.loanAmount && billingInfo.loanAmount > 0) ? `${billingInfo.loanAmount.toLocaleString()} ريال` : 'سداد سلفة'}</span></div>
                       )}
                       <div className="flex justify-between items-center py-3 bg-muted/50 rounded-xl px-3 mt-4">
                         <span className="font-black">إجمالي الخصم النهائي:</span>

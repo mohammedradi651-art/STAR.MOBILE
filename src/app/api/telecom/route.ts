@@ -391,6 +391,54 @@ export async function POST(request: Request) {
         data = { message: responseText, resultCode: "-1" };
       }
 
+      // معالجة خاصة ودقيقة لعملية فحص السلفة (solfa) لضمان عدم إخفاء حالة السلفة أو استبدالها بـ success/failed
+      if (action === 'solfa') {
+        const rawText = String(data.resultDesc || data.message || responseText || '').trim();
+        const rawStatus = data.status !== undefined ? String(data.status).trim() : '';
+
+        // استخراج مبلغ السلفة من الحقول المختلفة إن وجد
+        const extractedAmount = data.loan_amount ?? data.loanAmount ?? data.amount ?? data.solfa_amount;
+        let numericAmount = parseFloat(String(extractedAmount || '0'));
+        if (isNaN(numericAmount) || numericAmount <= 0) {
+          // محاولة استخراج المبلغ من النص مثل: "المشترك متسلف مبلغ 500 ريال" أو "السلفة: 500"
+          const match = rawText.match(/(?:سلفة|مبلغ)?\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(?:ريال)?/i);
+          if (match && match[1]) {
+            numericAmount = parseFloat(match[1]);
+          }
+        }
+
+        // الكشف الدقيق عن النفي (غير متسلف / لا توجد سلفة)
+        const hasNegation = rawText.includes('غير متسلف') || 
+                            rawText.includes('لا توجد سلفة') || 
+                            rawText.includes('ليس متسلف') || 
+                            rawText.includes('غير مشترك بالسلفة') ||
+                            rawStatus === '0';
+
+        // الكشف عن إثبات السلفة (حالة 1، أو مبلغ أكبر من صفر، أو نص متسلف دون نفي)
+        const hasLoanIndicator = rawStatus === '1' || 
+                                 rawStatus.toLowerCase() === 'true' || 
+                                 numericAmount > 0 || 
+                                 ((rawText.includes('متسلف') || rawText.includes('سلفة')) && !hasNegation);
+
+        const isLoan = Boolean(hasLoanIndicator && !hasNegation);
+        const finalLoanAmount = isLoan ? (numericAmount > 0 ? numericAmount : 0) : 0;
+        const finalStatus = isLoan ? "1" : "0";
+
+        return NextResponse.json({
+          ...data,
+          resultCode: "0",
+          status: finalStatus,
+          isLoan: isLoan,
+          loan_amount: String(finalLoanAmount),
+          loanAmount: finalLoanAmount,
+          providerStatus: data.status,
+          message: isLoan 
+            ? (finalLoanAmount > 0 ? `المشترك متسلف بمبلغ ${finalLoanAmount} ريال` : 'المشترك متسلف')
+            : 'المشترك غير متسلف',
+          resultDesc: data.resultDesc || data.message || (isLoan ? 'المشترك متسلف' : 'المشترك غير متسلف')
+        });
+      }
+
       const isSuccess = data?.resultCode === "0" || data?.resultCode === 0 || data?.resultCode === "-2" || data?.resultCode === -2 || data?.status === 'success' || data?.action === 'done';
 
       if (isSuccess) {
@@ -402,7 +450,7 @@ export async function POST(request: Request) {
         return NextResponse.json({
           ...data,
           resultCode: "0",
-          status: "success",
+          status: data?.status !== undefined && data?.status !== "failed" ? data.status : "success",
           transid: transid,
           chargedCost: requiredCost,
           remainingBalance: initialBalance,
