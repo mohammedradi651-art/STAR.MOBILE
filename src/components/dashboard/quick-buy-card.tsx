@@ -16,7 +16,7 @@ import {
   Gift
 } from 'lucide-react';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
-import { doc, writeBatch, increment, collection } from 'firebase/firestore';
+import { doc, writeBatch, increment, collection, updateDoc, onSnapshot } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import {
   Dialog,
@@ -83,65 +83,120 @@ export function QuickBuyCard() {
     }
 
     setIsProcessing(true);
+    const externalRef = `SM-BN-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
+    const now = new Date().toISOString();
+    const txRef = doc(collection(firestore, `users/${user.uid}/transactions`));
+    const baityOrderRef = doc(firestore, 'baityOrders', externalRef);
+
     try {
-      const response = await fetch(`/services/networks-api/order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ classId: cardDetails.classId })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'فشل الشراء من المصدر.');
-      }
-
-      const result = await response.json();
-      
-      if (!result.data || !result.data.order || !result.data.order.card) {
-          throw new Error('لم يتم استلام بيانات الكرت من المصدر.');
-      }
-
-      const cardData = result.data.order.card;
-      const batch = writeBatch(firestore);
-      const now = new Date().toISOString();
-
-      batch.update(userDocRef, { balance: increment(-cardDetails.price) });
-
-      const txRef = doc(collection(firestore, `users/${user.uid}/transactions`));
-      batch.set(txRef, {
+      // 1. خصم المبلغ فوراً من العميل بمجرد تأكيد الشراء
+      const initBatch = writeBatch(firestore);
+      initBatch.update(userDocRef, { balance: increment(-cardDetails.price) });
+      initBatch.set(txRef, {
+        id: txRef.id,
         userId: user.uid,
         transactionDate: now,
         amount: cardDetails.price,
         transactionType: `شراء ${cardDetails.name}`,
         notes: `شبكة الخير - عرض العيد الحصري`,
-        cardNumber: cardData.cardID,
+        status: 'pending',
+        externalRef: externalRef,
+        networkName: 'شبكة الخير',
+        className: cardDetails.name,
+        classId: cardDetails.classId,
+      });
+      initBatch.set(baityOrderRef, {
+        externalRef: externalRef,
+        userId: user.uid,
+        transactionId: txRef.id,
+        classId: cardDetails.classId,
+        className: cardDetails.name,
+        networkName: 'شبكة الخير',
+        networkId: '1',
+        price: cardDetails.price,
+        status: 'pending',
+        phoneNumber: userProfile.phoneNumber || '',
+        displayName: userProfile.displayName || '',
+        createdAt: now,
+      });
+      await initBatch.commit();
+
+      // الاستماع الفوري للويب هوك
+      const unsubscribe = onSnapshot(baityOrderRef, (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data?.status === 'completed' && data?.cardNumber) {
+            setPurchasedCard({ cardID: data.cardNumber, cardPass: data.cardPass || '' });
+            setIsOpen(false);
+            audioRef.current?.play().catch(() => {});
+            unsubscribe();
+          }
+        }
       });
 
-      await batch.commit();
-      
-      // إرسال SMS بالصيغة الملكية الجديدة
-      if (userProfile?.phoneNumber) {
-          const shortName = getFirstLast(userProfile.displayName);
-          const smsMsg = `ستار موبايل\nمرحباً ${shortName}،\n\nتم شراء كرت الإنترنت الخاص بك بنجاح.\n\nالشبكة: شبكة الخير\nالفئة: عرض العيد 55GB\nرقم الكرت: ${cardData.cardID}`;
-          
-          fetch('/api/sms', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                  phoneNumber: userProfile.phoneNumber.trim(),
-                  message: smsMsg
-              })
-          }).catch(e => console.error("SMS Notify Error", e));
-      }
+      // 2. إرسال الطلب المباشر للمزود
+      const response = await fetch(`/services/networks-api/order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          classId: cardDetails.classId,
+          externalRef: externalRef 
+        })
+      });
 
-      setPurchasedCard(cardData);
-      setIsOpen(false);
-      audioRef.current?.play().catch(() => {});
+      const result: any = await response.json().catch(() => ({}));
+
+      if (response.ok && result?.status === 200 && result?.data?.order?.card) {
+        const cardData = result.data.order.card;
+
+        const finishBatch = writeBatch(firestore);
+        finishBatch.update(txRef, {
+          status: 'completed',
+          cardNumber: cardData.cardID,
+          cardPassword: cardData.cardPass || cardData.cardID,
+          completedAt: new Date().toISOString()
+        });
+        finishBatch.update(baityOrderRef, {
+          status: 'completed',
+          cardNumber: cardData.cardID,
+          cardPass: cardData.cardPass || '',
+          uuidOrder: result.data.order.uuidOrder || '',
+          completedAt: new Date().toISOString()
+        });
+        await finishBatch.commit().catch(() => {});
+
+        // إرسال SMS بالصيغة الملكية الجديدة
+        if (userProfile?.phoneNumber) {
+            const shortName = getFirstLast(userProfile.displayName);
+            const smsMsg = `ستار موبايل\nمرحباً ${shortName}،\n\nتم شراء كرت الإنترنت الخاص بك بنجاح.\n\nالشبكة: شبكة الخير\nالفئة: عرض العيد 55GB\nرقم الكرت: ${cardData.cardID}`;
+            
+            fetch('/api/sms', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    phoneNumber: userProfile.phoneNumber.trim(),
+                    message: smsMsg
+                })
+            }).catch(e => console.error("SMS Notify Error", e));
+        }
+
+        setPurchasedCard(cardData);
+        setIsOpen(false);
+        audioRef.current?.play().catch(() => {});
+      } else {
+        setIsOpen(false);
+        toast({
+          title: "تم استلام الطلب وخصم المبلغ ✅",
+          description: "طلبك قيد المعالجة لدى المزود. في حال تأخر الكرت سيصلك إشعار ورسالة نصية برقم الكرت وتجده في سجل العمليات فور اعتماده.",
+          duration: 8000
+        });
+      }
     } catch (error: any) {
+      setIsOpen(false);
       toast({ 
-        variant: "destructive", 
-        title: "فشل العملية", 
-        description: error.message || 'يرجى التواصل مع الإدارة 770326828' 
+        title: "تم استلام الطلب وخصم المبلغ ✅", 
+        description: "طلبك مسجل وسيتم إصدار الكرت تلقائياً عبر الويب هوك فور تأكيده من المزود.",
+        duration: 8000
       });
     } finally {
       setIsProcessing(false);

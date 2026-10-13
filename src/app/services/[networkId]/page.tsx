@@ -6,7 +6,7 @@ import { SimpleHeader } from '@/components/layout/simple-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useFirestore, useUser, useDoc } from '@/firebase';
-import { doc, writeBatch, increment, collection } from 'firebase/firestore';
+import { doc, writeBatch, increment, collection, updateDoc, onSnapshot } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Calendar, CheckCircle, Copy, AlertCircle, Database, MessageSquare, Smartphone, Loader2 } from 'lucide-react';
 import {
@@ -135,7 +135,6 @@ function NetworkPurchasePageComponent() {
   const handlePurchase = async () => {
     if (!selectedCategory || !user || !userProfile || !firestore || !userDocRef) return;
 
-    setIsProcessing(true);
     const categoryPrice = selectedCategory.price;
     const effectivePrice = getEffectiveCardPrice(categoryPrice);
     const userBalance = userProfile?.balance ?? 0;
@@ -151,7 +150,59 @@ function NetworkPurchasePageComponent() {
         return;
     }
 
+    setIsProcessing(true);
+    const externalRef = `SM-BN-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
+    const now = new Date().toISOString();
+    const formattedDate = new Date().toLocaleDateString('ar-YE');
+    const txRef = doc(collection(firestore, `users/${user.uid}/transactions`));
+    const baityOrderRef = doc(firestore, 'baityOrders', externalRef);
+
     try {
+        // 1. خصم المبلغ فوراً من العميل بمجرد تأكيد الشراء
+        const initBatch = writeBatch(firestore);
+        initBatch.update(userDocRef!, { balance: increment(-effectivePrice) });
+        initBatch.set(txRef, {
+            id: txRef.id,
+            userId: user.uid,
+            transactionDate: now,
+            amount: effectivePrice,
+            transactionType: `شراء كرت ${selectedCategory.name}`,
+            notes: `شبكة: ${networkName}${isApiUser ? ' (سعر API مخفض)' : ''}`,
+            status: 'pending',
+            externalRef: externalRef,
+            networkName: networkName,
+            className: selectedCategory.name,
+            classId: selectedCategory.id,
+        });
+        initBatch.set(baityOrderRef, {
+            externalRef: externalRef,
+            userId: user.uid,
+            transactionId: txRef.id,
+            classId: selectedCategory.id,
+            className: selectedCategory.name,
+            networkName: networkName,
+            networkId: String(networkId),
+            price: effectivePrice,
+            status: 'pending',
+            phoneNumber: userProfile?.phoneNumber || '',
+            displayName: userProfile?.displayName || '',
+            createdAt: now,
+        });
+        await initBatch.commit();
+
+        // الاستماع الفوري للويب هوك في حال رد المزود بعد ثوانٍ
+        const unsubscribe = onSnapshot(baityOrderRef, (snap) => {
+            if (snap.exists()) {
+                const data = snap.data();
+                if (data?.status === 'completed' && data?.cardNumber) {
+                    setPurchasedCard({ cardID: data.cardNumber, cardPass: data.cardPass || '' });
+                    setIsConfirming(false);
+                    unsubscribe();
+                }
+            }
+        });
+
+        // 2. إرسال الطلب المباشر للمزود
         const response = await fetch(`/services/networks-api/order`, {
             method: 'POST',
             headers: {
@@ -159,65 +210,78 @@ function NetworkPurchasePageComponent() {
             },
             body: JSON.stringify({
                 classId: selectedCategory.id,
+                externalRef: externalRef,
             })
         });
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData?.error?.message?.ar || errorData?.message || 'فشل إنشاء الطلب.');
-        }
+        const result: any = await response.json().catch(() => ({}));
 
-        const result: OrderResponse = await response.json();
-        const cardData = result.data.order.card;
-        
-        const batch = writeBatch(firestore);
-        const now = new Date().toISOString();
-        const formattedDate = new Date().toLocaleDateString('ar-YE');
-
-        batch.update(userDocRef!, { balance: increment(-effectivePrice) });
-
-        const buyerTransactionRef = doc(collection(firestore, `users/${user.uid}/transactions`));
-        const transactionPayload: any = {
-            userId: user.uid,
-            transactionDate: now,
-            amount: effectivePrice,
-            transactionType: `شراء كرت ${selectedCategory.name}`,
-            notes: `شبكة: ${networkName}${isApiUser ? ' (سعر API مخفض)' : ''}`,
-            cardNumber: cardData.cardID,
-        };
-
-        if (cardData.cardPass && cardData.cardPass !== cardData.cardID) {
-            transactionPayload.cardPassword = cardData.cardPass;
-        }
-        
-        batch.set(buyerTransactionRef, transactionPayload);
-        await batch.commit();
-        setPurchasedCard(cardData);
-
-        // --- نظام إرسال الواتساب التلقائي (مع await لضمان التنفيذ) ---
-        if (userProfile?.phoneNumber) {
-            const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${networkName}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardData.cardID}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
+        if (response.ok && result?.status === 200 && result?.data?.order?.card) {
+            const cardData = result.data.order.card;
             
-            await fetch('/api/send-whatsapp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    phone: userProfile.phoneNumber,
-                    message: waMsg
-                })
-            }).catch(e => console.error("WhatsApp Notify Error", e));
-        }
+            const finishBatch = writeBatch(firestore);
+            const transactionPayload: any = {
+                status: 'completed',
+                cardNumber: cardData.cardID,
+                completedAt: new Date().toISOString(),
+            };
+            if (cardData.cardPass && cardData.cardPass !== cardData.cardID) {
+                transactionPayload.cardPassword = cardData.cardPass;
+            }
+            finishBatch.update(txRef, transactionPayload);
+            finishBatch.update(baityOrderRef, {
+                status: 'completed',
+                cardNumber: cardData.cardID,
+                cardPass: cardData.cardPass || '',
+                uuidOrder: result.data.order.uuidOrder || '',
+                completedAt: new Date().toISOString(),
+            });
+            await finishBatch.commit().catch(() => {});
 
+            setPurchasedCard(cardData);
+            setIsConfirming(false);
+
+            // --- نظام إرسال الواتساب/SMS التلقائي ---
+            if (userProfile?.phoneNumber) {
+                const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${networkName}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardData.cardID}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
+                fetch('/api/send-whatsapp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        phone: userProfile.phoneNumber.trim(),
+                        message: waMsg
+                    })
+                }).catch(() => {});
+
+                const smsMsg = `ستار موبايل\nمرحباً ${userProfile.displayName ? userProfile.displayName.split(' ')[0] : 'عميلنا'}،\n\nتم شراء كرت الإنترنت الخاص بك بنجاح.\n\nالشبكة: ${networkName}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardData.cardID}`;
+                fetch('/api/sms', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        phoneNumber: userProfile.phoneNumber.trim(),
+                        message: smsMsg
+                    })
+                }).catch(() => {});
+            }
+        } else {
+            // في حال تأخر الرد من المصدر: المبلغ مخصوم والطلب معلق بانتظار الويب هوك
+            setIsConfirming(false);
+            toast({
+                title: "تم استلام الطلب وخصم المبلغ ✅",
+                description: "طلبك قيد المعالجة لدى المزود. في حال تأخر الكرت سيصلك إشعار ورسالة نصية برقم الكرت وتجده في سجل العمليات فور اعتماده.",
+                duration: 8000
+            });
+        }
     } catch (error: any) {
-        console.error("Purchase failed:", error);
+        console.error("Order execution error:", error);
+        setIsConfirming(false);
         toast({
-            variant: "destructive",
-            title: "فشل عملية الشراء",
-            description: error.message || "حدث خطأ غير متوقع. الرجاء المحاولة مرة أخرى.",
+            title: "تم استلام الطلب وخصم المبلغ ✅",
+            description: "طلبك مسجل وسيتم إصدار الكرت تلقائياً عبر الويب هوك فور تأكيده من المزود.",
+            duration: 8000
         });
     } finally {
         setIsProcessing(false);
-        setIsConfirming(false);
     }
   };
 

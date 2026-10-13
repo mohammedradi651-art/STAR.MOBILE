@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { useCollection, useFirestore, useMemoFirebase, useUser, deleteDocumentNonBlocking, useDoc } from '@/firebase';
-import { collection, query, where, doc, getDocs, getDoc, writeBatch, increment, limit as firestoreLimit } from 'firebase/firestore';
+import { collection, query, where, doc, getDocs, getDoc, writeBatch, increment, limit as firestoreLimit, updateDoc, onSnapshot } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { 
   Wifi, 
@@ -189,25 +189,39 @@ export default function FavoritesPage() {
         return;
     }
 
+    let localBalanceDeducted = false;
     try {
         const now = new Date().toISOString();
-        const batch = writeBatch(firestore);
         let finalCardID = '';
 
         if (selectedNetwork.isLocal) {
+            // 1. شبكة محلية: خصم المبلغ فوراً لحمايته في حال انقطاع النت
+            await updateDoc(userDocRef, { balance: increment(-categoryPrice) });
+            localBalanceDeducted = true;
+
             const cardsRef = collection(firestore, `networks/${selectedNetwork.id}/cards`);
             const q = query(cardsRef, where('categoryId', '==', selectedCategory.id), where('status', '==', 'available'), firestoreLimit(1));
             const availableCardsSnapshot = await getDocs(q);
-            if (availableCardsSnapshot.empty) throw new Error('نعتذر، لا توجد كروت متاحة حالياً في هذه الفئة.');
+
+            if (availableCardsSnapshot.empty) {
+                await updateDoc(userDocRef, { balance: increment(categoryPrice) });
+                localBalanceDeducted = false;
+                throw new Error('نعتذر، لا توجد كروت متاحة حالياً في هذه الفئة (تم استرجاع المبلغ لرصيدك تلقائياً).');
+            }
             
             const cardDoc = availableCardsSnapshot.docs[0];
             finalCardID = cardDoc.data().cardNumber;
 
+            const batch = writeBatch(firestore);
             batch.update(cardDoc.ref, { status: 'sold', soldTo: user.uid, soldTimestamp: now });
-            batch.update(userDocRef, { balance: increment(-categoryPrice) });
             batch.set(doc(collection(firestore, `users/${user.uid}/transactions`)), {
-                userId: user.uid, transactionDate: now, amount: categoryPrice,
-                transactionType: `شراء كرت ${selectedCategory.name}`, notes: `شبكة: ${selectedNetwork.name}`, cardNumber: finalCardID,
+                userId: user.uid, 
+                transactionDate: now, 
+                amount: categoryPrice,
+                transactionType: `شراء كرت ${selectedCategory.name}`, 
+                notes: `شبكة: ${selectedNetwork.name}`, 
+                cardNumber: finalCardID,
+                status: 'completed'
             });
 
             // تحويل أرباح الكرت تلقائياً لمالك الشبكة بعد خصم 10%
@@ -236,35 +250,120 @@ export default function FavoritesPage() {
 
             await batch.commit();
             setPurchasedCard({ cardID: finalCardID });
+            setShowConfirmPurchase(null);
+            setSelectedNetwork(null);
+            audioRef.current?.play().catch(() => {});
         } else {
+            // 2. شبكة خارجية (بيتي): خصم المبلغ فوراً وحفظ الطلب المعلق لاستقبال الويب هوك
+            const externalRef = `SM-BN-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
+            const txRef = doc(collection(firestore, `users/${user.uid}/transactions`));
+            const baityOrderRef = doc(firestore, 'baityOrders', externalRef);
+
+            const initBatch = writeBatch(firestore);
+            initBatch.update(userDocRef, { balance: increment(-categoryPrice) });
+            initBatch.set(txRef, {
+                id: txRef.id,
+                userId: user.uid,
+                transactionDate: now,
+                amount: categoryPrice,
+                transactionType: `شراء كرت ${selectedCategory.name}`,
+                notes: `شبكة: ${selectedNetwork.name}`,
+                status: 'pending',
+                externalRef: externalRef,
+                networkName: selectedNetwork.name,
+                className: selectedCategory.name,
+                classId: selectedCategory.id,
+            });
+            initBatch.set(baityOrderRef, {
+                externalRef: externalRef,
+                userId: user.uid,
+                transactionId: txRef.id,
+                classId: selectedCategory.id,
+                className: selectedCategory.name,
+                networkName: selectedNetwork.name,
+                networkId: String(selectedNetwork.id),
+                price: categoryPrice,
+                status: 'pending',
+                phoneNumber: userProfile?.phoneNumber || '',
+                displayName: userProfile?.displayName || '',
+                createdAt: now,
+            });
+            await initBatch.commit();
+
+            // الاستماع الفوري للويب هوك
+            const unsubscribe = onSnapshot(baityOrderRef, (snap) => {
+                if (snap.exists()) {
+                    const data = snap.data();
+                    if (data?.status === 'completed' && data?.cardNumber) {
+                        setPurchasedCard({ cardID: data.cardNumber, cardPass: data.cardPass || '' });
+                        setShowConfirmPurchase(null);
+                        setSelectedNetwork(null);
+                        audioRef.current?.play().catch(() => {});
+                        unsubscribe();
+                    }
+                }
+            });
+
+            // إرسال الطلب المباشر للمزود
             const response = await fetch(`/services/networks-api/order`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ classId: selectedCategory.id })
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    classId: selectedCategory.id,
+                    externalRef: externalRef 
+                })
             });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.message || 'فشل الشراء من المصدر.');
             
-            finalCardID = result.data.order.card.cardID;
-            batch.update(userDocRef, { balance: increment(-categoryPrice) });
-            batch.set(doc(collection(firestore, `users/${user.uid}/transactions`)), {
-                userId: user.uid, transactionDate: now, amount: categoryPrice,
-                transactionType: `شراء كرت ${selectedCategory.name}`, notes: `شبكة: ${selectedNetwork.name}`, cardNumber: finalCardID,
-            });
-            await batch.commit();
-            setPurchasedCard(result.data.order.card);
+            const result: any = await response.json().catch(() => ({}));
+
+            if (response.ok && result?.status === 200 && result?.data?.order?.card) {
+                finalCardID = result.data.order.card.cardID;
+
+                const finishBatch = writeBatch(firestore);
+                finishBatch.update(txRef, {
+                    status: 'completed',
+                    cardNumber: finalCardID,
+                    cardPassword: result.data.order.card.cardPass || finalCardID,
+                    completedAt: new Date().toISOString()
+                });
+                finishBatch.update(baityOrderRef, {
+                    status: 'completed',
+                    cardNumber: finalCardID,
+                    cardPass: result.data.order.card.cardPass || '',
+                    uuidOrder: result.data.order.uuidOrder || '',
+                    completedAt: new Date().toISOString()
+                });
+                await finishBatch.commit().catch(() => {});
+
+                setPurchasedCard(result.data.order.card);
+                setShowConfirmPurchase(null);
+                setSelectedNetwork(null);
+                audioRef.current?.play().catch(() => {});
+            } else {
+                setShowConfirmPurchase(null);
+                setSelectedNetwork(null);
+                toast({
+                    title: "تم استلام الطلب وخصم المبلغ ✅",
+                    description: "طلبك قيد المعالجة لدى المزود. في حال تأخر الكرت سيصلك إشعار ورسالة نصية برقم الكرت وتجده في سجل العمليات فور اعتماده.",
+                    duration: 8000
+                });
+            }
         }
 
         // إرسال SMS بالصيغة الملكية
-        if (userProfile?.phoneNumber) {
+        if (finalCardID && userProfile?.phoneNumber) {
             const shortName = getFirstLast(userProfile.displayName);
             const smsMsg = `ستار موبايل\nمرحباً ${shortName}،\n\nتم شراء كرت الإنترنت الخاص بك بنجاح.\n\nالشبكة: ${selectedNetwork.name}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${finalCardID}`;
             fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phoneNumber: userProfile.phoneNumber.trim(), message: smsMsg }) }).catch(() => {});
         }
-
-        setShowConfirmPurchase(null);
-        setSelectedNetwork(null);
-        audioRef.current?.play().catch(() => {});
     } catch (error: any) {
+        if (localBalanceDeducted && userDocRef) {
+            try {
+                await updateDoc(userDocRef, { balance: increment(categoryPrice) });
+            } catch (refErr) {
+                console.error("Refund failed:", refErr);
+            }
+        }
         toast({ variant: "destructive", title: "فشل العملية", description: error.message });
     } finally { setIsProcessing(false); }
   };

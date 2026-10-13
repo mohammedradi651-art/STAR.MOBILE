@@ -6,7 +6,7 @@ import { SimpleHeader } from '@/components/layout/simple-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useFirestore, useUser, useDoc, useCollection, useMemoFirebase } from '@/firebase';
-import { doc, writeBatch, increment, collection, query, where, getDocs, limit as firestoreLimit } from 'firebase/firestore';
+import { doc, writeBatch, increment, collection, query, where, getDocs, limit as firestoreLimit, updateDoc } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Calendar, CheckCircle, Copy, AlertCircle, Database, CreditCard, MessageSquare, Smartphone, Loader2, Wifi, Clock } from 'lucide-react';
 import {
@@ -139,13 +139,21 @@ function NetworkPurchasePageComponent() {
         return;
     }
   
+    let balanceDeducted = false;
     try {
+        // خصم المبلغ فوراً من العميل بمجرد تأكيد الشراء لحمايته في حال انقطاع الاتصال
+        await updateDoc(userDocRef, { balance: increment(-effectivePrice) });
+        balanceDeducted = true;
+
         const cardsRef = collection(firestore, `networks/${networkId}/cards`);
         const q = query(cardsRef, where('categoryId', '==', selectedCategory.id), where('status', '==', 'available'), firestoreLimit(1));
         const availableCardsSnapshot = await getDocs(q);
   
         if (availableCardsSnapshot.empty) {
-            throw new Error('لا توجد كروت متاحة حالياً في هذه الفئة.');
+            // استرجاع المبلغ فوراً لعدم توفر الكرت
+            await updateDoc(userDocRef, { balance: increment(effectivePrice) });
+            balanceDeducted = false;
+            throw new Error('لا توجد كروت متاحة حالياً في هذه الفئة (تم استرجاع المبلغ لرصيدك تلقائياً).');
         }
   
         const cardToPurchaseDoc = availableCardsSnapshot.docs[0];
@@ -158,7 +166,6 @@ function NetworkPurchasePageComponent() {
         const ownerId = networkData.ownerId;
   
         batch.update(cardToPurchaseDoc.ref, { status: 'sold', soldTo: user.uid, soldTimestamp: now });
-        batch.update(userDocRef, { balance: increment(-effectivePrice) });
         
         const buyerTransactionRef = doc(collection(firestore, `users/${user.uid}/transactions`));
         batch.set(buyerTransactionRef, {
@@ -168,6 +175,7 @@ function NetworkPurchasePageComponent() {
             transactionType: `شراء كرت ${selectedCategory.name}`,
             notes: `شبكة: ${networkName}${isApiUser ? ' (سعر API مخفض)' : ''}`,
             cardNumber: cardToPurchaseData.cardNumber,
+            status: 'completed',
         });
 
         const soldCardRef = doc(collection(firestore, 'soldCards'));
@@ -226,7 +234,14 @@ function NetworkPurchasePageComponent() {
   
     } catch (error: any) {
         console.error("Local network purchase failure:", error);
-        toast({ variant: "destructive", title: "فشل الشراء", description: error.message || "حدث خطأ غير متوقع." });
+        if (balanceDeducted && userDocRef) {
+            try {
+                await updateDoc(userDocRef, { balance: increment(effectivePrice) });
+            } catch (refErr) {
+                console.error("Failed to refund on error:", refErr);
+            }
+        }
+        toast({ variant: "destructive", title: "فشل الشراء", description: error.message || "حدث خطأ غير متوقع وتم استرجاع الرصيد." });
     } finally {
         setIsProcessing(false);
         setIsConfirming(false);

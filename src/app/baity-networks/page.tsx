@@ -31,7 +31,7 @@ import {
   deleteDocumentNonBlocking,
   useDoc
 } from '@/firebase';
-import { collection, query, where, doc, writeBatch, increment, getDocs, limit as firestoreLimit } from 'firebase/firestore';
+import { collection, query, where, doc, writeBatch, increment, getDocs, limit as firestoreLimit, updateDoc, onSnapshot } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
@@ -145,38 +145,131 @@ export default function BaityNetworksPage() {
     const selectedCategory = showConfirmPurchase;
     if (!selectedCategory || !user || !userProfile || !firestore || !userDocRef) return;
     
-    setIsProcessing(true);
-    try {
-        const response = await fetch(`/services/networks-api/order`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ classId: selectedCategory.id })
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.message || 'فشل الشراء');
-        
-        const cardData = result.data.order.card;
-        const batch = writeBatch(firestore);
-        batch.update(userDocRef, { balance: increment(-selectedCategory.price) });
-        batch.set(doc(collection(firestore, `users/${user.uid}/transactions`)), {
-            userId: user.uid, transactionDate: new Date().toISOString(), amount: selectedCategory.price,
-            transactionType: `شراء كرت ${selectedCategory.name}`, notes: `شبكة: ${selectedNetwork?.name}`, cardNumber: cardData.cardID,
-        });
-        await batch.commit();
-        
-        setPurchasedCard(cardData);
-        setShowConfirmPurchase(null);
-        setSelectedNetwork(null);
-        audioRef.current?.play().catch(() => {});
+    const userBalance = userProfile.balance ?? 0;
+    if (userBalance < selectedCategory.price) {
+      toast({
+        variant: "destructive",
+        title: "رصيد غير كافٍ",
+        description: "رصيدك الحالي لا يكفي لإتمام عملية الشراء.",
+      });
+      return;
+    }
 
-        // إرسال SMS بالصيغة الملكية الجديدة
-        if (userProfile?.phoneNumber) {
-            const shortName = getFirstLast(userProfile.displayName);
-            const smsMsg = `ستار موبايل\nمرحباً ${shortName}،\n\nتم شراء كرت الإنترنت الخاص بك بنجاح.\n\nالشبكة: ${selectedNetwork?.name || 'الخير'}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardData.cardID}`;
-            fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phoneNumber: userProfile.phoneNumber.trim(), message: smsMsg }) }).catch(() => {});
+    setIsProcessing(true);
+    const externalRef = `SM-BN-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
+    const now = new Date().toISOString();
+    const txRef = doc(collection(firestore, `users/${user.uid}/transactions`));
+    const baityOrderRef = doc(firestore, 'baityOrders', externalRef);
+
+    try {
+        // 1. خصم المبلغ فوراً من العميل بمجرد الضغط على تأكيد الشراء
+        const initBatch = writeBatch(firestore);
+        initBatch.update(userDocRef, { balance: increment(-selectedCategory.price) });
+        initBatch.set(txRef, {
+            id: txRef.id,
+            userId: user.uid,
+            transactionDate: now,
+            amount: selectedCategory.price,
+            transactionType: `شراء كرت ${selectedCategory.name}`,
+            notes: `شبكة: ${selectedNetwork?.name || 'الخير'}`,
+            status: 'pending',
+            externalRef: externalRef,
+            networkName: selectedNetwork?.name || 'الخير',
+            className: selectedCategory.name,
+        });
+        initBatch.set(baityOrderRef, {
+            externalRef: externalRef,
+            userId: user.uid,
+            transactionId: txRef.id,
+            classId: selectedCategory.id,
+            className: selectedCategory.name,
+            networkName: selectedNetwork?.name || 'الخير',
+            networkId: selectedNetwork?.id || '',
+            price: selectedCategory.price,
+            status: 'pending',
+            phoneNumber: userProfile?.phoneNumber || '',
+            displayName: userProfile?.displayName || '',
+            createdAt: now,
+        });
+        await initBatch.commit();
+
+        // الاستماع للطلب عبر الويب هوك في حال تأخر رد المزود المباشر
+        const unsubscribe = onSnapshot(baityOrderRef, (snap) => {
+            if (snap.exists()) {
+                const data = snap.data();
+                if (data?.status === 'completed' && data?.cardNumber) {
+                    setPurchasedCard({ cardID: data.cardNumber, cardPass: data.cardPass || '' });
+                    setShowConfirmPurchase(null);
+                    setSelectedNetwork(null);
+                    audioRef.current?.play().catch(() => {});
+                    unsubscribe();
+                }
+            }
+        });
+
+        // 2. إرسال أمر الشراء إلى المزود مرفقاً بـ externalRef
+        const response = await fetch(`/services/networks-api/order`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                classId: selectedCategory.id,
+                externalRef: externalRef
+            })
+        });
+
+        const result = await response.json().catch(() => ({}));
+
+        if (response.ok && result?.status === 200 && result?.data?.order?.card) {
+            const cardData = result.data.order.card;
+            
+            const finishBatch = writeBatch(firestore);
+            finishBatch.update(txRef, {
+                status: 'completed',
+                cardNumber: cardData.cardID,
+                cardPassword: cardData.cardPass || cardData.cardID,
+                completedAt: new Date().toISOString()
+            });
+            finishBatch.update(baityOrderRef, {
+                status: 'completed',
+                cardNumber: cardData.cardID,
+                cardPass: cardData.cardPass || '',
+                uuidOrder: result.data.order.uuidOrder || '',
+                completedAt: new Date().toISOString()
+            });
+            await finishBatch.commit().catch(() => {});
+            
+            setPurchasedCard(cardData);
+            setShowConfirmPurchase(null);
+            setSelectedNetwork(null);
+            audioRef.current?.play().catch(() => {});
+
+            if (userProfile?.phoneNumber) {
+                const shortName = getFirstLast(userProfile.displayName);
+                const smsMsg = `ستار موبايل\nمرحباً ${shortName}،\n\nتم شراء كرت الإنترنت الخاص بك بنجاح.\n\nالشبكة: ${selectedNetwork?.name || 'الخير'}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardData.cardID}`;
+                fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phoneNumber: userProfile.phoneNumber.trim(), message: smsMsg }) }).catch(() => {});
+            }
+        } else {
+            // في حال تأخر الرد أو الخطأ: المبلغ مخصوم والطلب معلق بانتظار إشعار الويب هوك التلقائي
+            setShowConfirmPurchase(null);
+            setSelectedNetwork(null);
+            toast({
+                title: "تم استلام الطلب وخصم المبلغ ✅",
+                description: "طلبك قيد المعالجة لدى المزود. في حال تأخر الكرت سيصلك إشعار ورسالة نصية برقم الكرت وتجده في سجل العمليات.",
+                duration: 8000
+            });
         }
     } catch (error: any) {
-        toast({ variant: "destructive", title: "خطأ", description: error.message });
-    } finally { setIsProcessing(false); }
+        console.error("Order processing error:", error);
+        toast({ 
+            title: "تم استلام الطلب وخصم المبلغ ✅",
+            description: "طلبك مسجل وسيتم إصدار الكرت تلقائياً عبر الويب هوك فور تأكيده من المزود.",
+            duration: 8000
+        });
+        setShowConfirmPurchase(null);
+        setSelectedNetwork(null);
+    } finally { 
+        setIsProcessing(false); 
+    }
   };
 
   return (
@@ -220,7 +313,16 @@ export default function BaityNetworksPage() {
                 <Card className="w-full max-w-sm text-center p-8 rounded-[48px]">
                     <h2 className="text-2xl font-black text-green-600">تم الشراء!</h2>
                     <p className="text-3xl font-mono my-6 bg-muted p-4 rounded-2xl border-2 border-dashed">{purchasedCard.cardID}</p>
-                    <Button className="w-full h-12 rounded-2xl" onClick={() => { setPurchasedCard(null); router.push('/login'); }}>إغلاق</Button>
+                    <div className="flex gap-2">
+                        <Button className="flex-1 h-12 rounded-2xl bg-primary" onClick={() => {
+                            navigator.clipboard.writeText(purchasedCard.cardID);
+                            toast({ title: "تم النسخ", description: "تم نسخ رقم الكرت للحافظة بنجاح" });
+                        }}>
+                            <Copy className="h-4 w-4 ml-2" />
+                            نسخ الكرت
+                        </Button>
+                        <Button variant="outline" className="flex-1 h-12 rounded-2xl" onClick={() => setPurchasedCard(null)}>إغلاق</Button>
+                    </div>
                 </Card>
             </div>
         )}

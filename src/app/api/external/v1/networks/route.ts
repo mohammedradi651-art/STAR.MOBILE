@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
-import { collection, query, where, getDocs, doc, writeBatch, increment, limit as firestoreLimit, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, writeBatch, increment, limit as firestoreLimit, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 
 /**
  * @fileOverview بوابة الربط البرمجي للشبكات v1.6
@@ -144,13 +144,16 @@ export async function POST(req: Request) {
         const localSnap = await getDoc(localDocRef);
 
         if (localSnap.exists()) {
-            // --- شراء محلي ---
+            // --- شراء محلي: خصم المبلغ فوراً ---
             const catRef = doc(firestore, `networks/${networkId}/cardCategories`, classId);
             const catSnap = await getDoc(catRef);
             if (!catSnap.exists()) return NextResponse.json({ success: false, code: 'SM_NOT_FOUND', message: 'Category not found' }, { status: 404, headers: corsHeaders });
             
             const price = catSnap.data().price;
             if ((effectiveUserData.balance || 0) < price) return NextResponse.json({ success: false, code: 'SM_INSUFFICIENT_BALANCE', message: 'Insufficient balance' }, { status: 400, headers: corsHeaders });
+
+            // 1. خصم الرصيد فوراً
+            await updateDoc(doc(firestore, 'users', effectiveUserId), { balance: increment(-price) });
 
             const cardsQ = query(
                 collection(firestore, `networks/${networkId}/cards`),
@@ -160,13 +163,16 @@ export async function POST(req: Request) {
             );
             const cardsSnap = await getDocs(cardsQ);
 
-            if (cardsSnap.empty) return NextResponse.json({ success: false, code: 'SM_PROVIDER_ERROR', message: 'Out of stock in local storage' }, { status: 400, headers: corsHeaders });
+            if (cardsSnap.empty) {
+                // استرجاع الرصيد فوراً لعدم توفر كروت
+                await updateDoc(doc(firestore, 'users', effectiveUserId), { balance: increment(price) });
+                return NextResponse.json({ success: false, code: 'SM_PROVIDER_ERROR', message: 'Out of stock in local storage (balance refunded)' }, { status: 400, headers: corsHeaders });
+            }
 
             const cardDoc = cardsSnap.docs[0];
             const cardData = cardDoc.data();
             
             const batch = writeBatch(firestore);
-            batch.update(doc(firestore, 'users', effectiveUserId), { balance: increment(-price) });
             batch.update(cardDoc.ref, { status: 'sold', soldTo: effectiveUserId, soldTimestamp: timestamp });
             batch.set(doc(collection(firestore, `users/${effectiveUserId}/transactions`)), {
                 userId: effectiveUserId,
@@ -174,7 +180,8 @@ export async function POST(req: Request) {
                 amount: price,
                 transactionType: 'API: شراء كرت محلي',
                 notes: `شبكة: ${localSnap.data().name}${isAdmin ? ' (عبر البوت)' : ''}`,
-                cardNumber: cardData.cardNumber
+                cardNumber: cardData.cardNumber,
+                status: 'completed'
             });
 
             // تحويل أرباح الكرت تلقائياً لمالك الشبكة بعد خصم 10%
@@ -208,41 +215,89 @@ export async function POST(req: Request) {
             }, { headers: corsHeaders });
 
         } else {
-            // --- شراء خارجي (بيتي) ---
+            // --- شراء خارجي (بيتي): خصم المبلغ فوراً وربط الويب هوك ---
+            const classesRes = await fetch(`${origin}/services/networks-api/${networkId}/classes`);
+            let price = 0;
+            let className = '';
+            if (classesRes.ok) {
+                const classesData = await classesRes.json();
+                const targetClass = classesData.find((c: any) => String(c.id) === String(classId));
+                price = targetClass ? targetClass.price : 0;
+                className = targetClass ? targetClass.name : '';
+            }
+
+            if (price > 0 && (effectiveUserData.balance || 0) < price) {
+                return NextResponse.json({ success: false, code: 'SM_INSUFFICIENT_BALANCE', message: 'Insufficient balance' }, { status: 400, headers: corsHeaders });
+            }
+
+            const externalRef = `SM-API-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
+            const txRef = doc(collection(firestore, `users/${effectiveUserId}/transactions`));
+            const baityOrderRef = doc(firestore, 'baityOrders', externalRef);
+
+            // 1. خصم المبلغ فوراً وإنشاء السجل المعلق
+            const initBatch = writeBatch(firestore);
+            if (price > 0) {
+                initBatch.update(doc(firestore, 'users', effectiveUserId), { balance: increment(-price) });
+            }
+            initBatch.set(txRef, {
+                id: txRef.id,
+                userId: effectiveUserId,
+                transactionDate: timestamp,
+                amount: price,
+                transactionType: 'API: شراء كرت خارجي',
+                notes: `شبكة بيتي: ${networkId}${isAdmin ? ' (عبر البوت)' : ''}`,
+                status: 'pending',
+                externalRef: externalRef,
+                networkId: String(networkId),
+                classId: String(classId),
+                className: className
+            });
+            initBatch.set(baityOrderRef, {
+                externalRef: externalRef,
+                userId: effectiveUserId,
+                transactionId: txRef.id,
+                classId: String(classId),
+                className: className,
+                networkId: String(networkId),
+                price: price,
+                status: 'pending',
+                phoneNumber: effectiveUserData.phoneNumber || '',
+                displayName: effectiveUserData.displayName || '',
+                createdAt: timestamp
+            });
+            await initBatch.commit();
+
+            // 2. طلب الكرت من المزود
             const orderRes = await fetch(`${origin}/services/networks-api/order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ classId })
+                body: JSON.stringify({ classId, externalRef })
             });
-            const result = await orderRes.json();
+            const result = await orderRes.json().catch(() => ({}));
 
-            if (orderRes.ok && result.status === 200) {
+            if (orderRes.ok && result.status === 200 && result.data?.order?.card) {
                 const card = result.data.order.card;
-                const classesRes = await fetch(`${origin}/services/networks-api/${networkId}/classes`);
-                const classesData = await classesRes.json();
-                const targetClass = classesData.find((c: any) => String(c.id) === String(classId));
-                const price = targetClass ? targetClass.price : 0;
 
-                if (price > 0 && (effectiveUserData.balance || 0) < price) {
-                    return NextResponse.json({ success: false, code: 'SM_INSUFFICIENT_BALANCE', message: 'Insufficient balance' }, { status: 400, headers: corsHeaders });
-                }
-
-                const batch = writeBatch(firestore);
-                if (price > 0) batch.update(doc(firestore, 'users', effectiveUserId), { balance: increment(-price) });
-                batch.set(doc(collection(firestore, `users/${effectiveUserId}/transactions`)), {
-                    userId: effectiveUserId,
-                    transactionDate: timestamp,
-                    amount: price,
-                    transactionType: 'API: شراء كرت خارجي',
-                    notes: `شبكة بيتي: ${networkId}${isAdmin ? ' (عبر البوت)' : ''}`,
-                    cardNumber: card.cardID
+                const finishBatch = writeBatch(firestore);
+                finishBatch.update(txRef, {
+                    status: 'completed',
+                    cardNumber: card.cardID,
+                    cardPassword: card.cardPass || card.cardID,
+                    completedAt: new Date().toISOString()
                 });
-                await batch.commit();
+                finishBatch.update(baityOrderRef, {
+                    status: 'completed',
+                    cardNumber: card.cardID,
+                    cardPass: card.cardPass || '',
+                    uuidOrder: result.data.order.uuidOrder || '',
+                    completedAt: new Date().toISOString()
+                });
+                await finishBatch.commit().catch(() => {});
 
                 return NextResponse.json({
                     success: true,
                     code: 'SM_SUCCESS',
-                    transactionId: result.data.order.uuidOrder,
+                    transactionId: result.data.order.uuidOrder || externalRef,
                     data: {
                         cardNumber: card.cardID,
                         cardPassword: card.cardPass || card.cardID,
@@ -253,11 +308,14 @@ export async function POST(req: Request) {
                 }, { headers: corsHeaders });
             }
 
+            // في حال تأخر الرد من بيتي: العملية معلقة بانتظار الويب هوك
             return NextResponse.json({ 
-                success: false, 
-                code: 'SM_PROVIDER_ERROR', 
-                message: result.message || 'Order failed at provider' 
-            }, { status: 400, headers: corsHeaders });
+                success: true, 
+                code: 'SM_PENDING', 
+                message: 'Order accepted and pending provider fulfillment via webhook',
+                externalRef: externalRef,
+                timestamp
+            }, { status: 202, headers: corsHeaders });
         }
     }
 

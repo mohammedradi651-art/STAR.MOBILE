@@ -14,7 +14,7 @@ export async function POST(
 
   try {
     const body = await request.json();
-    const { classId } = body;
+    const { classId, externalRef } = body;
 
     if (!classId) {
       return new NextResponse(JSON.stringify({ message: 'Class ID is required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
@@ -24,7 +24,7 @@ export async function POST(
         return new NextResponse(JSON.stringify({ message: 'إعدادات شراء الكروت ناقصة في فيرسل.' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
 
-    const externalApiBody = {
+    const externalApiBody: any = {
       data: {
         class: classId,
         user: { 
@@ -33,6 +33,11 @@ export async function POST(
         },
       }
     };
+
+    if (externalRef) {
+      externalApiBody.externalRef = externalRef;
+      externalApiBody.data.externalRef = externalRef;
+    }
     
     const response = await fetch(API_BASE_URL, {
       method: 'POST',
