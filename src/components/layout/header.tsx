@@ -7,6 +7,8 @@ import { collection, query, orderBy, limit, doc, updateDoc } from 'firebase/fire
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { useOnlineStatus } from '@/hooks/use-online-status';
+import { OfflineDialog } from '@/components/layout/offline-dialog';
 
 type Notification = {
   id: string;
@@ -23,6 +25,9 @@ const Header = () => {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const router = useRouter();
+  const isOnline = useOnlineStatus();
+  const isOffline = !isOnline;
+  const [isOfflineAlertOpen, setIsOfflineAlertOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [greeting, setGreeting] = useState('أهلاً');
   const [isDark, setIsDark] = useState(false);
@@ -96,6 +101,10 @@ const Header = () => {
 
   const handleNotificationClick = (e: React.MouseEvent) => {
     e.preventDefault();
+    if (isOffline) {
+      setIsOfflineAlertOpen(true);
+      return;
+    }
     if (userDocRef) {
       const allNotifs = [...(globalNotifications || []), ...(personalNotifications || [])];
       if (allNotifs.length > 0) {
@@ -117,46 +126,57 @@ const Header = () => {
   const displayName = getFirstAndLastName(user?.displayName || userProfile?.displayName);
 
   return (
-    <header className="px-4 pt-4 pb-2 text-foreground relative">
-      <div className="flex items-start justify-between gap-3 flex-row-reverse">
-        <div className="flex items-center gap-2 shrink-0">
-          <button onClick={handleNotificationClick} className={cn(
-            "relative flex h-10 w-10 items-center justify-center rounded-2xl border transition-colors",
-            isDark ? "border-white/5 bg-white/5 text-white" : "border-black/5 bg-white text-foreground"
-          )}>
-            <Bell className="h-5 w-5 text-primary" />
-            {unreadCount > 0 && <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-white text-[8px] font-black border-2 border-background">{unreadCount > 9 ? '+9' : unreadCount}</span>}
-          </button>
-          
-          {isInstallable && (
-            <button 
-              onClick={handleInstallClick} 
-              className={cn(
-                "flex h-10 w-10 items-center justify-center rounded-2xl border transition-all active:scale-90",
-                isDark ? "border-white/5 bg-white/5 text-white" : "border-black/5 bg-white text-foreground"
+    <>
+      <header className="px-4 pt-4 pb-2 text-foreground relative">
+        <div className="flex items-start justify-between gap-3 flex-row-reverse">
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={handleNotificationClick} className={cn(
+              "relative flex h-10 w-10 items-center justify-center rounded-2xl border transition-colors",
+              isDark ? "border-white/5 bg-white/5 text-white" : "border-black/5 bg-white text-foreground"
+            )}>
+              <Bell className="h-5 w-5 text-primary" />
+              {unreadCount > 0 && <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-white text-[8px] font-black border-2 border-background">{unreadCount > 9 ? '+9' : unreadCount}</span>}
+              {isOffline && (
+                <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-background animate-pulse" />
               )}
-              title="تثبيت التطبيق"
-            >
-              <Download className="h-5 w-5 text-primary animate-pulse" />
             </button>
-          )}
-        </div>
+            
+            {isInstallable && (
+              <button 
+                onClick={handleInstallClick} 
+                className={cn(
+                  "flex h-10 w-10 items-center justify-center rounded-2xl border transition-all active:scale-90",
+                  isDark ? "border-white/5 bg-white/5 text-white" : "border-black/5 bg-white text-foreground"
+                )}
+                title="تثبيت التطبيق"
+              >
+                <Download className="h-5 w-5 text-primary animate-pulse" />
+              </button>
+            )}
+          </div>
 
-        <div className="text-right pt-1 ml-auto">
-          {isUserLoading ? (
-            <div className="space-y-2 text-right">
-              <Skeleton className="h-6 w-24 ml-auto" />
-              <Skeleton className="h-4 w-12 ml-auto" />
-            </div>
-          ) : (
-            <>
-              <h1 className="font-black text-[22px] leading-none tracking-tight">{greeting}</h1>
-              <p className="mt-1 text-[13px] font-bold text-muted-foreground">{displayName}</p>
-            </>
-          )}
+          <div className="text-right pt-1 ml-auto">
+            {isUserLoading ? (
+              <div className="space-y-2 text-right">
+                <Skeleton className="h-6 w-24 ml-auto" />
+                <Skeleton className="h-4 w-12 ml-auto" />
+              </div>
+            ) : (
+              <>
+                <h1 className="font-black text-[22px] leading-none tracking-tight">{greeting}</h1>
+                <p className="mt-1 text-[13px] font-bold text-muted-foreground">{displayName}</p>
+              </>
+            )}
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      <OfflineDialog
+        open={isOfflineAlertOpen}
+        onOpenChange={setIsOfflineAlertOpen}
+        sectionName="الإشعارات"
+      />
+    </>
   );
 };
 

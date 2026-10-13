@@ -18,8 +18,10 @@ import {
   Clock, 
   Database, 
   AlertCircle, 
-  Globe 
+  Globe,
+  WifiOff
 } from 'lucide-react';
+import { useOnlineStatus } from '@/hooks/use-online-status';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -90,6 +92,8 @@ export default function FavoritesPage() {
   const { user } = useUser();
   const { toast } = useToast();
   const router = useRouter();
+  const isOnline = useOnlineStatus();
+  const isOffline = !isOnline;
   const [searchTerm, setSearchTerm] = useState('');
 
   const [selectedNetwork, setSelectedNetwork] = useState<CombinedNetwork | null>(null);
@@ -139,13 +143,29 @@ export default function FavoritesPage() {
 
     const catCacheKey = `star_cache_cats_${fav.targetId}`;
     const cachedCats = localStorage.getItem(catCacheKey);
+    let hasValidCache = false;
+
     if (cachedCats) {
-        try {
-            setCategories(JSON.parse(cachedCats));
-            setIsLoadingCategories(false);
-        } catch (e) {
-            setCategories([]);
+      try {
+        const parsed = JSON.parse(cachedCats);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCategories(parsed);
+          setIsLoadingCategories(false);
+          hasValidCache = true;
         }
+      } catch (e) {
+        setCategories([]);
+      }
+    }
+
+    // إذا كان العميل بدون إنترنت
+    if (isOffline) {
+      if (!hasValidCache) {
+        setCategories([]);
+        setIsLoadingCategories(false);
+        setCategoryError('uncached_offline');
+      }
+      return;
     }
 
     try {
@@ -168,7 +188,7 @@ export default function FavoritesPage() {
     } catch (err: any) {
       console.error(err);
       if (categories.length === 0) {
-          setCategoryError(err.message || 'لا يمكن تحميل الفئات حالياً.');
+        setCategoryError(err.message || 'لا يمكن تحميل الفئات حالياً.');
       }
     } finally {
       setIsLoadingCategories(false);
@@ -177,10 +197,37 @@ export default function FavoritesPage() {
 
   const handlePurchase = async () => {
     const selectedCategory = showConfirmPurchase;
-    if (!selectedCategory || !selectedNetwork || !user || !userProfile || !firestore || !userDocRef) return;
+    if (!selectedCategory || !selectedNetwork) return;
+
+    const categoryPrice = selectedCategory.price;
+
+    // في وضع عدم الاتصال بالإنترنت: فتح تطبيق الرسائل للرقم 770326828
+    // في وضع عدم الاتصال بالإنترنت: فتح تطبيق الرسائل للرقم 770326828 بكود مختصر جداً
+    if (isOffline) {
+      const adminPhone = '770326828';
+      const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
+      
+      // إرسال الكود فقط لتوفير تكلفة الرسالة على العميل وتفادي تجزئتها لأكثر من رسالة
+      const smsBody = `#STAR:${selectedNetwork.id}:${selectedCategory.id}:${categoryPrice}#`;
+
+      const smsUrl = isIOS
+        ? `sms:${adminPhone}&body=${encodeURIComponent(smsBody)}`
+        : `sms:${adminPhone}?body=${encodeURIComponent(smsBody)}`;
+
+      setShowConfirmPurchase(null);
+      toast({
+        title: "جارٍ فتح تطبيق الرسائل...",
+        description: `سيتم إرسال كود الطلب السريع للرقم ${adminPhone} لخصم المبلغ وتزويدك برقم الكرت فوراً.`,
+        duration: 5000,
+      });
+
+      window.location.href = smsUrl;
+      return;
+    }
+
+    if (!user || !userProfile || !firestore || !userDocRef) return;
 
     setIsProcessing(true);
-    const categoryPrice = selectedCategory.price;
     const userBalance = userProfile?.balance ?? 0;
 
     if (userBalance < categoryPrice) {
@@ -475,8 +522,22 @@ export default function FavoritesPage() {
                                 <div className="flex justify-center py-10">
                                     <ProcessingOverlay />
                                 </div>
+                            ) : categoryError === 'uncached_offline' ? (
+                                <div className="text-center p-6 bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/20 rounded-[28px] space-y-3 my-4">
+                                    <div className="w-14 h-14 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+                                        <WifiOff className="w-7 h-7 animate-pulse" />
+                                    </div>
+                                    <h3 className="text-base font-black text-foreground">الفئات غير محملة مسبقاً</h3>
+                                    <p className="text-xs font-bold text-muted-foreground leading-relaxed">
+                                        عزيزي العميل، لم يتم تحميل فئات هذه الشبكة مسبقاً في هاتفك أثناء اتصالك بالإنترنت.
+                                        <br className="my-1" />
+                                        يرجى الاتصال بالإنترنت وفتح هذه الشبكة مرة واحدة فقط ليتم حفظ فئاتها تلقائياً، وبعدها ستفتح معك وتعمل بدون إنترنت دائماً!
+                                    </p>
+                                </div>
                             ) : categoryError ? (
                                 <p className="text-center text-destructive font-bold p-4 bg-destructive/10 rounded-2xl">{categoryError}</p>
+                            ) : categories.length === 0 ? (
+                                <div className="text-center py-8 text-muted-foreground font-bold">لا توجد فئات متاحة حالياً لهذه الشبكة.</div>
                             ) : (
                                 <div className="space-y-3">
                                     {sortedCategories.map((cat, idx) => {
@@ -537,31 +598,56 @@ export default function FavoritesPage() {
             </DialogContent>
         </Dialog>
 
-        {/* Confirmation Dialog - Identical to Services Page but without SMS Purchase as per user request */}
+        {/* Confirmation Dialog */}
         <Dialog open={!!showConfirmPurchase} onOpenChange={(open) => !open && setShowConfirmPurchase(null)}>
             <DialogContent className="rounded-[32px] max-sm text-center bg-white dark:bg-slate-900 z-[10000] border-none shadow-2xl outline-none p-0 overflow-hidden">
                 <div className="bg-primary/5 p-8 flex flex-col items-center border-b border-primary/5">
-                    <div className="bg-primary/10 w-16 h-16 rounded-full flex items-center justify-center mb-4">
-                        <CheckCircle className="h-10 w-10 text-primary" />
+                    <div className={cn(
+                        "w-16 h-16 rounded-full flex items-center justify-center mb-4",
+                        isOffline ? "bg-amber-500/15 text-amber-600" : "bg-primary/10 text-primary"
+                    )}>
+                        {isOffline ? <MessageSquare className="h-9 w-9 text-amber-600 animate-pulse" /> : <CheckCircle className="h-10 w-10 text-primary" />}
                     </div>
-                    <DialogTitle className="font-black text-xl text-primary">تأكيد عملية الشراء</DialogTitle>
+                    <DialogTitle className="font-black text-xl text-foreground">
+                        {isOffline ? 'طلب كرت بدون إنترنت (SMS)' : 'تأكيد عملية الشراء'}
+                    </DialogTitle>
                     <DialogDescription className="font-bold text-muted-foreground mt-1">
-                        هل أنت متأكد من شراء كرت <span className="text-primary">"{showConfirmPurchase?.name}"</span>؟
+                        {isOffline ? (
+                            <>
+                                سيتم فتح تطبيق الرسائل لإرسال طلب شراء كرت <span className="text-primary font-black">"{showConfirmPurchase?.name}"</span> إلى الإدارة (<span className="font-mono text-foreground font-black">770326828</span>) وسيتم خصم المبلغ من رصيدك وإرسال الكرت إليك فوراً.
+                            </>
+                        ) : (
+                            <>هل أنت متأكد من شراء كرت <span className="text-primary">"{showConfirmPurchase?.name}"</span>؟</>
+                        )}
                     </DialogDescription>
                 </div>
                 
                 <div className="p-6 space-y-3">
                     <div className="py-6 bg-muted/30 rounded-[28px] border-2 border-dashed border-primary/10 space-y-2 mt-4">
-                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">سيتم خصم المبلغ من رصيدك</p>
+                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                            {isOffline ? 'المبلغ المطلوب خصمه من رصيدك' : 'سيتم خصم المبلغ من رصيدك'}
+                        </p>
                         <p className="text-3xl font-black text-primary">{showConfirmPurchase?.price.toLocaleString('en-US')} <span className="text-sm">ريال</span></p>
                     </div>
 
                     <Button 
-                        className="w-full h-12 rounded-2xl font-black text-base shadow-lg shadow-primary/20" 
+                        className={cn(
+                            "w-full h-12 rounded-2xl font-black text-base shadow-lg",
+                            isOffline ? "bg-[#0048ad] hover:bg-[#003887] text-white gap-2 shadow-[#0048ad]/20" : "shadow-primary/20"
+                        )} 
                         onClick={handlePurchase} 
                         disabled={isProcessing}
                     >
-                        {isProcessing ? <Loader2 className="animate-spin h-5 w-5" /> : 'تأكيد الشراء'}
+                        {isProcessing ? (
+                            <Loader2 className="animate-spin h-5 w-5" />
+                        ) : isOffline ? (
+                            <>
+                                <MessageSquare className="h-5 w-5" />
+                                <span>إرسال الطلب (SMS)</span>
+                            </>
+                        ) : (
+                            'تأكيد الشراء'
+                        )}
                     </Button>
                     
                     <Button 
