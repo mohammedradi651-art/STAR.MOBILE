@@ -104,10 +104,15 @@ export default function AlwadiPage() {
 
   const isApiUser = isUserApiCustomer(userProfile);
 
-  // احتساب السعر النهائي بدقة: إذا كان المستخدم صاحب مفتاح API تطبق نسبة API، وإلا السعر الرسمي الكامل
+  // احتساب السعر النهائي بدقة: إذا كان المستخدم صاحب مفتاح API تطبق نسبة API (5% خصم = 2850 للـ 3000)، وإلا السعر الرسمي الكامل
   const getFinalPrice = (price: number) => {
     if (!isApiUser) return price;
-    const rate = config.alwadi?.rate ?? 1;
+    let rate = (config.alwadi?.rate !== undefined && config.alwadi.rate > 0 && config.alwadi.rate < 1) ? config.alwadi.rate : 0.95;
+    if (userProfile?.alwadiDiscount !== undefined && Number(userProfile.alwadiDiscount) > 0) {
+      const disc = Number(userProfile.alwadiDiscount);
+      if (disc < 1) rate = disc;
+      else if (disc < 100) rate = (100 - disc) / 100;
+    }
     return roundCurrency(price * rate);
   };
 

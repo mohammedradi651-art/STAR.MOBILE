@@ -140,20 +140,43 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: false, code: 'SM_VALIDATION_ERROR', message: 'networkId and classId are required' }, { status: 400, headers: corsHeaders });
         }
 
+        // جلب نسبة الخصم المعتمدة للشبكات (افتراضياً 5% أي معامل 0.95 إذا لم يتم تعديله)
+        let networksRate = 0.95;
+        try {
+            const configSnap = await getDoc(doc(firestore, 'system_settings', 'telecom_config'));
+            if (configSnap.exists()) {
+                const cfg = configSnap.data();
+                if (cfg?.networks?.rate !== undefined && Number(cfg.networks.rate) > 0) {
+                    networksRate = Number(cfg.networks.rate);
+                }
+            }
+        } catch (e) {
+            console.warn("Could not read telecom_config in v1/networks:", e);
+        }
+
         const localDocRef = doc(firestore, 'networks', networkId);
         const localSnap = await getDoc(localDocRef);
 
         if (localSnap.exists()) {
-            // --- شراء محلي: خصم المبلغ فوراً ---
+            // --- شراء محلي: تطبيق سعر API المخفض (950 بدلاً من 1000) ---
             const catRef = doc(firestore, `networks/${networkId}/cardCategories`, classId);
             const catSnap = await getDoc(catRef);
             if (!catSnap.exists()) return NextResponse.json({ success: false, code: 'SM_NOT_FOUND', message: 'Category not found' }, { status: 404, headers: corsHeaders });
             
-            const price = catSnap.data().price;
-            if ((effectiveUserData.balance || 0) < price) return NextResponse.json({ success: false, code: 'SM_INSUFFICIENT_BALANCE', message: 'Insufficient balance' }, { status: 400, headers: corsHeaders });
+            const originalPrice = Number(catSnap.data().price) || 0;
+            const discountedPrice = Math.round(originalPrice * networksRate); // 1000 * 0.95 = 950
 
-            // 1. خصم الرصيد فوراً
-            await updateDoc(doc(firestore, 'users', effectiveUserId), { balance: increment(-price) });
+            if ((effectiveUserData.balance || 0) < discountedPrice) {
+                return NextResponse.json({ 
+                    success: false, 
+                    code: 'SM_INSUFFICIENT_BALANCE', 
+                    message: `الرصيد غير كافٍ. المطلوب: ${discountedPrice} ر.ي، المتاح: ${effectiveUserData.balance || 0} ر.ي`, 
+                    timestamp 
+                }, { status: 400, headers: corsHeaders });
+            }
+
+            // 1. خصم الرصيد المخفض فوراً
+            await updateDoc(doc(firestore, 'users', effectiveUserId), { balance: increment(-discountedPrice) });
 
             const cardsQ = query(
                 collection(firestore, `networks/${networkId}/cards`),
@@ -165,7 +188,7 @@ export async function POST(req: Request) {
 
             if (cardsSnap.empty) {
                 // استرجاع الرصيد فوراً لعدم توفر كروت
-                await updateDoc(doc(firestore, 'users', effectiveUserId), { balance: increment(price) });
+                await updateDoc(doc(firestore, 'users', effectiveUserId), { balance: increment(discountedPrice) });
                 return NextResponse.json({ success: false, code: 'SM_PROVIDER_ERROR', message: 'Out of stock in local storage (balance refunded)' }, { status: 400, headers: corsHeaders });
             }
 
@@ -177,18 +200,18 @@ export async function POST(req: Request) {
             batch.set(doc(collection(firestore, `users/${effectiveUserId}/transactions`)), {
                 userId: effectiveUserId,
                 transactionDate: timestamp,
-                amount: price,
+                amount: discountedPrice,
                 transactionType: 'API: شراء كرت محلي',
-                notes: `شبكة: ${localSnap.data().name}${isAdmin ? ' (عبر البوت)' : ''}`,
+                notes: `شبكة: ${localSnap.data().name} (السعر الأصلي: ${originalPrice} ر.ي - سعر API: ${discountedPrice} ر.ي)${isAdmin ? ' (عبر البوت)' : ''}`,
                 cardNumber: cardData.cardNumber,
                 status: 'completed'
             });
 
-            // تحويل أرباح الكرت تلقائياً لمالك الشبكة بعد خصم 10%
+            // تحويل أرباح الكرت لمالك الشبكة بعد خصم 10%
             const ownerId = localSnap.data()?.ownerId;
             if (ownerId && ownerId !== 'admin') {
-                const commission = Math.ceil(price * 0.10);
-                const payoutAmount = price - commission;
+                const commission = Math.ceil(originalPrice * 0.10);
+                const payoutAmount = originalPrice - commission;
                 batch.update(doc(firestore, 'users', ownerId), { balance: increment(payoutAmount) });
                 batch.set(doc(collection(firestore, `users/${ownerId}/transactions`)), {
                     userId: ownerId,
@@ -208,44 +231,96 @@ export async function POST(req: Request) {
                 data: {
                     cardNumber: cardData.cardNumber,
                     cardPassword: cardData.cardNumber,
-                    price: price,
+                    price: originalPrice, // 1000 السعر الرسمي ليظهر في واجهة زبائنه
+                    deductedAmount: discountedPrice, // 950 المبلغ الفعلي المخصوم من رصيده
                     clientName: effectiveUserData.displayName
                 },
                 timestamp
             }, { headers: corsHeaders });
 
         } else {
-            // --- شراء خارجي (بيتي): خصم المبلغ فوراً وربط الويب هوك ---
-            const classesRes = await fetch(`${origin}/services/networks-api/${networkId}/classes`);
-            let price = 0;
+            // --- شراء خارجي (بيتي): جلب السعر مباشرة من بيتي وتطبيق الخصم 5% ---
+            let originalPrice = 0;
             let className = '';
-            if (classesRes.ok) {
-                const classesData = await classesRes.json();
-                const targetClass = classesData.find((c: any) => String(c.id) === String(classId));
-                price = targetClass ? targetClass.price : 0;
-                className = targetClass ? targetClass.name : '';
+            const baityApiKey = process.env.BAITYNET_NETWORKS_API_KEY;
+
+            // أ. جلب سعر الفئة مباشرة من خادم بيتي
+            if (baityApiKey && networkId) {
+                try {
+                    const baityClassesRes = await fetch(`https://apis.baitynet.net/api/partner/networks/${networkId}/classes`, {
+                        method: 'GET',
+                        headers: {
+                            'x-api-key': baityApiKey.trim(),
+                            'Accept': 'application/json',
+                            'User-Agent': 'StarMobileApp/1.0',
+                        },
+                        cache: 'no-store'
+                    });
+                    if (baityClassesRes.ok) {
+                        const json = await baityClassesRes.json();
+                        const classesList = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+                        const targetClass = classesList.find((c: any) => String(c.id) === String(classId));
+                        if (targetClass) {
+                            originalPrice = Number(targetClass.price) || 0;
+                            className = targetClass.name || '';
+                        }
+                    }
+                } catch (e) {
+                    console.error("Direct Baity classes fetch error:", e);
+                }
             }
 
-            if (price > 0 && (effectiveUserData.balance || 0) < price) {
-                return NextResponse.json({ success: false, code: 'SM_INSUFFICIENT_BALANCE', message: 'Insufficient balance' }, { status: 400, headers: corsHeaders });
+            // فحص إضافي عبر المسار الداخلي إذا لم يتم العثور على السعر
+            if (originalPrice <= 0 && networkId) {
+                try {
+                    const extRes = await fetch(`${origin}/services/networks-api/${networkId}/classes`);
+                    if (extRes.ok) {
+                        const classesData = await extRes.json();
+                        const targetClass = Array.isArray(classesData) ? classesData.find((c: any) => String(c.id) === String(classId)) : null;
+                        if (targetClass) {
+                            originalPrice = Number(targetClass.price) || 0;
+                            className = targetClass.name || '';
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            // فحص إلزامي: منع إتمام الطلب إذا لم يتم التعرف على السعر لمنع شراء كروت مجانية!
+            if (originalPrice <= 0) {
+                return NextResponse.json({ 
+                    success: false, 
+                    code: 'SM_PRICE_NOT_FOUND', 
+                    message: 'تعذر التحقق من سعر الباقة من مزود الخدمة، يرجى التأكد من networkId و classId', 
+                    timestamp 
+                }, { status: 400, headers: corsHeaders });
+            }
+
+            // احتساب السعر المخفض لصاحب الـ API (1000 * 0.95 = 950)
+            const discountedPrice = Math.round(originalPrice * networksRate);
+
+            if ((effectiveUserData.balance || 0) < discountedPrice) {
+                return NextResponse.json({ 
+                    success: false, 
+                    code: 'SM_INSUFFICIENT_BALANCE', 
+                    message: `الرصيد غير كافٍ. المطلوب: ${discountedPrice} ر.ي، المتاح: ${effectiveUserData.balance || 0} ر.ي`, 
+                    timestamp 
+                }, { status: 400, headers: corsHeaders });
             }
 
             const externalRef = `SM-API-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
             const txRef = doc(collection(firestore, `users/${effectiveUserId}/transactions`));
             const baityOrderRef = doc(firestore, 'baityOrders', externalRef);
 
-            // 1. خصم المبلغ فوراً وإنشاء السجل المعلق
+            // 1. خصم المبلغ المخفض (950) فوراً وتسجيل الطلب معلقاً
             const initBatch = writeBatch(firestore);
-            if (price > 0) {
-                initBatch.update(doc(firestore, 'users', effectiveUserId), { balance: increment(-price) });
-            }
+            initBatch.update(doc(firestore, 'users', effectiveUserId), { balance: increment(-discountedPrice) });
             initBatch.set(txRef, {
                 id: txRef.id,
                 userId: effectiveUserId,
                 transactionDate: timestamp,
-                amount: price,
+                amount: discountedPrice,
                 transactionType: 'API: شراء كرت خارجي',
-                notes: `شبكة بيتي: ${networkId}${isAdmin ? ' (عبر البوت)' : ''}`,
+                notes: `شبكة بيتي: ${networkId} (السعر الأصلي: ${originalPrice} ر.ي - سعر API: ${discountedPrice} ر.ي)${isAdmin ? ' (عبر البوت)' : ''}`,
                 status: 'pending',
                 externalRef: externalRef,
                 networkId: String(networkId),
@@ -259,7 +334,7 @@ export async function POST(req: Request) {
                 classId: String(classId),
                 className: className,
                 networkId: String(networkId),
-                price: price,
+                price: discountedPrice,
                 status: 'pending',
                 phoneNumber: effectiveUserData.phoneNumber || '',
                 displayName: effectiveUserData.displayName || '',
@@ -267,53 +342,91 @@ export async function POST(req: Request) {
             });
             await initBatch.commit();
 
-            // 2. طلب الكرت من المزود
-            const orderRes = await fetch(`${origin}/services/networks-api/order`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ classId, externalRef })
-            });
-            const result = await orderRes.json().catch(() => ({}));
-
-            if (orderRes.ok && result.status === 200 && result.data?.order?.card) {
-                const card = result.data.order.card;
-
-                const finishBatch = writeBatch(firestore);
-                finishBatch.update(txRef, {
-                    status: 'completed',
-                    cardNumber: card.cardID,
-                    cardPassword: card.cardPass || card.cardID,
-                    completedAt: new Date().toISOString()
+            // 2. طلب الكرت مباشرة من بيتي
+            try {
+                const orderRes = await fetch('https://apis.baitynet.net/api/partner/orders', {
+                    method: 'POST',
+                    headers: {
+                        'x-api-key': (baityApiKey || '').trim(),
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'User-Agent': 'StarMobileApp/1.0',
+                    },
+                    body: JSON.stringify({
+                        externalRef,
+                        data: {
+                            class: classId,
+                            externalRef,
+                            user: {
+                                identifier: process.env.BAITYNET_NETWORKS_USER_PHONE?.trim(),
+                                password: process.env.BAITYNET_NETWORKS_USER_PASS?.trim()
+                            }
+                        }
+                    }),
+                    cache: 'no-store'
                 });
-                finishBatch.update(baityOrderRef, {
-                    status: 'completed',
-                    cardNumber: card.cardID,
-                    cardPass: card.cardPass || '',
-                    uuidOrder: result.data.order.uuidOrder || '',
-                    completedAt: new Date().toISOString()
-                });
-                await finishBatch.commit().catch(() => {});
 
-                return NextResponse.json({
-                    success: true,
-                    code: 'SM_SUCCESS',
-                    transactionId: result.data.order.uuidOrder || externalRef,
-                    data: {
+                const result = await orderRes.json().catch(() => ({}));
+
+                if (orderRes.ok && result.status === 200 && result.data?.order?.card) {
+                    const card = result.data.order.card;
+
+                    const finishBatch = writeBatch(firestore);
+                    finishBatch.update(txRef, {
+                        status: 'completed',
                         cardNumber: card.cardID,
                         cardPassword: card.cardPass || card.cardID,
-                        price: price,
-                        clientName: effectiveUserData.displayName
-                    },
-                    timestamp
-                }, { headers: corsHeaders });
+                        completedAt: new Date().toISOString()
+                    });
+                    finishBatch.update(baityOrderRef, {
+                        status: 'completed',
+                        cardNumber: card.cardID,
+                        cardPass: card.cardPass || '',
+                        uuidOrder: result.data.order.uuidOrder || '',
+                        completedAt: new Date().toISOString()
+                    });
+                    await finishBatch.commit().catch(() => {});
+
+                    return NextResponse.json({
+                        success: true,
+                        code: 'SM_SUCCESS',
+                        transactionId: result.data.order.uuidOrder || externalRef,
+                        data: {
+                            cardNumber: card.cardID,
+                            cardPassword: card.cardPass || card.cardID,
+                            price: originalPrice, // 1000 السعر الرسمي ليظهر لزبائنه في واجهتهم
+                            deductedAmount: discountedPrice, // 950 المبلغ الفعلي المخصوم من رصيده
+                            clientName: effectiveUserData.displayName
+                        },
+                        timestamp
+                    }, { headers: corsHeaders });
+                }
+
+                // إذا رفض المزود الطلب بشكل صريح: استرجاع المبلغ فوراً
+                if (result.status && result.status !== 200) {
+                    await updateDoc(doc(firestore, 'users', effectiveUserId), { balance: increment(discountedPrice) });
+                    await updateDoc(txRef, { status: 'failed', notes: `فشل من المزود وتم استرجاع الرصيد: ${result.message || ''}` });
+                    await updateDoc(baityOrderRef, { status: 'failed' });
+
+                    return NextResponse.json({
+                        success: false,
+                        code: 'SM_PROVIDER_ERROR',
+                        message: result.message || 'فشل تنفيذ الطلب لدى المزود وتم استرجاع الرصيد تلقائياً',
+                        timestamp
+                    }, { status: 400, headers: corsHeaders });
+                }
+            } catch (fetchErr) {
+                console.warn("Direct Baity order timeout/network error, keeping as pending for webhook:", fetchErr);
             }
 
-            // في حال تأخر الرد من بيتي: العملية معلقة بانتظار الويب هوك
+            // في حال تأخر الرد أو انقطاع الاتصال: العملية معلقة والمبلغ مخصوم والويب هوك سيكملها
             return NextResponse.json({ 
                 success: true, 
                 code: 'SM_PENDING', 
-                message: 'Order accepted and pending provider fulfillment via webhook',
+                message: 'تم استلام الطلب وخصم المبلغ، والعملية قيد المزامنة مع المزود عبر الويب هوك',
                 externalRef: externalRef,
+                price: originalPrice,
+                deductedAmount: discountedPrice,
                 timestamp
             }, { status: 202, headers: corsHeaders });
         }

@@ -78,20 +78,34 @@ export async function POST(req: Request) {
     const { action, number, packageId, subscriberId } = body;
     const origin = new URL(req.url).origin;
 
-    const originalPrices: Record<string, number> = {
-      "1": systemConfig.alwadi?.packages?.twoMonths || 3000,
-      "3": systemConfig.alwadi?.packages?.fourMonths || 6000,
-      "7": systemConfig.alwadi?.packages?.sixMonths || 9000,
-      "9": systemConfig.alwadi?.packages?.oneYear || 15000
+    const OFFICIAL_ALWADI_PRICES: Record<string, number> = {
+      "1": 3000,
+      "3": 6000,
+      "7": 9000,
+      "9": 15000
     };
 
-    // --- جلب قائمة الباقات والأسعار المعتمدة للعميل بناءً على نسب الـ API المعتمدة ---
+    // احتساب نسبة الخصم للربط البرمجي (افتراضياً 5% خصم = 0.95 إذا لم يتم تخصيص نسبة أخرى)
+    let alwadiRate = 0.95;
+    if (systemConfig.alwadi?.rate !== undefined && Number(systemConfig.alwadi.rate) > 0 && Number(systemConfig.alwadi.rate) < 1) {
+      alwadiRate = Number(systemConfig.alwadi.rate);
+    }
+    if (userData.alwadiDiscount !== undefined && Number(userData.alwadiDiscount) > 0) {
+      const disc = Number(userData.alwadiDiscount);
+      if (disc < 1) {
+        alwadiRate = disc;
+      } else if (disc < 100) {
+        alwadiRate = (100 - disc) / 100;
+      }
+    }
+
+    // --- جلب قائمة الباقات والأسعار الرسمية لتظهر لزبائن أصحاب الـ API كالمعتاد بدون كشف الخصم الداخلي ---
     if (action === 'packages' || action === 'pricing') {
       const pkgs = [
-        { id: "1", name: "باقة شهرين", originalPrice: originalPrices["1"], price: calculateFinalServicePrice(originalPrices["1"], systemConfig.alwadi) },
-        { id: "3", name: "باقة 4 أشهر", originalPrice: originalPrices["3"], price: calculateFinalServicePrice(originalPrices["3"], systemConfig.alwadi) },
-        { id: "7", name: "باقة 6 أشهر", originalPrice: originalPrices["7"], price: calculateFinalServicePrice(originalPrices["7"], systemConfig.alwadi) },
-        { id: "9", name: "باقة سنة كاملة", originalPrice: originalPrices["9"], price: calculateFinalServicePrice(originalPrices["9"], systemConfig.alwadi) }
+        { id: "1", name: "باقة شهرين", price: OFFICIAL_ALWADI_PRICES["1"] },
+        { id: "3", name: "باقة 4 أشهر", price: OFFICIAL_ALWADI_PRICES["3"] },
+        { id: "7", name: "باقة 6 أشهر", price: OFFICIAL_ALWADI_PRICES["7"] },
+        { id: "9", name: "باقة سنة كاملة", price: OFFICIAL_ALWADI_PRICES["9"] }
       ];
       return NextResponse.json({
         success: true,
@@ -157,8 +171,8 @@ export async function POST(req: Request) {
 
         // ب. التحقق من صحة رقم الباقة واحتساب السعر الدقيق بناءً على إعدادات الـ API والنسب
         const pkgIdStr = String(packageId).trim();
-        const basePrice = originalPrices[pkgIdStr];
-        if (!basePrice) {
+        const officialPrice = OFFICIAL_ALWADI_PRICES[pkgIdStr];
+        if (!officialPrice) {
             return NextResponse.json({ 
                 success: false, 
                 code: 'SM_VALIDATION_ERROR', 
@@ -167,10 +181,8 @@ export async function POST(req: Request) {
             }, { status: 400, headers: corsHeaders });
         }
 
-        const price = calculateFinalServicePrice(
-            basePrice,
-            systemConfig.alwadi
-        );
+        // احتساب السعر المخصوم 5% لصاحب الـ API بدقة: 3000 * 0.95 = 2850
+        const discountedPrice = Math.round(officialPrice * alwadiRate);
 
         // ج. المطابقة الذكية: التحقق من أن subscriberId المرسل يطابق رقم الكرت فعلياً
         try {
@@ -199,11 +211,11 @@ export async function POST(req: Request) {
         }
 
         // د. التحقق من الرصيد الكافي
-        if ((userData.balance || 0) < price) {
+        if ((userData.balance || 0) < discountedPrice) {
             return NextResponse.json({ 
                 success: false, 
                 code: 'SM_INSUFFICIENT_BALANCE', 
-                message: `رصيدك الحالي في ستار موبايل لا يكفي. المطلوب: ${price} ر.ي، المتاح: ${userData.balance || 0} ر.ي`, 
+                message: `رصيدك الحالي في ستار موبايل لا يكفي. المطلوب: ${discountedPrice} ر.ي، المتاح: ${userData.balance || 0} ر.ي`, 
                 timestamp 
             }, { status: 400, headers: corsHeaders });
         }
@@ -214,7 +226,7 @@ export async function POST(req: Request) {
             const txRef = doc(collection(firestore, `users/${userId}/transactions`));
             
             batch.set(txRef, {
-                userId, transactionDate: timestamp, amount: price,
+                userId, transactionDate: timestamp, amount: discountedPrice,
                 transactionType: 'تجديد تجريبي (API)', notes: `تجربة ربط للكرت: ${number} - تم الاسترجاع فوراً`,
                 status: 'success'
             });
@@ -226,7 +238,15 @@ export async function POST(req: Request) {
                 code: 'SM_SUCCESS',
                 message: 'نجحت محاكاة التجديد (وضع التجربة)',
                 transactionId: `TEST-${Date.now()}`,
-                data: { cardNumber: number, subscriberId: subscriberId, amount: price, originalPrice: basePrice, mode: 'demo' },
+                data: { 
+                    cardNumber: number, 
+                    subscriberId: subscriberId, 
+                    price: officialPrice, // 3000 السعر الرسمي ليظهر في واجهتهم
+                    deductedAmount: discountedPrice, // 2850 المبلغ الفعلي المخصوم
+                    amount: discountedPrice, 
+                    originalPrice: officialPrice, 
+                    mode: 'demo' 
+                },
                 timestamp
             }, { headers: corsHeaders });
         }
@@ -243,15 +263,15 @@ export async function POST(req: Request) {
             const batch = writeBatch(firestore);
             const userRef = doc(firestore, 'users', userId);
             
-            batch.update(userRef, { balance: increment(-price) });
+            batch.update(userRef, { balance: increment(-discountedPrice) });
 
             const txRef = doc(collection(firestore, `users/${userId}/transactions`));
             batch.set(txRef, {
                 userId,
                 transactionDate: timestamp,
-                amount: price,
+                amount: discountedPrice,
                 transactionType: `تجديد منظومة الوادي (API)`,
-                notes: `كرت: ${number} - باقة: ${basePrice} ر.ي (سعر الربط البرمجي: ${price} ر.ي)`,
+                notes: `كرت: ${number} - باقة: ${officialPrice} ر.ي (سعر الربط البرمجي: ${discountedPrice} ر.ي)`,
                 status: 'success'
             });
 
@@ -262,7 +282,15 @@ export async function POST(req: Request) {
                 code: 'SM_SUCCESS',
                 message: 'تم التجديد بنجاح وخصم المبلغ من رصيدك',
                 transactionId: `ALW-API-${Date.now()}`,
-                data: { cardNumber: number, subscriberId: subscriberId, amount: price, originalPrice: basePrice, client: userData.displayName },
+                data: { 
+                    cardNumber: number, 
+                    subscriberId: subscriberId, 
+                    price: officialPrice, // 3000 السعر الرسمي ليظهر لزبائنه في واجهتهم
+                    deductedAmount: discountedPrice, // 2850 المبلغ الفعلي المخصوم من رصيده
+                    amount: discountedPrice, 
+                    originalPrice: officialPrice, 
+                    client: userData.displayName 
+                },
                 timestamp
             }, { headers: corsHeaders });
         }
