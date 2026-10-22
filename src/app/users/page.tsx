@@ -61,7 +61,8 @@ import {
   XCircle,
   ShieldCheck,
   Zap,
-  Settings
+  Settings,
+  RotateCcw
 } from 'lucide-react';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { useToast } from '@/hooks/use-toast';
@@ -148,12 +149,43 @@ export default function UsersPage() {
 
   const isUserAdmin = user?.email === '770326828@shabakat.com' || user?.uid === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2';
 
-  // إدارة حالة المستخدمين عبر البحث عند الطلب فقط
+  // إدارة حالة المستخدمين عبر البحث عند الطلب
   const [searchedUsers, setSearchedUsers] = useState<User[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [totalUsersCount, setTotalUsersCount] = useState<number | null>(null);
   const [totalUsersBalance, setTotalUsersBalance] = useState<number | null>(null);
+
+  // جلب المشتركين الذين لديهم رصيد دائماً ليظهروا تلقائياً
+  const usersWithBalanceQuery = useMemoFirebase(
+    () => (firestore && isUserAdmin ? query(
+      collection(firestore, 'users'),
+      where('balance', '>', 0)
+    ) : null),
+    [firestore, isUserAdmin]
+  );
+  const { data: rawUsersWithBalance, isLoading: isLoadingUsersWithBalance } = useCollection<User>(usersWithBalanceQuery);
+
+  // استبعاد حساب المدير وترتيب أصحاب الرصيد تنازلياً (الأعلى رصيداً أولاً)
+  const customersWithBalance = useMemo(() => {
+    if (!rawUsersWithBalance) return [];
+    return rawUsersWithBalance
+      .filter(u => 
+        u.id !== user?.uid && 
+        u.id !== 'wsy8bUcULSYX2J9Q9WyisiFX5ki2' && 
+        u.phoneNumber !== '770326828' && 
+        u.email !== '770326828@shabakat.com' &&
+        (u.balance ?? 0) > 0
+      )
+      .sort((a, b) => (b.balance ?? 0) - (a.balance ?? 0));
+  }, [rawUsersWithBalance, user?.uid]);
+
+  const resetSearch = useCallback(() => {
+    setSearchTerm('');
+    setSearchedUsers([]);
+    setHasSearched(false);
+    setAccountTypeFilter('all');
+  }, []);
 
   // إحصاء رصيد العملاء الإجمالي مع عدد المشتركين معاً في قراءة واحدة فقط (getAggregateFromServer)
   useEffect(() => {
@@ -680,13 +712,33 @@ export default function UsersPage() {
     }
   };
 
-  const filteredUsers = searchedUsers.filter(user => {
-    if (accountTypeFilter === 'all') return true;
-    if (accountTypeFilter === 'user') return user.accountType === 'user' || !user.accountType;
-    if (accountTypeFilter === 'with-balance') return (user.balance ?? 0) > 0;
-    if (accountTypeFilter === 'network-owner') return user.accountType === 'network-owner';
-    return true;
-  });
+  const displayedUsers = useMemo(() => {
+    if (hasSearched) {
+      return searchedUsers;
+    }
+    if (!searchTerm.trim()) {
+      return customersWithBalance;
+    }
+    const term = searchTerm.trim().toLowerCase();
+    const cleanDigits = term.replace(/\D/g, '');
+    return customersWithBalance.filter(u => {
+      const normName = normalizeArabic(u.displayName || '');
+      const normSearch = normalizeArabic(term);
+      const matchName = normName.includes(normSearch);
+      const matchPhone = cleanDigits.length >= 2 && (u.phoneNumber || '').includes(cleanDigits);
+      return matchName || matchPhone;
+    });
+  }, [hasSearched, searchedUsers, searchTerm, customersWithBalance]);
+
+  const filteredUsers = useMemo(() => {
+    return displayedUsers.filter(user => {
+      if (accountTypeFilter === 'all') return true;
+      if (accountTypeFilter === 'user') return user.accountType === 'user' || !user.accountType;
+      if (accountTypeFilter === 'with-balance') return (user.balance ?? 0) > 0;
+      if (accountTypeFilter === 'network-owner') return user.accountType === 'network-owner';
+      return true;
+    });
+  }, [displayedUsers, accountTypeFilter]);
 
   const formatBalanceDisplay = (val: string | null) => {
     if (val === 'خطأ' || val === null) return 'خطأ';
@@ -824,7 +876,14 @@ export default function UsersPage() {
                   placeholder="ابحث باسم العميل أو رقمه (مثال: 771042239)..." 
                   className="w-full pr-11 pl-10 h-12 rounded-2xl bg-card border border-border/60 text-xs font-bold focus-visible:ring-primary shadow-xs" 
                   value={searchTerm} 
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSearchTerm(val);
+                    if (!val.trim() && hasSearched) {
+                      setHasSearched(false);
+                      setSearchedUsers([]);
+                    }
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
@@ -834,12 +893,9 @@ export default function UsersPage() {
                 />
                 {searchTerm && (
                   <button 
-                    onClick={() => {
-                      setSearchTerm('');
-                      setSearchedUsers([]);
-                      setHasSearched(false);
-                    }} 
-                    className="absolute left-3.5 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded-full text-muted-foreground"
+                    type="button"
+                    onClick={resetSearch} 
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded-full text-muted-foreground transition-colors"
                   >
                     <XCircle className="w-4 h-4" />
                   </button>
@@ -857,23 +913,22 @@ export default function UsersPage() {
             </div>
           </div>
 
-          {hasSearched && searchedUsers.length > 0 && (
+          {(customersWithBalance.length > 0 || searchedUsers.length > 0) && (
             <div>
-              <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-1 mb-3">تصفية النتائج</h3>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-4 gap-2">
                   {filterOptions.map((opt) => (
                       <button
                           key={opt.value}
                           onClick={() => setAccountTypeFilter(opt.value as any)}
                           className={cn(
-                              "flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all duration-300 gap-2",
+                              "flex flex-col items-center justify-center py-2 px-1 rounded-2xl border transition-all duration-200 gap-1",
                               accountTypeFilter === opt.value
-                                  ? "border-primary bg-primary/5 text-primary shadow-sm scale-[1.02]"
-                                  : "border-transparent bg-card text-muted-foreground hover:bg-muted/50 shadow-sm"
+                                  ? "border-primary bg-primary/10 text-primary font-black shadow-xs scale-[1.02]"
+                                  : "border-border/40 bg-card text-muted-foreground hover:bg-muted/40 font-bold"
                           )}
                       >
-                          <opt.icon className={cn("h-5 w-5", accountTypeFilter === opt.value ? "text-primary" : "text-muted-foreground/60")} />
-                          <span className="text-[11px] font-black">{opt.label}</span>
+                          <opt.icon className={cn("h-4 w-4", accountTypeFilter === opt.value ? "text-primary" : "text-muted-foreground/70")} />
+                          <span className="text-[10px] truncate max-w-full">{opt.label}</span>
                       </button>
                   ))}
               </div>
@@ -882,32 +937,85 @@ export default function UsersPage() {
 
           <div className="space-y-3">
             <div className="flex justify-between items-center px-1 mb-1">
-                <h3 className="text-xs font-black text-primary uppercase tracking-widest">
-                  النتائج ({filteredUsers.length})
-                </h3>
-                {hasSearched && (
-                  <span className="text-[10px] font-bold text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full">
-                    جلب عند الطلب فقط
-                  </span>
+                {hasSearched ? (
+                  <>
+                    <div className="flex items-center gap-1.5">
+                      <Search className="w-3.5 h-3.5 text-primary" />
+                      <h3 className="text-xs font-black text-primary">
+                        نتائج البحث ({filteredUsers.length})
+                      </h3>
+                    </div>
+                    <button 
+                      onClick={resetSearch}
+                      className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-2.5 py-1 rounded-full flex items-center gap-1 transition-colors"
+                    >
+                      <RotateCcw className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                      <span>عرض أصحاب الرصيد</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-1.5">
+                      <Wallet className="w-3.5 h-3.5 text-emerald-600" />
+                      <h3 className="text-xs font-black text-foreground">
+                        {searchTerm.trim() ? `المطابقون في أصحاب الرصيد (${filteredUsers.length})` : `العملاء أصحاب الرصيد (${filteredUsers.length})`}
+                      </h3>
+                    </div>
+                    <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>ظاهرون دائماً</span>
+                    </span>
+                  </>
                 )}
             </div>
 
-            {isSearching ? (
-                [1, 2].map(i => <Skeleton key={i} className="h-24 w-full rounded-3xl" />)
-            ) : !hasSearched ? (
+            {isSearching || (!hasSearched && isLoadingUsersWithBalance) ? (
+                [1, 2, 3].map(i => <Skeleton key={i} className="h-24 w-full rounded-3xl" />)
+            ) : hasSearched && filteredUsers.length === 0 ? (
+                <div className="text-center py-10 opacity-75 space-y-3 bg-card rounded-3xl p-6 border border-border/50">
+                    <Users className="h-10 w-10 mx-auto text-muted-foreground/50" />
+                    <div>
+                        <p className="text-xs font-black text-foreground">لا يوجد مستخدم مطابق للبحث</p>
+                        <p className="text-[10px] text-muted-foreground mt-1">تأكد من كتابة الاسم أو رقم الهاتف بدقة وحاول مجدداً.</p>
+                    </div>
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={resetSearch}
+                        className="rounded-xl text-xs font-bold gap-1.5 mx-auto"
+                    >
+                        <Wallet className="w-3.5 h-3.5 text-emerald-600" />
+                        العودة لأصحاب الرصيد
+                    </Button>
+                </div>
+            ) : !hasSearched && searchTerm.trim() && filteredUsers.length === 0 ? (
+                <Card className="rounded-3xl border border-dashed border-border/60 p-6 text-center bg-card/60 space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto text-primary">
+                        <Search className="h-6 w-6" />
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-xs font-black text-foreground">لم يُعثر على عميل برصيد يطابق "{searchTerm}"</p>
+                        <p className="text-[11px] text-muted-foreground font-medium">
+                            يمكنك البحث في قاعدة بيانات كافة المشتركين (حتى المشتركين بدون رصيد).
+                        </p>
+                    </div>
+                    <Button 
+                        onClick={() => handleSearch(searchTerm)} 
+                        disabled={isSearching}
+                        className="rounded-2xl font-black text-xs bg-[#0048ad] hover:bg-[#00388a] text-white px-5 h-11 gap-1.5 shadow-sm mx-auto"
+                    >
+                        {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                        <span>بحث في كامل المشتركين</span>
+                    </Button>
+                </Card>
+            ) : !hasSearched && !searchTerm.trim() && customersWithBalance.length === 0 ? (
                 <Card className="rounded-3xl border border-dashed border-border/60 p-8 text-center bg-card/60 space-y-2">
-                    <Search className="h-10 w-10 mx-auto text-[#0048ad]/50" />
-                    <p className="text-xs font-black text-foreground">ابحث بأسم المستخدم ليتم جلبه</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      ابحث بأسم او رقم العميل.
+                    <Wallet className="h-10 w-10 mx-auto text-muted-foreground/40" />
+                    <p className="text-xs font-black text-foreground">لا يوجد عملاء لديهم رصيد حالياً</p>
+                    <p className="text-[11px] text-muted-foreground font-medium">
+                        جميع أرصدة العملاء مصفّرة. يمكنك البحث عن أي عميل عبر شريط البحث أعلاه.
                     </p>
                 </Card>
-            ) : filteredUsers.length === 0 ? (
-                <div className="text-center py-10 opacity-60 space-y-2">
-                    <Users className="h-10 w-10 mx-auto text-muted-foreground/50" />
-                    <p className="text-xs font-bold text-foreground">لا يوجد مستخدم مطابق للبحث</p>
-                    <p className="text-[10px] text-muted-foreground">تأكد من كتابة الاسم أو الرقم بدقة وحاول مجدداً.</p>
-                </div>
             ) : (
                 filteredUsers.map((user) => (
                 <Card key={user.id} className="rounded-3xl border-none shadow-sm hover:shadow-md transition-shadow overflow-hidden bg-card">
@@ -940,8 +1048,8 @@ export default function UsersPage() {
                                 <p className="text-muted-foreground text-[10px] font-bold font-mono tracking-wider">{user.phoneNumber}</p>
                             </div>
                         </div>
-                        <div className="text-primary font-black text-sm pt-1" dir="rtl">
-                            {user.balance?.toLocaleString('en-US')} <span className="text-[9px] font-bold opacity-70">ر.ي</span>
+                        <div className={cn("font-black text-sm pt-1", (user.balance ?? 0) > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")} dir="rtl">
+                            {(user.balance ?? 0).toLocaleString('en-US')} <span className="text-[9px] font-bold opacity-70">ر.ي</span>
                         </div>
                     </div>
                     

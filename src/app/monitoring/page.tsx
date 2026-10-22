@@ -184,8 +184,31 @@ const isTelecomTx = (tx: MonitoredTransaction) => {
            n.includes('رصيد');
 };
 
-// تعريف التبويبات المطلوبة بدقة بدون تبويب "الكل"
+// دوال فحص التوقيت الدقيقة
+const isTxToday = (dateStr?: string) => {
+    if (!dateStr) return false;
+    try {
+        const date = parseISO(dateStr);
+        return isToday(date);
+    } catch {
+        return false;
+    }
+};
+
+const isTxThisMonth = (dateStr?: string) => {
+    if (!dateStr) return false;
+    try {
+        const date = parseISO(dateStr);
+        const now = new Date();
+        return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+    } catch {
+        return false;
+    }
+};
+
+// تعريف التبويبات مع تبويب "الكل" للمشتركين
 const TABS = [
+    { id: 'all', label: 'الكل', icon: Activity },
     { id: 'deposits', label: 'الإيداعات', icon: Wallet },
     { id: 'sdad', label: 'السداد', icon: Smartphone },
     { id: 'networks', label: 'الشبكات', icon: Wifi },
@@ -195,14 +218,16 @@ const TABS = [
 ] as const;
 
 type TabKey = typeof TABS[number]['id'];
+type DateFilterKey = 'today' | 'month' | 'all';
 
 export default function MonitoringPage() {
     const firestore = useFirestore();
     const { user } = useUser();
     const { toast } = useToast();
 
-    // نحدد التبويب الافتراضي كـ "الإيداعات"
-    const [activeTab, setActiveTab] = useState<TabKey>('deposits');
+    // التبويب الافتراضي وفلتر الفترة
+    const [activeTab, setActiveTab] = useState<TabKey>('all');
+    const [dateFilter, setDateFilter] = useState<DateFilterKey>('today');
     const [transactions, setTransactions] = useState<MonitoredTransaction[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -210,11 +235,59 @@ export default function MonitoringPage() {
     const [selectedTx, setSelectedTx] = useState<MonitoredTransaction | null>(null);
     const [activeClientName, setActiveClientName] = useState<string>('');
     const [copiedField, setCopiedField] = useState<string | null>(null);
+    const [needsIndex, setNeedsIndex] = useState(false);
+    const [usersMap, setUsersMap] = useState<Record<string, { displayName?: string; phoneNumber?: string }>>({});
+
+    // دالة استبعاد عمليات حساب المدير 770326828 نهائياً
+    const isAdminTx = useCallback((tx: MonitoredTransaction) => {
+        const parent = tx._parentUserId || tx.userId || '';
+        const phone = tx.userPhone || '';
+        const name = tx.userName || '';
+        
+        // استبعاد أي عملية خاصة بحساب المدير نفسه
+        if (parent === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2' || parent === user?.uid) return true;
+        if (tx.userId === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2' || tx.userId === user?.uid) return true;
+        if (phone.includes('770326828')) return true;
+        if (name.includes('مدير النظام')) return true;
+        
+        return false;
+    }, [user?.uid]);
+
+    // جلب أسماء وأرقام المشتركين المعروضين في القائمة تلقائياً
+    useEffect(() => {
+        if (!firestore) return;
+        const uidsToFetch = Array.from(new Set(
+            transactions
+                .filter(t => !isAdminTx(t))
+                .map(t => t.userId || t._parentUserId)
+                .filter((id): id is string => Boolean(id && !usersMap[id]))
+        )).slice(0, 35);
+
+        if (uidsToFetch.length === 0) return;
+
+        uidsToFetch.forEach(uid => {
+            getDoc(doc(firestore, 'users', uid)).then(snap => {
+                if (snap.exists()) {
+                    const d = snap.data();
+                    setUsersMap(prev => ({
+                        ...prev,
+                        [uid]: { displayName: d.displayName, phoneNumber: d.phoneNumber }
+                    }));
+                }
+            }).catch(() => {});
+        });
+    }, [transactions, firestore, usersMap, isAdminTx]);
 
     // جلب اسم العميل الحقيقي عند فتح المنبثق إذا لم يكن محفوظاً في العملية
     useEffect(() => {
         if (!selectedTx) {
             setActiveClientName('');
+            return;
+        }
+
+        const cached = usersMap[selectedTx.userId || selectedTx._parentUserId || ''];
+        if (cached?.displayName) {
+            setActiveClientName(cached.displayName);
             return;
         }
 
@@ -246,12 +319,11 @@ export default function MonitoringPage() {
         } else {
             setActiveClientName('عميل');
         }
-    }, [selectedTx, firestore]);
+    }, [selectedTx, firestore, usersMap]);
 
     const isUserAdmin = user?.email === '770326828@shabakat.com' || user?.uid === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2';
 
-    // جلب مخفض ومحسن جداً لفايربيس: نطلب 50 عملية فقط دفعة واحدة لكافة التبويبات (توفير 95% من القراءات)
-    // مع إزالة استعلام users الضخم الذي كان يستهلك 500 قراءة عند كل فتح!
+    // جلب عمليات المشتركين مع دعم الفهرسة والاحتياطي الموسّع
     const setupTransactionsListener = useCallback(() => {
         if (!firestore || !isUserAdmin) return () => {};
 
@@ -264,7 +336,7 @@ export default function MonitoringPage() {
                 const parentUserId = docSnap.ref.parent?.parent?.id;
                 list.push({
                     id: docSnap.id,
-                    transactionDate: data.transactionDate || '',
+                    transactionDate: data.transactionDate || data.createdAt || '',
                     amount: Number(data.amount || 0),
                     transactionType: data.transactionType || 'عملية',
                     notes: data.notes || '',
@@ -282,6 +354,7 @@ export default function MonitoringPage() {
                     _parentUserId: parentUserId,
                 });
             }
+            // ترتيب تنازلي حاسم من الأحدث إلى الأقدم
             list.sort((a, b) => {
                 const timeA = a.transactionDate ? new Date(a.transactionDate).getTime() : 0;
                 const timeB = b.transactionDate ? new Date(b.transactionDate).getTime() : 0;
@@ -293,17 +366,18 @@ export default function MonitoringPage() {
         let isPrimaryActive = true;
         let fallbackUnsubscribe: (() => void) | null = null;
 
-        // قراءة 50 عملية فقط كحد أقصى لتخفيف استهلاك فايربيس
+        // استعلام مباشر مفهرس تنازلياً لـ 300 عملية
         const primaryQuery = query(
             collectionGroup(firestore, 'transactions'),
             orderBy('transactionDate', 'desc'),
-            limit(50)
+            limit(300)
         );
 
         const primaryUnsubscribe = onSnapshot(
             primaryQuery,
             (snapshot) => {
                 if (!isPrimaryActive) return;
+                setNeedsIndex(false);
                 const list = parseDocs(snapshot.docs);
                 setTransactions(list);
                 setIsLoading(false);
@@ -311,12 +385,16 @@ export default function MonitoringPage() {
             },
             (error: FirestoreError) => {
                 console.warn("Primary query warning, using fallback limit:", error.message);
+                if (error.message?.includes('index') || error.message?.includes('COLLECTION_GROUP')) {
+                    setNeedsIndex(true);
+                }
                 isPrimaryActive = false;
 
                 try {
+                    // استعلام احتياطي موسّع لـ 1000 عملية ليغطي عمليات المشتركين لليوم والشهر بالكامل
                     const fallbackQuery = query(
                         collectionGroup(firestore, 'transactions'),
-                        limit(50)
+                        limit(1000)
                     );
 
                     fallbackUnsubscribe = onSnapshot(
@@ -355,7 +433,7 @@ export default function MonitoringPage() {
         setIsRefreshing(true);
         setupTransactionsListener();
         setTimeout(() => setIsRefreshing(false), 700);
-        toast({ title: "تم التحديث", description: "تم جلب آخر العمليات المباشرة." });
+        toast({ title: "تم التحديث", description: "تم جلب آخر عمليات المشتركين." });
     };
 
     const handleCopy = (text: string, fieldName: string) => {
@@ -366,17 +444,32 @@ export default function MonitoringPage() {
         toast({ title: "تم النسخ", description: `تم نسخ ${fieldName} بنجاح.` });
     };
 
-    // تصفية العمليات حسب التبويب النشط والبحث - وأخذ آخر 5 عمليات فقط لكل قسم
+    // تصفية عمليات المشتركين فقط (استبعاد المدير)، وتطبيق فلتر الفترة والتبويب والبحث كاملاً من الأحدث للأقدم
     const currentTabTransactions = useMemo(() => {
         const q = toEnDigits(searchTerm).trim().toLowerCase();
 
-        // 1. تصفية حسب نوع التبويب
-        const filteredByType = transactions.filter(tx => {
+        // 1. تصفية عمليات المدير نهائياً (إبقاء المشتركين فقط)
+        const subscriberOnly = transactions.filter(tx => !isAdminTx(tx));
+
+        // 2. تصفية الفترة الزمنية (اليوم / هذا الشهر / الكل)
+        const filteredByDate = subscriberOnly.filter(tx => {
+            if (dateFilter === 'today') {
+                return isTxToday(tx.transactionDate);
+            }
+            if (dateFilter === 'month') {
+                return isTxThisMonth(tx.transactionDate);
+            }
+            return true;
+        });
+
+        // 3. تصفية حسب نوع التبويب
+        const filteredByType = filteredByDate.filter(tx => {
+            if (activeTab === 'all') return true;
             switch (activeTab) {
                 case 'deposits':
                     return isDepositTx(tx);
                 case 'sdad':
-                    return isTelecomTx(tx); // لا يحتوي على إيداعات إطلاقاً
+                    return isTelecomTx(tx);
                 case 'networks':
                     return isNetworksTx(tx);
                 case 'alwadi':
@@ -386,15 +479,16 @@ export default function MonitoringPage() {
                 case 'withdrawals':
                     return isWithdrawalTx(tx);
                 default:
-                    return false;
+                    return true;
             }
         });
 
-        // 2. تصفية بالبحث إذا وجد
+        // 4. تصفية بالبحث إذا وجد
         const searched = filteredByType.filter(tx => {
             if (!q) return true;
-            const userName = (tx.userName || '').toLowerCase();
-            const userPhone = toEnDigits(tx.userPhone || '').toLowerCase();
+            const userInfo = usersMap[tx.userId || tx._parentUserId || ''];
+            const userName = (userInfo?.displayName || tx.userName || '').toLowerCase();
+            const userPhone = toEnDigits(userInfo?.phoneNumber || tx.userPhone || '').toLowerCase();
             const recipientPhone = toEnDigits(tx.recipientPhoneNumber || '').toLowerCase();
             const cardNum = toEnDigits(tx.cardNumber || '').toLowerCase();
             const notes = (tx.notes || '').toLowerCase();
@@ -408,36 +502,55 @@ export default function MonitoringPage() {
                    userPhone.includes(q);
         });
 
-        // 3. عرض آخر 5 عمليات فقط لكل تبويب
-        return searched.slice(0, 5);
-    }, [transactions, activeTab, searchTerm]);
+        // إرجاع كافة العمليات كاملة مرتبة من الأحدث للأقدم
+        return searched;
+    }, [transactions, activeTab, searchTerm, dateFilter, isAdminTx, usersMap]);
 
-    // حساب إحصائيات سريعة للعمليات اليوم
+    // حساب إحصائيات دقيقة للمشتركين فقط تتفاعل مع الفترة المختارة
     const stats = useMemo(() => {
         let totalSdad = 0;
         let totalDeposit = 0;
         let totalCards = 0;
+        let periodCount = 0;
         let todayCount = 0;
+        let monthCount = 0;
 
-        for (const tx of transactions) {
+        const subscriberOnly = transactions.filter(tx => !isAdminTx(tx));
+
+        for (const tx of subscriberOnly) {
             if (!tx.transactionDate) continue;
-            try {
-                const date = parseISO(tx.transactionDate);
-                if (isToday(date)) {
-                    todayCount++;
-                    if (isTelecomTx(tx)) {
-                        totalSdad += tx.amount;
-                    } else if (isDepositTx(tx)) {
-                        totalDeposit += tx.amount;
-                    } else if (isNetworksTx(tx)) {
-                        totalCards += tx.amount;
-                    }
+            const isTodayTx = isTxToday(tx.transactionDate);
+            const isMonthTx = isTxThisMonth(tx.transactionDate);
+
+            if (isTodayTx) todayCount++;
+            if (isMonthTx) monthCount++;
+
+            const matchPeriod = 
+                dateFilter === 'today' ? isTodayTx :
+                dateFilter === 'month' ? isMonthTx : true;
+
+            if (matchPeriod) {
+                periodCount++;
+                if (isTelecomTx(tx)) {
+                    totalSdad += tx.amount;
+                } else if (isDepositTx(tx)) {
+                    totalDeposit += tx.amount;
+                } else if (isNetworksTx(tx)) {
+                    totalCards += tx.amount;
                 }
-            } catch {}
+            }
         }
 
-        return { totalSdad, totalDeposit, totalCards, todayCount };
-    }, [transactions]);
+        return { 
+            totalSdad, 
+            totalDeposit, 
+            totalCards, 
+            periodCount, 
+            todayCount, 
+            monthCount, 
+            totalCount: subscriberOnly.length 
+        };
+    }, [transactions, dateFilter, isAdminTx]);
 
     if (!isUserAdmin) {
         return (
@@ -455,6 +568,83 @@ export default function MonitoringPage() {
 
             <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4 pb-28">
 
+                {/* حقل تصفية العمليات: عمليات اليوم أو عمليات الشهر أو الكل */}
+                <div className="grid grid-cols-3 gap-1.5 bg-card p-1.5 rounded-2xl border border-border/60 shadow-xs">
+                    <button
+                        onClick={() => setDateFilter('today')}
+                        className={cn(
+                            "flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-black transition-all",
+                            dateFilter === 'today'
+                                ? "bg-[#0048ad] text-white shadow-xs scale-[1.02]"
+                                : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-bold"
+                        )}
+                    >
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>عمليات اليوم</span>
+                        <span className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded-full font-mono",
+                            dateFilter === 'today' ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
+                        )}>
+                            {toEnDigits(stats.todayCount)}
+                        </span>
+                    </button>
+
+                    <button
+                        onClick={() => setDateFilter('month')}
+                        className={cn(
+                            "flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-black transition-all",
+                            dateFilter === 'month'
+                                ? "bg-[#0048ad] text-white shadow-xs scale-[1.02]"
+                                : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-bold"
+                        )}
+                    >
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>عمليات الشهر</span>
+                        <span className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded-full font-mono",
+                            dateFilter === 'month' ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
+                        )}>
+                            {toEnDigits(stats.monthCount)}
+                        </span>
+                    </button>
+
+                    <button
+                        onClick={() => setDateFilter('all')}
+                        className={cn(
+                            "flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-black transition-all",
+                            dateFilter === 'all'
+                                ? "bg-[#0048ad] text-white shadow-xs scale-[1.02]"
+                                : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-bold"
+                        )}
+                    >
+                        <Activity className="w-3.5 h-3.5" />
+                        <span>كافة العمليات</span>
+                        <span className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded-full font-mono",
+                            dateFilter === 'all' ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
+                        )}>
+                            {toEnDigits(stats.totalCount)}
+                        </span>
+                    </button>
+                </div>
+
+                {needsIndex && (
+                    <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 p-3.5 rounded-2xl flex items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-2 text-blue-800 dark:text-blue-300">
+                            <AlertCircle className="w-4 h-4 text-blue-600 shrink-0" />
+                            <span className="font-bold text-[11px]">لتفعيل الفهرسة السحابية التلقائية في فايربيس (نقرة واحدة):</span>
+                        </div>
+                        <a 
+                            href="https://console.firebase.google.com/v1/r/project/studio-239662212-1b7b6/firestore/indexes?create_exemption=Cmhwcm9qZWN0cy9zdHVkaW8tMjM5NjYyMjEyLTFiN2I2L2RhdGFiYXNlcy8oZGVmYXVsdCkvY29sbGVjdGlvbkdyb3Vwcy90cmFuc2FjdGlvbnMvZmllbGRzL3RyYW5zYWN0aW9uRGF0ZRACGhMKD3RyYW5zYWN0aW9uRGF0ZRAC" 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-[10px] font-black text-white bg-[#0048ad] hover:bg-[#00388a] px-3 py-1.5 rounded-xl shrink-0 transition-colors"
+                        >
+                            تفعيل الفهرس
+                        </a>
+                    </div>
+                )}
+
                 {/* كرت الإحصائيات الموحد بلون التطبيق الأساسي #0048ad */}
                 <Card className="rounded-[28px] border-none shadow-md bg-gradient-to-br from-[#0048ad] to-[#00337c] text-white p-4 overflow-hidden relative">
                     <div className="flex items-center justify-between pb-3 border-b border-white/15">
@@ -463,12 +653,14 @@ export default function MonitoringPage() {
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
                                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
                             </span>
-                            <span className="text-xs font-black text-white">إحصائيات اليوم المباشرة</span>
+                            <span className="text-xs font-black text-white">
+                                {dateFilter === 'today' ? 'إحصائيات المشتركين اليوم' : dateFilter === 'month' ? 'إحصائيات المشتركين للشهر' : 'إحصائيات المشتركين الإجمالية'}
+                            </span>
                         </div>
 
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] font-bold bg-white/15 px-2.5 py-0.5 rounded-full font-mono">
-                                {toEnDigits(stats.todayCount)} اليوم
+                                {toEnDigits(stats.periodCount)} عملية
                             </span>
                             <button 
                                 onClick={handleManualRefresh}
@@ -512,7 +704,7 @@ export default function MonitoringPage() {
                 <div className="relative">
                     <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input 
-                        placeholder="بحث بالرقم، الخدمة، الكرت، الملاحظات..." 
+                        placeholder="بحث باسم العميل، الهاتف، الخدمة، الكرت..." 
                         className="h-10 pr-9 pl-9 rounded-2xl bg-card border-border/50 text-xs font-bold shadow-xs focus:ring-2 focus:ring-[#0048ad]/20"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -527,7 +719,7 @@ export default function MonitoringPage() {
                     )}
                 </div>
 
-                {/* شريط التبويبات الستة بدقة (بدون الكل) وبلون التطبيق المعتمد */}
+                {/* شريط التبويبات مع الكل وبلون التطبيق المعتمد */}
                 <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
                     {TABS.map((tab) => {
                         const Icon = tab.icon;
@@ -540,7 +732,7 @@ export default function MonitoringPage() {
                                     "flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-black transition-all shrink-0 border",
                                     isActive
                                         ? "bg-[#0048ad] border-[#0048ad] text-white shadow-xs"
-                                        : "bg-card border-border/60 text-muted-foreground hover:text-foreground"
+                                        : "bg-card border-border/60 text-muted-foreground hover:text-foreground font-bold"
                                 )}
                             >
                                 <Icon className="w-3.5 h-3.5" />
@@ -550,17 +742,21 @@ export default function MonitoringPage() {
                     })}
                 </div>
 
-                {/* عنوان القسم ومؤشر آخر 5 عمليات */}
+                {/* عنوان القسم ومؤشر عدد العمليات */}
                 <div className="flex items-center justify-between px-1 pt-1">
-                    <span className="text-[11px] font-black text-muted-foreground">
-                        آخر {toEnDigits(currentTabTransactions.length)} عمليات ({TABS.find(t => t.id === activeTab)?.label})
+                    <span className="text-[11px] font-black text-foreground flex items-center gap-1.5">
+                        <Activity className="w-3.5 h-3.5 text-[#0048ad]" />
+                        <span>عمليات المشتركين ({toEnDigits(currentTabTransactions.length)})</span>
+                        <span className="text-[10px] text-muted-foreground font-bold">
+                            - {TABS.find(t => t.id === activeTab)?.label}
+                        </span>
                     </span>
-                    <span className="text-[10px] font-bold text-muted-foreground/70 bg-muted/60 px-2 py-0.5 rounded-full">
-                        حد أقصى 5
+                    <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                        <span>من الأحدث للأقدم</span>
                     </span>
                 </div>
 
-                {/* قائمة العمليات (آخر 5 عمليات فقط لكل تبويب) */}
+                {/* قائمة عمليات المشتركين كاملة مرتبة من الأحدث للأقدم */}
                 <div className="space-y-2">
                     {isLoading ? (
                         <div className="space-y-2">
@@ -571,17 +767,20 @@ export default function MonitoringPage() {
                     ) : currentTabTransactions.length === 0 ? (
                         <Card className="rounded-3xl border-none shadow-xs p-8 text-center bg-card space-y-2">
                             <FileText className="w-8 h-8 mx-auto text-muted-foreground/50" />
-                            <p className="font-black text-xs text-foreground">لا توجد عمليات مسجلة حديثاً</p>
+                            <p className="font-black text-xs text-foreground">لا توجد عمليات مسجلة</p>
                             <p className="text-[11px] text-muted-foreground">
-                                لم يتم العثور على أي عمليات في قسم {TABS.find(t => t.id === activeTab)?.label}.
+                                {dateFilter === 'today' 
+                                    ? `لم يتم العثور على أي عمليات للمشتركين اليوم في قسم ${TABS.find(t => t.id === activeTab)?.label}. يمكنك الضغط على "عمليات الشهر" أعلاه.`
+                                    : `لم يتم العثور على أي عمليات للمشتركين في قسم ${TABS.find(t => t.id === activeTab)?.label}.`}
                             </p>
                         </Card>
                     ) : (
                         currentTabTransactions.map((tx) => {
                             const Icon = getTransactionIcon(tx.transactionType);
                             const isDeposit = isDepositTx(tx);
-                            const clientDisplay = tx.userName || tx.subscriberName || 'عميل';
-                            const phoneDisplay = toEnDigits(tx.userPhone || tx.recipientPhoneNumber || '');
+                            const userInfo = usersMap[tx.userId || tx._parentUserId || ''];
+                            const clientDisplay = userInfo?.displayName || tx.userName || tx.subscriberName || 'مشترك';
+                            const phoneDisplay = toEnDigits(userInfo?.phoneNumber || tx.userPhone || tx.recipientPhoneNumber || '');
 
                             return (
                                 <Card 
