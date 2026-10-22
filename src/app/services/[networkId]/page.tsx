@@ -169,6 +169,7 @@ function NetworkPurchasePageComponent() {
             transactionType: `شراء كرت ${selectedCategory.name}`,
             notes: `شبكة: ${networkName}${isApiUser ? ' (سعر API مخفض)' : ''}`,
             status: 'pending',
+            readiness: 'قيد الانتظار',
             externalRef: externalRef,
             networkName: networkName,
             className: selectedCategory.name,
@@ -190,13 +191,19 @@ function NetworkPurchasePageComponent() {
         });
         await initBatch.commit();
 
+        let isCompletedLocally = false;
+
         // الاستماع الفوري للويب هوك في حال رد المزود بعد ثوانٍ
         const unsubscribe = onSnapshot(baityOrderRef, (snap) => {
             if (snap.exists()) {
                 const data = snap.data();
-                if (data?.status === 'completed' && data?.cardNumber) {
+                if (data?.status === 'completed' && data?.cardNumber && !isCompletedLocally) {
+                    isCompletedLocally = true;
                     setPurchasedCard({ cardID: data.cardNumber, cardPass: data.cardPass || '' });
                     setIsConfirming(false);
+                    audioRef.current?.play().catch(() => {});
+                    unsubscribe();
+                } else if (data?.status === 'failed') {
                     unsubscribe();
                 }
             }
@@ -216,12 +223,16 @@ function NetworkPurchasePageComponent() {
 
         const result: any = await response.json().catch(() => ({}));
 
-        if (response.ok && result?.status === 200 && result?.data?.order?.card) {
+        // أ) نجاح فوري واستلام الكرت
+        if (response.ok && result?.status === 200 && result?.data?.order?.card?.cardID) {
+            isCompletedLocally = true;
+            unsubscribe();
             const cardData = result.data.order.card;
             
             const finishBatch = writeBatch(firestore);
             const transactionPayload: any = {
                 status: 'completed',
+                readiness: 'جاهزة',
                 cardNumber: cardData.cardID,
                 completedAt: new Date().toISOString(),
             };
@@ -263,22 +274,72 @@ function NetworkPurchasePageComponent() {
                     })
                 }).catch(() => {});
             }
-        } else {
-            // في حال تأخر الرد من المصدر: المبلغ مخصوم والطلب معلق بانتظار الويب هوك
+        } else if (response.ok && result?.status === 200 && result?.data?.order?.uuidOrder && !result?.data?.order?.card) {
+            // ب) الطلب مسجل لدى المزود وقيد الانتظار الفعلي لاستلامه عبر الويب هوك
             setIsConfirming(false);
             toast({
-                title: "تم استلام الطلب وخصم المبلغ ✅",
-                description: "طلبك قيد المعالجة لدى المزود. في حال تأخر الكرت سيصلك إشعار ورسالة نصية برقم الكرت وتجده في سجل العمليات فور اعتماده.",
+                title: "الطلب قيد الانتظار ⏳",
+                description: "طلبك قيد المعالجة لدى المزود وسيصلك الكرت فوراً وتجده في سجل العمليات، وإذا تعذر صدوره يسترجع المبلغ لرصيدك تلقائياً.",
                 duration: 8000
+            });
+        } else {
+            // ج) فشل الشراء (نفاد المخزون، رصيد المزود غير كاف، إلخ): إعادة المبلغ فوراً للعميل وتحديث الحالة لفشل
+            unsubscribe();
+            try {
+                const refundBatch = writeBatch(firestore);
+                refundBatch.update(userDocRef!, { balance: increment(effectivePrice) });
+                refundBatch.update(txRef, {
+                    status: 'failed',
+                    readiness: 'فاشلة',
+                    notes: `شبكة: ${networkName} (فشل الشراء: تم استرجاع المبلغ لرصيدك)`,
+                    failedAt: new Date().toISOString()
+                });
+                refundBatch.update(baityOrderRef, {
+                    status: 'failed',
+                    failedAt: new Date().toISOString(),
+                    errorReason: result?.message || 'فشل الشراء من المزود'
+                });
+                await refundBatch.commit();
+            } catch (refErr) {
+                console.error("Refund commit error:", refErr);
+            }
+
+            setIsConfirming(false);
+            toast({
+                variant: "destructive",
+                title: "فشل الشراء وتم استرجاع المبلغ",
+                description: "فشل الشراء\nيرجى التواصل مع الادارة 770326828\n(تمت إعادة المبلغ إلى رصيدك تلقائياً)",
+                duration: 9000
             });
         }
     } catch (error: any) {
         console.error("Order execution error:", error);
+        // في حال حدوث خطأ استثنائي أو انقطاع في الشبكة: إعادة المبلغ فوراً للعميل
+        try {
+            const refundBatch = writeBatch(firestore);
+            refundBatch.update(userDocRef!, { balance: increment(effectivePrice) });
+            refundBatch.update(txRef, {
+                status: 'failed',
+                readiness: 'فاشلة',
+                notes: `شبكة: ${networkName} (فشل الاتصال: تم استرجاع المبلغ لرصيدك)`,
+                failedAt: new Date().toISOString()
+            });
+            refundBatch.update(baityOrderRef, {
+                status: 'failed',
+                failedAt: new Date().toISOString(),
+                errorReason: error?.message || 'خطأ اتصال'
+            });
+            await refundBatch.commit();
+        } catch (refErr) {
+            console.error("Refund commit error on catch:", refErr);
+        }
+
         setIsConfirming(false);
         toast({
-            title: "تم استلام الطلب وخصم المبلغ ✅",
-            description: "طلبك مسجل وسيتم إصدار الكرت تلقائياً عبر الويب هوك فور تأكيده من المزود.",
-            duration: 8000
+            variant: "destructive",
+            title: "فشل الشراء وتم استرجاع المبلغ",
+            description: "فشل الشراء\nيرجى التواصل مع الادارة 770326828\n(تمت إعادة المبلغ إلى رصيدك تلقائياً)",
+            duration: 9000
         });
     } finally {
         setIsProcessing(false);

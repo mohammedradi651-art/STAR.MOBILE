@@ -20,26 +20,45 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 
-const Icon4G = ({ size }: { size?: number }) => (
-  <span className="font-black leading-none" style={{ fontSize: size ? `${size * 0.8}px` : "10px" }}>
-    4G
-  </span>
+const YemenMobileIcon = ({ size = 16, className = "", style = {} }: { size?: number; className?: string; style?: any }) => (
+  <div className={cn("relative overflow-hidden rounded-md shrink-0", className)} style={{ width: size, height: size, ...style }}>
+    <Image src="/mobel.png" alt="يمن موبايل" fill className="object-cover" />
+  </div>
 );
 
-const AlsafaaIcon = ({ className, size, style }: { className?: string; size?: number; style?: React.CSSProperties }) => (
-  <div className={cn("relative overflow-hidden rounded-xl", className)} style={{ width: size, height: size, ...style }}>
+const Yemen4GIcon = ({ size = 16, className = "", style = {} }: { size?: number; className?: string; style?: any }) => (
+  <div className={cn("relative overflow-hidden rounded-md shrink-0", className)} style={{ width: size, height: size, ...style }}>
+    <Image src="https://i.postimg.cc/FsmGqt98/1768999789252.jpg" alt="يمن فورجي" fill className="object-cover" />
+  </div>
+);
+
+const AlwadiIcon = ({ size = 16, className = "", style = {} }: { size?: number; className?: string; style?: any }) => (
+  <div className={cn("relative overflow-hidden rounded-md shrink-0", className)} style={{ width: size, height: size, ...style }}>
+    <Image src="https://i.postimg.cc/wjKrdNX2/images-(5).jpg" alt="منظومة الوادي" fill className="object-cover" />
+  </div>
+);
+
+const AlsafaaIcon = ({ className = "", size = 16, style = {} }: { className?: string; size?: number; style?: React.CSSProperties }) => (
+  <div className={cn("relative overflow-hidden rounded-md shrink-0", className)} style={{ width: size, height: size, ...style }}>
     <Image src="https://i.postimg.cc/nL2S7w6S/20260728-152016.jpg" alt="شبكة الصفاء الرقمية" fill className="object-cover" />
   </div>
 );
 
+const BandarAdenIcon = ({ size = 16, className = "", style = {} }: { size?: number; className?: string; style?: any }) => (
+  <div className={cn("relative overflow-hidden rounded-md shrink-0", className)} style={{ width: size, height: size, ...style }}>
+    <Image src="/bandar-aden.jpg" alt="شبكة بندر عدن" fill className="object-cover" />
+  </div>
+);
+
 const availableServices = [
-  { id: "yemen-mobile", name: "يمن موبايل", icon: PhoneCall, href: "/yemen-mobile", requiresInternet: true },
-  { id: "yemen-4g", name: "يمن فورجي", icon: Icon4G, href: "/yemen-4g", requiresInternet: true },
+  { id: "yemen-mobile", name: "يمن موبايل", icon: YemenMobileIcon, href: "/yemen-mobile", requiresInternet: true },
+  { id: "yemen-4g", name: "يمن فورجي", icon: Yemen4GIcon, href: "/yemen-4g", requiresInternet: true },
   { id: "pay-bills", name: "تسديد رصيد", icon: Smartphone, href: "/telecom-services", requiresInternet: true },
   { id: "digital-cards", name: "الشبكات", icon: Wifi, href: "/services", requiresInternet: false },
   { id: "payments", name: "المدفوعات", icon: CreditCard, href: "/payment-services", requiresInternet: true },
-  { id: "alwadi", name: "منظومة الوادي", icon: SatelliteDish, href: "/alwadi", requiresInternet: true },
+  { id: "alwadi", name: "منظومة الوادي", icon: AlwadiIcon, href: "/alwadi", requiresInternet: true },
   { id: "alsafaa", name: "شبكة الصفاء الرقمية", icon: AlsafaaIcon, href: "/alsafaa", requiresInternet: true },
+  { id: "bandar-aden", name: "شبكة بندر عدن", icon: BandarAdenIcon, href: "/bandar-aden", requiresInternet: true },
   { id: "withdraw", name: "غذي حسابك", icon: Wallet, href: "/top-up", requiresInternet: true },
   { id: "games", name: "شدات ببجي", icon: Gamepad2, href: "/games", requiresInternet: true },
   { id: "favorites", name: "المفضلة", icon: Heart, href: "/favorites", requiresInternet: false },
@@ -119,7 +138,7 @@ export function BalanceCard() {
   };
 
   const ActionButton = ({ service, side }: { service: (typeof availableServices)[0]; side: "left" | "right" }) => {
-    const Icon = service.icon as React.ComponentType<{ size?: number; style?: any }>;
+    const Icon = service.icon as React.ComponentType<{ size?: number; className?: string; style?: any }>;
     const isDisabled = isOffline && service.requiresInternet;
 
     let timer: any;

@@ -345,7 +345,7 @@ export default function TransactionsPage() {
                                         </div>
                                         <div className="text-left">
                                             <p className={cn("font-black text-sm", isCredit ? 'text-green-600' : 'text-destructive')}>{tx.amount.toLocaleString()} ر.ي</p>
-                                            {isTelecomService(tx.transactionType) && (() => {
+                                            {(isTelecomService(tx.transactionType) || tx.transactionType.includes('شراء كرت') || tx.status) && (() => {
                                                 const readiness = getReadinessDetails(tx);
                                                 return (
                                                     <span className={cn("text-[10px] font-black block mt-0.5", readiness.colorClass)}>
@@ -400,7 +400,7 @@ export default function TransactionsPage() {
                           <span className="text-muted-foreground flex items-center gap-2"><Clock className="h-4 w-4 text-primary"/> الوقت:</span>
                           <span className="font-bold">{safeFormatDate(selectedTx.transactionDate, 'h:mm:ss a')}</span>
                       </div>
-                      {isTelecomService(selectedTx.transactionType) && (() => {
+                      {(isTelecomService(selectedTx.transactionType) || selectedTx.transactionType.includes('شراء كرت') || selectedTx.status) && (() => {
                           const readiness = getReadinessDetails(selectedTx);
                           return (
                               <div className="flex justify-between items-center py-2 border-b border-dashed">
@@ -416,6 +416,11 @@ export default function TransactionsPage() {
                               </div>
                           );
                       })()}
+                      {selectedTx.status === 'failed' && (
+                          <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-2xl text-center text-xs font-bold leading-relaxed">
+                              تم استرجاع المبلغ لحسابك تلقائياً لتعذر إصدار الكرت من المزود.
+                          </div>
+                      )}
                       {selectedTx.cardNumber && (
                           <div className="pt-4 bg-muted/30 p-4 rounded-2xl">
                               <h4 className="font-bold text-xs mb-3 flex items-center gap-2 text-primary"><CreditCard className="w-3.5 h-3.5"/> تفاصيل الكرت المستلم</h4>

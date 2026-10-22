@@ -667,4 +667,3 @@ export default function Yemen4GPage() {
         </div>
     );
 }
-

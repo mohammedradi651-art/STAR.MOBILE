@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -98,6 +99,7 @@ type NetworkCard = {
 const validityOptions = ["يوم", "يومين", "3 أيام", "أسبوع", "شهر", "شهرين", "3 أشهر", "6 أشهر", "سنة"];
 
 export default function OwnerNetworkManagePage() {
+  const router = useRouter();
   const firestore = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();

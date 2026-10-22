@@ -228,6 +228,7 @@ export async function POST(req: Request) {
             const txRef = db.collection('users').doc(userId).collection('transactions').doc(transactionId);
             await txRef.update({
               status: 'completed',
+              readiness: 'جاهزة',
               cardNumber: cardData.cardID,
               cardPassword: cardData.cardPass || cardData.cardID,
               completedAt: nowIso,
@@ -292,6 +293,7 @@ export async function POST(req: Request) {
             if (userId && transactionId) {
               await db.collection('users').doc(userId).collection('transactions').doc(transactionId).update({
                 status: 'failed',
+                readiness: 'فاشلة',
                 notes: (existingOrder.notes || '') + ' (فشلت العملية واستُرجع الرصيد)',
               });
             }

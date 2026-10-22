@@ -452,6 +452,7 @@ export default function CombinedNetworksPage() {
                 transactionType: `شراء كرت ${selectedCategory.name}`,
                 notes: `شبكة: ${selectedNetwork.name}${isApiUser ? ' (سعر API مخفض)' : ''}`,
                 status: 'pending',
+                readiness: 'قيد الانتظار',
                 externalRef: externalRef,
                 networkName: selectedNetwork.name,
                 className: selectedCategory.name,
@@ -473,15 +474,20 @@ export default function CombinedNetworksPage() {
             });
             await initBatch.commit();
 
+            let isCompletedLocally = false;
+
             // الاستماع اللحظي للويب هوك في حال ردّ في الخلفية
             const unsubscribe = onSnapshot(baityOrderRef, (snap) => {
                 if (snap.exists()) {
                     const data = snap.data();
-                    if (data?.status === 'completed' && data?.cardNumber) {
+                    if (data?.status === 'completed' && data?.cardNumber && !isCompletedLocally) {
+                        isCompletedLocally = true;
                         setPurchasedCard({ cardID: data.cardNumber, cardPass: data.cardPass || '' });
                         setShowConfirmPurchase(null);
                         setSelectedNetwork(null);
                         audioRef.current?.play().catch(() => {});
+                        unsubscribe();
+                    } else if (data?.status === 'failed') {
                         unsubscribe();
                     }
                 }
@@ -499,13 +505,17 @@ export default function CombinedNetworksPage() {
             
             const result = await response.json().catch(() => ({}));
 
-            if (response.ok && result?.status === 200 && result?.data?.order?.card) {
+            // أ) نجاح فوري واستلام الكرت
+            if (response.ok && result?.status === 200 && result?.data?.order?.card?.cardID) {
+                isCompletedLocally = true;
+                unsubscribe();
                 const cardData = result.data.order.card;
                 finalCardID = cardData.cardID;
 
                 const finishBatch = writeBatch(firestore);
                 const transactionPayload: any = {
                     status: 'completed',
+                    readiness: 'جاهزة',
                     cardNumber: cardData.cardID,
                     completedAt: new Date().toISOString()
                 };
@@ -526,14 +536,44 @@ export default function CombinedNetworksPage() {
                 setShowConfirmPurchase(null);
                 setSelectedNetwork(null);
                 audioRef.current?.play().catch(() => {});
-            } else {
-                // تأخر الرد أو معالجة خلفية: المبلغ مخصوم وسيصل عبر الويب هوك
+            } else if (response.ok && result?.status === 200 && result?.data?.order?.uuidOrder && !result?.data?.order?.card) {
+                // ب) الطلب قيد الانتظار الفعلي لدى المزود برقم أمر uuidOrder وسيصل الكرت عبر الويب هوك
                 setShowConfirmPurchase(null);
                 setSelectedNetwork(null);
                 toast({
-                    title: "تم استلام الطلب وخصم المبلغ ✅",
-                    description: "طلبك قيد المعالجة لدى المزود. في حال تأخر الكرت سيصلك إشعار ورسالة نصية برقم الكرت وتجده في سجل العمليات فور اعتماده.",
+                    title: "الطلب قيد الانتظار ⏳",
+                    description: "طلبك قيد المعالجة لدى المزود وسيصلك الكرت فوراً وتجده في سجل العمليات، وإذا تعذر صدوره يسترجع المبلغ لرصيدك تلقائياً.",
                     duration: 8000
+                });
+            } else {
+                // ج) فشل الشراء (نفاد المخزون، رصيد بيتي غير كافٍ، رفض الطلب): استرجاع المبلغ فوراً وتحديث الحالة
+                unsubscribe();
+                try {
+                    const refundBatch = writeBatch(firestore);
+                    refundBatch.update(userDocRef, { balance: increment(effectivePrice) });
+                    refundBatch.update(txRef, {
+                        status: 'failed',
+                        readiness: 'فاشلة',
+                        notes: `شبكة: ${selectedNetwork.name} (فشل الشراء: تم استرجاع المبلغ لرصيدك)`,
+                        failedAt: new Date().toISOString()
+                    });
+                    refundBatch.update(baityOrderRef, {
+                        status: 'failed',
+                        failedAt: new Date().toISOString(),
+                        errorReason: result?.message || 'فشل الشراء من المزود'
+                    });
+                    await refundBatch.commit();
+                } catch (refErr) {
+                    console.error("Refund commit error:", refErr);
+                }
+
+                setShowConfirmPurchase(null);
+                setSelectedNetwork(null);
+                toast({
+                    variant: "destructive",
+                    title: "فشل الشراء وتم استرجاع المبلغ",
+                    description: "فشل الشراء\nيرجى التواصل مع الادارة 770326828\n(تمت إعادة المبلغ إلى رصيدك تلقائياً)",
+                    duration: 9000
                 });
             }
         }
@@ -554,14 +594,21 @@ export default function CombinedNetworksPage() {
         }
     } catch (error: any) {
         console.error("Purchase execution error:", error);
-        if (localBalanceDeducted && userDocRef) {
+        // استرجاع الرصيد في حال حدوث أي خطأ
+        if (userDocRef) {
             try {
                 await updateDoc(userDocRef, { balance: increment(effectivePrice) });
             } catch (refErr) {
-                console.error("Failed to refund local network on error:", refErr);
+                console.error("Failed to refund on error:", refErr);
             }
         }
-        toast({ variant: "destructive", title: "فشل العملية", description: error.message || 'فشل الشراء\nيرجى التواصل مع الادارة 770326828' });
+        setShowConfirmPurchase(null);
+        setSelectedNetwork(null);
+        toast({ 
+            variant: "destructive", 
+            title: "فشل الشراء وتم استرجاع المبلغ", 
+            description: "فشل الشراء\nيرجى التواصل مع الادارة 770326828\n(تمت إعادة المبلغ إلى رصيدك تلقائياً)" 
+        });
     } finally { 
         setIsProcessing(false); 
     }

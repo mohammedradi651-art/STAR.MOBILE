@@ -217,7 +217,7 @@ export function RecentTransactions() {
                                             <p className={`font-bold text-base ${isCredit ? 'text-green-600' : 'text-destructive'}`}>
                                                 {tx.amount.toLocaleString('en-US')} ر.ي
                                             </p>
-                                            {isTelecomService(tx.transactionType) ? (() => {
+                                            {(isTelecomService(tx.transactionType) || tx.transactionType.includes('شراء كرت') || tx.status) ? (() => {
                                                 const readiness = getReadinessDetails(tx);
                                                 return (
                                                     <p className={cn("text-[10px] font-black mt-0.5", readiness.colorClass)}>

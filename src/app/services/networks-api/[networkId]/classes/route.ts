@@ -8,9 +8,10 @@ const API_BASE_URL = 'https://apis.baitynet.net/api/partner/networks';
 
 export async function GET(
   request: Request,
-  { params }: { params: { networkId: string } }
+  { params }: { params: Promise<{ networkId: string }> | { networkId: string } }
 ) {
-  const networkId = params.networkId;
+  const resolvedParams = await params;
+  const networkId = resolvedParams.networkId;
   const API_KEY = process.env.BAITYNET_NETWORKS_API_KEY;
 
   if (!networkId) {

@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic';
 const telecomServices = [
   {
     name: 'يمن موبايل',
-    logo: 'https://i.postimg.cc/tTXzYWY3/1200x630wa.jpg',
+    logo: '/mobel.png',
     href: '/yemen-mobile',
     description: 'سداد فواتير، باقات، وشحن رصيد فوري',
     color: '#B32C4C',

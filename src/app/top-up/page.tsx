@@ -69,11 +69,21 @@ const TopUpMovingLoader = () => {
   );
 };
 
-const getLogoSrc = (url?: string) => {
-    if (url && (url.startsWith('http') || url.startsWith('/'))) {
+const getLogoSrc = (url?: string, name?: string) => {
+    if (url && (url.startsWith('http') || url.startsWith('/')) && !url.includes('placehold.co')) {
       return url;
     }
-    return 'https://placehold.co/100x100/e2e8f0/e2e8f0'; 
+    const n = (name || '').toLowerCase();
+    if (n.includes('كريمي') || n.includes('kuraimi')) {
+      return 'https://i.postimg.cc/ZRHzd8jN/FB-IMG-1768999572493.jpg';
+    }
+    if (n.includes('أمجاد') || n.includes('امجاد') || n.includes('amjad')) {
+      return 'https://i.postimg.cc/tTXzYWY3/1200x630wa.jpg';
+    }
+    if (n.includes('عمقي') || n.includes('مشقاص') || n.includes('omqy')) {
+      return 'https://i.postimg.cc/wjKrdNX2/images-(5).jpg';
+    }
+    return '/logo.jpg'; 
 };
 
 export default function TopUpPage() {
@@ -284,7 +294,7 @@ export default function TopUpPage() {
                             <div className="absolute inset-0 bg-white/20 rounded-[30px] blur-xl animate-pulse" />
                             <div className="relative w-full h-full overflow-hidden rounded-[26px] border-4 border-white/30 shadow-2xl bg-white p-1">
                                 <Image 
-                                    src="https://i.postimg.cc/2551nF1s/20260308-183624.jpg" 
+                                    src="/logo.jpg" 
                                     alt="Star Mobile Logo" 
                                     fill
                                     className="object-cover"
@@ -317,7 +327,7 @@ export default function TopUpPage() {
                                         )}
                                     >
                                         <div className="w-16 h-16 rounded-[22px] relative shadow-md overflow-hidden bg-white p-1 border border-muted">
-                                            <Image src={getLogoSrc(method.logoUrl)} alt={method.name} fill className="object-contain" />
+                                            <Image src={getLogoSrc(method.logoUrl, method.name)} alt={method.name} fill className="object-contain" />
                                         </div>
                                         <p className={cn(
                                             "text-center text-[11px] font-black transition-colors truncate w-full", 

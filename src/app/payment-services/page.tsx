@@ -32,6 +32,14 @@ const paymentServices = [
     accent: 'bg-primary/5'
   },
   {
+    name: 'شبكة بندر عدن',
+    logo: '/bandar-aden.jpg',
+    href: '/bandar-aden',
+    description: 'استعلام عن اشتراك شبكة بندر عدن',
+    color: '#0048ad',
+    accent: 'bg-primary/5'
+  },
+  {
     name: 'سداد الكهرباء',
     logo: 'https://i.postimg.cc/3RbLf0J5/images-(6).jpg',
     href: '/electricity',

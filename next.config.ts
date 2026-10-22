@@ -10,6 +10,24 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  async redirects() {
+    return [
+      { source: '/aden', destination: '/bandar-aden', permanent: true },
+      { source: '/alwadi/renew', destination: '/alwadi', permanent: true },
+      { source: '/house-balance', destination: '/telecom-services', permanent: true },
+      { source: '/landline-services', destination: '/internet-landline', permanent: true },
+      { source: '/pay-balance', destination: '/telecom-services', permanent: true },
+      { source: '/why-services', destination: '/why', permanent: true },
+      { source: '/yemen-mobile-services', destination: '/yemen-mobile', permanent: true },
+      { source: '/yemen-mobile/:packageId', destination: '/yemen-mobile', permanent: true },
+      { source: '/baity-packages', destination: '/services', permanent: true },
+      { source: '/baity-networks', destination: '/services', permanent: true },
+      { source: '/network-cards/:networkId', destination: '/services/:networkId', permanent: true },
+      { source: '/electricity-requests', destination: '/admin-requests', permanent: true },
+      { source: '/water-requests', destination: '/admin-requests', permanent: true },
+      { source: '/withdrawal-requests', destination: '/admin-requests', permanent: true },
+    ];
+  },
   async headers() {
     return [
       {
@@ -53,51 +71,11 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'placehold.co',
-        port: '',
-        pathname: '/**',
+        hostname: '**',
       },
       {
-        protocol: 'https',
-        hostname: 'images.unsplash.com',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'picsum.photos',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'tse2.mm.bing.net',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https' ,
-        hostname: 'tse1.mm.bing.net',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'i.postimg.cc',
-        port: '',
-        pathname: '/**',
-      },
-       {
-        protocol: 'https',
-        hostname: 'i.ibb.co',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'firebasestorage.googleapis.com',
-        port: '',
-        pathname: '/**',
+        protocol: 'http',
+        hostname: '**',
       },
     ],
   },
