@@ -24,7 +24,8 @@ import {
   Hash,
   Calendar,
   Smartphone,
-  Users
+  Users,
+  Search
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -297,11 +298,6 @@ const PackageItemCard = ({
       className="bg-[#fad9b2] rounded-3xl p-5 shadow-sm relative border border-[#B32C4C]/10 mb-3 text-center cursor-pointer hover:bg-[#B32C4C]/5 transition-all active:scale-[0.98] group"
       onClick={onClick}
     >
-      {hasDiscount && (
-        <span className="absolute top-3 right-3 text-[10px] font-black bg-blue-600 text-white px-2 py-0.5 rounded-full shadow-xs">
-          سعر API
-        </span>
-      )}
       <div className="flex justify-center mb-3">
           <div className="relative w-12 h-12 rounded-2xl overflow-hidden border-2 border-white dark:border-slate-800 shadow-md">
               <Image 
@@ -318,13 +314,7 @@ const PackageItemCard = ({
           <span className="text-2xl font-black text-foreground">
               {displayPrice.toLocaleString('en-US')}
           </span>
-          <span className="text-xs font-black text-foreground/70">ريال</span>
         </div>
-        {hasDiscount && (
-          <span className="text-xs line-through text-muted-foreground/80 font-bold">
-            {offer.price.toLocaleString('en-US')} ريال
-          </span>
-        )}
       </div>
       
       <div className="grid grid-cols-4 gap-2 pt-3 mt-2 border-t border-[#B32C4C]/10 text-center">
@@ -427,24 +417,30 @@ export default function YemenMobilePage() {
 
     try {
       const transid = Date.now().toString().slice(-8);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
       
       const [queryResponse, solfaResponse, offerResponse] = await Promise.all([
           fetch('/api/telecom', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'x-app-source': 'internal' },
               body: JSON.stringify({ mobile: phoneNumber, action: 'query', transid }),
+              signal: controller.signal
           }),
           fetch('/api/telecom', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'x-app-source': 'internal' },
               body: JSON.stringify({ mobile: phoneNumber, action: 'solfa', transid }),
+              signal: controller.signal
           }),
           fetch('/api/telecom', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'x-app-source': 'internal' },
               body: JSON.stringify({ mobile: phoneNumber, action: 'queryoffer', transid }),
+              signal: controller.signal
           })
       ]);
+      clearTimeout(timeoutId);
 
       const queryResult = await queryResponse.json();
       const solfaResult = await solfaResponse.json();
@@ -551,8 +547,12 @@ export default function YemenMobilePage() {
           throw new Error(getFriendlyErrorMessage(providerError));
       }
     } catch (e: any) {
-        toast({ variant: 'destructive', title: 'تنبيه من المزود', description: e.message });
+        const errorMsg = e.name === 'AbortError'
+            ? 'خادم المزود لا يستجيب حالياً (انتهت مهلة الاستعلام)، يرجى المحاولة لاحقاً.'
+            : (e.message || 'حدث خطأ في الاستعلام من المزود.');
+        toast({ variant: 'destructive', title: 'تنبيه من المزود', description: errorMsg });
         setBillingInfo(null);
+        setActiveOffers([]);
     } finally {
         setIsSearching(false);
     }
@@ -613,7 +613,7 @@ export default function YemenMobilePage() {
             amount: costToDeduct,
             transactionType: 'سداد يمن موبايل (رصيد)',
             recipientPhoneNumber: phone,
-            notes: `إلى رقم: ${phone}. مبلغ السداد: ${val}${isApiUser ? ` (سعر API: ${costToDeduct})` : ''}.`,
+            notes: `إلى رقم: ${phone}. مبلغ السداد: ${val}.`,
             serviceCategory: 'يمن موبايل'
         });
 
@@ -657,7 +657,7 @@ export default function YemenMobilePage() {
             amount: totalToDeduct,
             transactionType: `تفعيل ${selectedOffer.offerName}`,
             recipientPhoneNumber: phone,
-            notes: `للرقم: ${phone}${isNumberLoaned ? ` (شامل سداد سلفة: ${loanAmt > 0 ? loanAmt : 'نعم'})` : ''}${isApiUser ? ` (سعر API: ${effectiveOfferPrice})` : ''}`,
+            notes: `للرقم: ${phone}${isNumberLoaned ? ` (شامل سداد سلفة: ${loanAmt > 0 ? loanAmt : 'نعم'})` : ''}`,
             serviceCategory: 'يمن موبايل'
         });
 
@@ -741,7 +741,21 @@ export default function YemenMobilePage() {
             </div>
         </div>
 
-        {phone.length === 9 && (phone.startsWith('77') || phone.startsWith('78')) && (
+        {phone.length === 9 && (phone.startsWith('77') || phone.startsWith('78')) && !isSearching && !billingInfo && (
+            <div className="animate-in fade-in zoom-in duration-300">
+                <Button 
+                    className="w-full h-12 rounded-2xl font-bold mt-2 shadow-sm text-white" 
+                    onClick={() => handleSearch(phone)}
+                    disabled={isSearching}
+                    style={{ backgroundColor: YEMEN_MOBILE_PRIMARY }}
+                >
+                    <Search className="ml-2 h-4 w-4" />
+                    استعلام عن الرقم
+                </Button>
+            </div>
+        )}
+
+        {!isSearching && billingInfo && (
             <div className="space-y-4 animate-in fade-in-0 slide-in-from-top-2">
                 {billingInfo && (
                     <div className="rounded-3xl overflow-hidden shadow-lg p-1 animate-in zoom-in-95" style={YEMEN_MOBILE_GRADIENT}>
@@ -881,9 +895,6 @@ export default function YemenMobilePage() {
                         <span className="font-black">إجمالي الخصم من الرصيد:</span>
                         <div className="flex items-center gap-2">
                             <span className="font-black text-[#B32C4C] text-lg">{getEffectiveCreditCost(parseFloat(amount || '0')).toLocaleString()} ريال</span>
-                            {isApiUser && config.yemen_mobile?.rate !== undefined && config.yemen_mobile.rate < 1 && (
-                                <span className="text-[9px] font-black bg-blue-500/10 text-blue-600 px-1.5 py-0.5 rounded">سعر API</span>
-                            )}
                         </div>
                     </div>
                 </div>
@@ -905,9 +916,6 @@ export default function YemenMobilePage() {
                         <span className="text-muted-foreground">سعر الباقة:</span>
                         <div className="flex items-center gap-1.5">
                           <span className="font-bold">{getEffectiveOfferPrice(selectedOffer?.price || 0).toLocaleString()} ريال</span>
-                          {isApiUser && getEffectiveOfferPrice(selectedOffer?.price || 0) < (selectedOffer?.price || 0) && (
-                            <span className="text-[9px] font-black bg-blue-500/10 text-blue-600 px-1.5 py-0.5 rounded">سعر API</span>
-                          )}
                         </div>
                       </div>
                       {billingInfo?.isLoan && (

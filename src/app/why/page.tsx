@@ -103,11 +103,6 @@ const PackageItemCard = ({
           </div>
           <div className="flex items-center justify-center gap-2 mb-1">
             <h4 className="text-sm font-black text-[#7c3aed] group-hover:text-[#7c3aed]/80 transition-colors">{offer.offerName}</h4>
-            {isApiUser && (
-              <span className="text-[9px] bg-purple-500/10 text-purple-600 dark:text-purple-400 font-bold px-1.5 py-0.5 rounded-full border border-purple-500/20">
-                سعر API
-              </span>
-            )}
           </div>
           <div className="flex items-baseline justify-center mb-4">
             <span className="text-2xl font-black text-foreground">
@@ -213,7 +208,7 @@ export default function WhyPage() {
                 amount: finalToDeduct,
                 transactionType: `سداد واي (${typeLabel})`,
                 recipientPhoneNumber: phone,
-                notes: `للرقم: ${phone}${isApiUser ? ' (سعر API معتمد)' : ''}`,
+                notes: `للرقم: ${phone}`,
                 serviceCategory: 'واي'
             });
 
@@ -308,11 +303,6 @@ export default function WhyPage() {
                                     <div className="mt-4 p-3 bg-[#7c3aed]/5 rounded-2xl border border-dashed border-[#7c3aed]/20">
                                         <div className="flex justify-between items-center mb-1">
                                             <p className="text-[10px] font-black text-muted-foreground uppercase">المبلغ المطلوب</p>
-                                            {isApiUser && (
-                                                <span className="text-[9px] bg-purple-500/10 text-purple-600 dark:text-purple-400 font-bold px-1.5 py-0.5 rounded-full">
-                                                    سعر API (معامل {whyEffectiveRate})
-                                                </span>
-                                            )}
                                         </div>
                                         <p className="text-lg font-black text-[#7c3aed]">{amount ? roundCurrency(parseFloat(amount) * whyEffectiveRate).toLocaleString() : '0'} ريال</p>
                                     </div>
@@ -333,10 +323,7 @@ export default function WhyPage() {
                         <AlertDialogTitle className="text-center font-black">تأكيد تفعيل الباقة</AlertDialogTitle>
                         <div className="space-y-3 pt-4 text-right text-sm">
                             <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">اسم الباقة:</span><span className="font-bold">{selectedOffer?.offerName}</span></div>
-                            <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">قيمة الباقة الأساسية:</span><span className="font-bold">{selectedOffer?.price.toLocaleString('en-US')} ريال</span></div>
-                            {isApiUser && (
-                                <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">فئة العميل:</span><span className="font-bold text-purple-600 dark:text-purple-400">عميل API (معامل {whyEffectiveRate})</span></div>
-                            )}
+                            <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">قيمة الباقة:</span><span className="font-bold">{selectedOffer && roundCurrency(selectedOffer.price * whyEffectiveRate).toLocaleString('en-US')} ريال</span></div>
                             <div className="flex justify-between items-center py-3 bg-[#7c3aed]/10 rounded-xl px-2 mt-2"><span className="font-black text-[#7c3aed]">المبلغ المخصوم:</span><span className="font-black text-[#7c3aed] text-lg">{selectedOffer && roundCurrency(selectedOffer.price * whyEffectiveRate).toLocaleString()} ريال</span></div>
                         </div>
                     </AlertDialogHeader>
@@ -354,9 +341,6 @@ export default function WhyPage() {
                         <div className="space-y-3 pt-4 text-right text-sm">
                             <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">رقم الهاتف:</span><span className="font-bold">{phone}</span></div>
                             <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">مبلغ الشحن:</span><span className="font-bold">{parseFloat(amount || '0').toLocaleString('en-US')} ريال</span></div>
-                            {isApiUser && (
-                                <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">فئة العميل:</span><span className="font-bold text-purple-600 dark:text-purple-400">عميل API (معامل {whyEffectiveRate})</span></div>
-                            )}
                             <div className="flex justify-between items-center py-3 bg-[#7c3aed]/10 rounded-xl px-2 mt-2"><span className="font-black text-[#7c3aed]">إجمالي الخصم:</span><span className="font-black text-[#7c3aed] text-lg">{roundCurrency(parseFloat(amount || '0') * whyEffectiveRate).toLocaleString('en-US')} ريال</span></div>
                         </div>
                     </AlertDialogHeader>

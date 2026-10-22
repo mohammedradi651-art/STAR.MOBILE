@@ -112,11 +112,6 @@ const PackageCard = ({
           <div className="flex flex-col items-start">
               <div className="flex items-center gap-2">
                 <h4 className="text-sm font-black text-foreground group-hover:text-[#106BA2] transition-colors">{offer.offerName}</h4>
-                {isApiUser && (
-                  <span className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold px-1.5 py-0.5 rounded-full border border-amber-500/20">
-                    سعر API
-                  </span>
-                )}
               </div>
               <div className="flex items-center gap-3 mt-1">
                 <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1"><Globe className="w-3 h-3 text-[#106BA2]"/> {offer.data}</span>
@@ -128,13 +123,7 @@ const PackageCard = ({
       <div className="flex flex-col items-end text-left shrink-0">
         <div className="flex items-baseline gap-1">
             <span className="text-xl font-black text-[#106BA2]">{displayPrice.toLocaleString('en-US')}</span>
-            <span className="text-[10px] font-bold text-muted-foreground">ر.ي</span>
         </div>
-        {isApiUser && effectivePrice !== undefined && effectivePrice < offer.price && (
-          <span className="text-[10px] text-muted-foreground line-through font-bold">
-            {offer.price.toLocaleString('en-US')} ر.ي
-          </span>
-        )}
         <Button size="sm" className="h-7 rounded-lg text-[10px] font-black px-4 mt-1 bg-[#106BA2] hover:bg-[#106BA2]/90">سداد</Button>
       </div>
     </div>
@@ -201,11 +190,15 @@ export default function Yemen4GPage() {
         setIsSearching(true);
         setQueryResult(null);
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
             const response = await fetch('/api/telecom', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-app-source': 'internal' },
-                body: JSON.stringify({ mobile: phoneNumber, action: 'query', service: 'yem4g' })
+                body: JSON.stringify({ mobile: phoneNumber, action: 'query', service: 'yem4g' }),
+                signal: controller.signal
             });
+            clearTimeout(timeoutId);
             const result = await response.json();
             
             const isSuccess = result.resultCode === "0" || result.resultCode === 0;
@@ -243,7 +236,11 @@ export default function Yemen4GPage() {
 
             setQueryResult({ balance, packagePrice: price, expireDate: expiry, message: result.resultDesc });
         } catch (error: any) {
-            toast({ variant: 'destructive', title: 'تنبيه من المزود', description: error.message });
+            const errorMsg = error.name === 'AbortError'
+                ? 'خادم المزود لا يستجيب حالياً (انتهت مهلة الاستعلام)، يرجى المحاولة لاحقاً.'
+                : (error.message || 'فشل الاستعلام من المصدر.');
+            toast({ variant: 'destructive', title: 'تنبيه من المزود', description: errorMsg });
+            setQueryResult(null);
         } finally {
             setIsSearching(false);
         }
@@ -317,7 +314,7 @@ export default function Yemen4GPage() {
                 amount: totalToDeduct,
                 transactionType: 'سداد يمن فورجي',
                 recipientPhoneNumber: phone,
-                notes: `إلى رقم: ${phone}. مبلغ: ${baseAmount}${isApiUser ? ' (سعر API معتمد)' : ` + عمولة: ${feeOrDiscount}`}.`,
+                notes: `إلى رقم: ${phone}. مبلغ: ${baseAmount}${isApiUser ? '' : ` + عمولة: ${feeOrDiscount}`}.`,
                 serviceCategory: 'يمن فورجي'
             });
 
@@ -378,7 +375,7 @@ export default function Yemen4GPage() {
                 amount: totalToDeduct,
                 transactionType: `تفعيل ${selectedOffer.offerName}`,
                 recipientPhoneNumber: phone,
-                notes: `للرقم: ${phone}. سعر: ${basePrice}${isApiUser ? ' (سعر API معتمد)' : ` + عمولة: ${feeOrDiscount}`}.`,
+                notes: `للرقم: ${phone}. سعر: ${basePrice}${isApiUser ? '' : ` + عمولة: ${feeOrDiscount}`}.`,
                 serviceCategory: 'يمن فورجي'
             });
 
@@ -457,7 +454,21 @@ export default function Yemen4GPage() {
                     </div>
                 </div>
 
-                {phone.length === 9 && phone.startsWith('10') && (
+                {phone.length === 9 && phone.startsWith('10') && !isSearching && !queryResult && (
+                    <div className="animate-in fade-in zoom-in duration-300">
+                        <Button 
+                            className="w-full h-12 rounded-2xl font-bold mt-2 shadow-sm text-white" 
+                            onClick={() => handleSearch(phone)}
+                            disabled={isSearching}
+                            style={{ backgroundColor: YEMEN_4G_PRIMARY }}
+                        >
+                            <Search className="ml-2 h-4 w-4" />
+                            استعلام عن الرقم
+                        </Button>
+                    </div>
+                )}
+
+                {!isSearching && queryResult && (
                     <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
                         {queryResult && (
                             <div className="rounded-3xl overflow-hidden shadow-lg p-1 animate-in zoom-in-95" style={YEMEN_4G_GRADIENT}>
@@ -552,12 +563,6 @@ export default function Yemen4GPage() {
                                     <span className="font-bold text-orange-600">{Math.ceil(parseFloat(amount || '0') * 0.05).toLocaleString('en-US')} ريال</span>
                                 </div>
                             )}
-                            {isApiUser && (
-                                <div className="flex justify-between items-center py-2 border-b border-dashed">
-                                    <span className="text-muted-foreground">فئة العميل:</span>
-                                    <span className="font-bold text-amber-600 dark:text-amber-400">عميل API (نسب معتمدة)</span>
-                                </div>
-                            )}
                             <div className="flex justify-between items-center py-3 bg-muted/50 rounded-xl px-2 mt-2">
                                 <span className="font-black">إجمالي المطلوب:</span>
                                 <span className="font-black text-[#106BA2] text-lg">
@@ -583,19 +588,13 @@ export default function Yemen4GPage() {
                         <div className="py-4 space-y-3 text-right text-sm">
                             <p className="text-center text-lg font-black text-[#106BA2] mb-2">{selectedOffer?.offerName}</p>
                             <div className="flex justify-between items-center py-2 border-b border-dashed">
-                                <span className="text-muted-foreground">سعر الباقة الرسمي:</span>
-                                <span className="font-bold">{(selectedOffer?.price || 0).toLocaleString('en-US')} ريال</span>
+                                <span className="text-muted-foreground">سعر الباقة:</span>
+                                <span className="font-bold">{(isApiUser ? calculateFinalServicePrice(selectedOffer?.price || 0, config.yemen_4g) : (selectedOffer?.price || 0)).toLocaleString('en-US')} ريال</span>
                             </div>
                             {!isApiUser && (
                                 <div className="flex justify-between items-center py-2 border-b border-dashed">
                                     <span className="text-muted-foreground">النسبة (5%):</span>
                                     <span className="font-bold text-orange-600">{Math.ceil((selectedOffer?.price || 0) * 0.05).toLocaleString('en-US')} ريال</span>
-                                </div>
-                            )}
-                            {isApiUser && (
-                                <div className="flex justify-between items-center py-2 border-b border-dashed">
-                                    <span className="text-muted-foreground">فئة العميل:</span>
-                                    <span className="font-bold text-amber-600 dark:text-amber-400">عميل API (نسب معتمدة)</span>
                                 </div>
                             )}
                             <div className="flex justify-between items-center py-3 bg-muted/50 rounded-xl px-2 mt-2">

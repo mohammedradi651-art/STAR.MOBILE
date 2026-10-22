@@ -129,7 +129,7 @@ export default function GamesPage() {
         setIsProcessing(true);
         try {
             const txType = `شحن ${activeGame === 'pubg' ? 'شدات' : 'جواهر'}: ${selectedOffer.amount}`;
-            const txNotes = `رقم اللاعب: ${playerId}. اللعبة: ${activeGame === 'pubg' ? 'ببجي' : 'فري فاير'}${isApiUser ? ' (سعر API معتمد)' : ''}`;
+            const txNotes = `رقم اللاعب: ${playerId}. اللعبة: ${activeGame === 'pubg' ? 'ببجي' : 'فري فاير'}`;
 
             // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
             const { transid, backpass } = await initiateTelecomPayment({
@@ -333,11 +333,6 @@ export default function GamesPage() {
                                                     <div className="text-right">
                                                         <div className="flex items-center gap-2">
                                                             <h4 className="font-black text-sm text-foreground">{pkg.amount}</h4>
-                                                            {isApiUser && (
-                                                                <span className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold px-1.5 py-0.5 rounded-full border border-amber-500/20">
-                                                                    سعر API
-                                                                </span>
-                                                            )}
                                                         </div>
                                                         <p className="text-[10px] font-bold text-muted-foreground">تفعيل فوري</p>
                                                     </div>
@@ -347,11 +342,6 @@ export default function GamesPage() {
                                                         <span className="text-lg font-black text-primary">{effectivePrice.toLocaleString('en-US')}</span>
                                                         <span className="text-[10px] font-bold text-primary opacity-70">ر.ي</span>
                                                     </div>
-                                                    {isApiUser && effectivePrice < pkg.price && (
-                                                        <p className="text-[10px] text-muted-foreground line-through font-bold text-left">
-                                                            {pkg.price.toLocaleString('en-US')} ر.ي
-                                                        </p>
-                                                    )}
                                                     <Button size="sm" className="h-7 rounded-lg text-[10px] font-black px-4 mt-1">شراء</Button>
                                                 </div>
                                             </CardContent>
@@ -400,7 +390,7 @@ export default function GamesPage() {
 
                         <div className="bg-muted/50 p-5 rounded-[28px] border-2 border-dashed border-primary/10 space-y-2 text-center">
                             <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
-                                {isApiUser ? 'المبلغ المخصوم (سعر API معتمد)' : 'المبلغ المخصوم من رصيدك'}
+                                المبلغ المخصوم من رصيدك
                             </p>
                             <div className="flex items-baseline justify-center gap-1">
                                 <span className="text-3xl font-black text-primary">

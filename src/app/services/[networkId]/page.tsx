@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useFirestore, useUser, useDoc } from '@/firebase';
 import { doc, writeBatch, increment, collection, updateDoc, onSnapshot } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Calendar, CheckCircle, Copy, AlertCircle, Database, MessageSquare, Smartphone, Loader2 } from 'lucide-react';
+import { Calendar, CheckCircle, Copy, AlertCircle, Database, MessageSquare, Smartphone, Loader2, Clock } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -98,6 +98,7 @@ function NetworkPurchasePageComponent() {
   const [selectedCategory, setSelectedCategory] = useState<CardCategory | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [delayedOrderPopupOpen, setDelayedOrderPopupOpen] = useState(false);
   const [purchasedCard, setPurchasedCard] = useState<NetworkCard | null>(null);
   const [isSmsDialogOpen, setIsSmsDialogOpen] = useState(false);
   const [smsRecipient, setSmsRecipient] = useState('');
@@ -167,7 +168,7 @@ function NetworkPurchasePageComponent() {
             transactionDate: now,
             amount: effectivePrice,
             transactionType: `شراء كرت ${selectedCategory.name}`,
-            notes: `شبكة: ${networkName}${isApiUser ? ' (سعر API مخفض)' : ''}`,
+            notes: `شبكة: ${networkName}`,
             status: 'pending',
             readiness: 'قيد الانتظار',
             externalRef: externalRef,
@@ -191,66 +192,84 @@ function NetworkPurchasePageComponent() {
         });
         await initBatch.commit();
 
-        let isCompletedLocally = false;
+        let isHandled = false;
+        let timeoutId: any = null;
+        let unsubscribe: (() => void) | null = null;
 
-        // الاستماع الفوري للويب هوك في حال رد المزود بعد ثوانٍ
-        const unsubscribe = onSnapshot(baityOrderRef, (snap) => {
-            if (snap.exists()) {
-                const data = snap.data();
-                if (data?.status === 'completed' && data?.cardNumber && !isCompletedLocally) {
-                    isCompletedLocally = true;
-                    setPurchasedCard({ cardID: data.cardNumber, cardPass: data.cardPass || '' });
-                    setIsConfirming(false);
-                    audioRef.current?.play().catch(() => {});
-                    unsubscribe();
-                } else if (data?.status === 'failed') {
-                    unsubscribe();
-                }
+        const handleOrderFailure = async (reason: string, isStockOutArg?: boolean) => {
+            if (isHandled) return;
+            isHandled = true;
+            if (timeoutId) clearTimeout(timeoutId);
+            if (unsubscribe) unsubscribe();
+
+            try {
+                const refundBatch = writeBatch(firestore);
+                refundBatch.update(userDocRef!, { balance: increment(effectivePrice) });
+                refundBatch.update(txRef, {
+                    status: 'failed',
+                    readiness: 'فاشلة',
+                    notes: `شبكة: ${networkName} (فشل الشراء)`,
+                    failedAt: new Date().toISOString()
+                });
+                refundBatch.update(baityOrderRef, {
+                    status: 'failed',
+                    failedAt: new Date().toISOString(),
+                    errorReason: reason || 'فشل الشراء من المزود'
+                });
+                await refundBatch.commit();
+            } catch (refErr) {
+                console.error("Refund commit error:", refErr);
             }
-        });
 
-        // 2. إرسال الطلب المباشر للمزود
-        const response = await fetch(`/services/networks-api/order`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                classId: selectedCategory.id,
-                externalRef: externalRef,
-            })
-        });
-
-        const result: any = await response.json().catch(() => ({}));
-
-        // أ) نجاح فوري واستلام الكرت
-        if (response.ok && result?.status === 200 && result?.data?.order?.card?.cardID) {
-            isCompletedLocally = true;
-            unsubscribe();
-            const cardData = result.data.order.card;
-            
-            const finishBatch = writeBatch(firestore);
-            const transactionPayload: any = {
-                status: 'completed',
-                readiness: 'جاهزة',
-                cardNumber: cardData.cardID,
-                completedAt: new Date().toISOString(),
-            };
-            if (cardData.cardPass && cardData.cardPass !== cardData.cardID) {
-                transactionPayload.cardPassword = cardData.cardPass;
-            }
-            finishBatch.update(txRef, transactionPayload);
-            finishBatch.update(baityOrderRef, {
-                status: 'completed',
-                cardNumber: cardData.cardID,
-                cardPass: cardData.cardPass || '',
-                uuidOrder: result.data.order.uuidOrder || '',
-                completedAt: new Date().toISOString(),
-            });
-            await finishBatch.commit().catch(() => {});
-
-            setPurchasedCard(cardData);
             setIsConfirming(false);
+            setIsProcessing(false);
+
+            const isStockOut = isStockOutArg || /مخزون|نفاد|انتهى/i.test(reason);
+            const failureMsg = isStockOut 
+                ? "فشل الشراء: انتهى المخزون\nيرجى التواصل مع الادارة 770326828" 
+                : "فشل الشراء\nيرجى التواصل مع الادارة 770326828";
+
+            toast({
+                variant: "destructive",
+                title: "فشل الشراء",
+                description: failureMsg,
+                duration: 9000
+            });
+        };
+
+        const handleOrderSuccess = async (cardData: { cardID: string; cardPass?: string }, uuidOrder?: string) => {
+            if (isHandled) return;
+            isHandled = true;
+            if (timeoutId) clearTimeout(timeoutId);
+            if (unsubscribe) unsubscribe();
+
+            try {
+                const finishBatch = writeBatch(firestore);
+                const transactionPayload: any = {
+                    status: 'completed',
+                    readiness: 'جاهزة',
+                    cardNumber: cardData.cardID,
+                    completedAt: new Date().toISOString(),
+                };
+                if (cardData.cardPass && cardData.cardPass !== cardData.cardID) {
+                    transactionPayload.cardPassword = cardData.cardPass;
+                }
+                finishBatch.update(txRef, transactionPayload);
+                finishBatch.update(baityOrderRef, {
+                    status: 'completed',
+                    cardNumber: cardData.cardID,
+                    cardPass: cardData.cardPass || '',
+                    uuidOrder: uuidOrder || '',
+                    completedAt: new Date().toISOString(),
+                });
+                await finishBatch.commit().catch(() => {});
+            } catch (e) {
+                console.error("Finish batch error:", e);
+            }
+
+            setPurchasedCard(cardData as NetworkCard);
+            setIsConfirming(false);
+            setIsProcessing(false);
 
             // --- نظام إرسال الواتساب/SMS التلقائي ---
             if (userProfile?.phoneNumber) {
@@ -274,71 +293,99 @@ function NetworkPurchasePageComponent() {
                     })
                 }).catch(() => {});
             }
-        } else if (response.ok && result?.status === 200 && result?.data?.order?.uuidOrder && !result?.data?.order?.card) {
-            // ب) الطلب مسجل لدى المزود وقيد الانتظار الفعلي لاستلامه عبر الويب هوك
-            setIsConfirming(false);
-            toast({
-                title: "الطلب قيد الانتظار ⏳",
-                description: "طلبك قيد المعالجة لدى المزود وسيصلك الكرت فوراً وتجده في سجل العمليات، وإذا تعذر صدوره يسترجع المبلغ لرصيدك تلقائياً.",
-                duration: 8000
+        };
+
+        // ننتظر الرد المباشر أو الويب هوك أو 50 ثانية
+        await new Promise<void>((resolve) => {
+            // 1) مؤقت 50 ثانية: إذا تأخر الرد تظهر المنبثقة للعميل
+            timeoutId = setTimeout(() => {
+                if (!isHandled) {
+                    isHandled = true;
+                    if (unsubscribe) unsubscribe();
+                    setIsConfirming(false);
+                    setIsProcessing(false);
+                    setDelayedOrderPopupOpen(true);
+                    resolve();
+                }
+            }, 50000);
+
+            // 2) الاستماع اللحظي للويب هوك في حال رد المزود خلال الثواني الأولى
+            unsubscribe = onSnapshot(baityOrderRef, (snap) => {
+                if (!snap.exists() || isHandled) return;
+                const data = snap.data();
+                if (data?.status === 'completed' && data?.cardNumber) {
+                    handleOrderSuccess({ cardID: data.cardNumber, cardPass: data.cardPass || '' }, data.uuidOrder);
+                    resolve();
+                } else if (data?.status === 'failed') {
+                    handleOrderFailure(data.errorReason || '');
+                    resolve();
+                }
             });
-        } else {
-            // ج) فشل الشراء (نفاد المخزون، رصيد المزود غير كاف، إلخ): إعادة المبلغ فوراً للعميل وتحديث الحالة لفشل
-            unsubscribe();
+
+            // 3) إرسال الطلب المباشر للمزود
+            fetch(`/services/networks-api/order`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    classId: selectedCategory.id,
+                    externalRef: externalRef,
+                })
+            })
+            .then(async (response) => {
+                const result: any = await response.json().catch(() => ({}));
+                if (isHandled) return;
+
+                if (response.ok && result?.status === 200 && result?.data?.order?.card?.cardID) {
+                    // أ) نجاح فوري واستلام الكرت
+                    handleOrderSuccess(result.data.order.card, result.data.order.uuidOrder);
+                    resolve();
+                } else if (response.ok && result?.status === 200 && result?.data?.order?.uuidOrder && !result?.data?.order?.card) {
+                    // ب) الطلب قيد الانتظار الفعلي لدى المزود - لا نظهر رسالة استلام بل نستمر بالانتظار حتى الويب هوك أو 50 ثانية
+                } else {
+                    // ج) فشل الشراء مباشرة من المزود (مثل عدم كفاية رصيد الأدمن أو نفاد المخزون)
+                    const errMsg = result?.message || 'فشل الشراء من المزود';
+                    handleOrderFailure(errMsg, result?.isStockOut);
+                    resolve();
+                }
+            })
+            .catch((err) => {
+                if (!isHandled) {
+                    handleOrderFailure(err?.message || 'خطأ في الاتصال بالمزود');
+                    resolve();
+                }
+            });
+        });
+    } catch (error: any) {
+        console.error("Order execution error:", error);
+        // في حال حدوث خطأ استثنائي: إعادة المبلغ فوراً للعميل بصمت
+        if (userDocRef) {
             try {
                 const refundBatch = writeBatch(firestore);
                 refundBatch.update(userDocRef!, { balance: increment(effectivePrice) });
                 refundBatch.update(txRef, {
                     status: 'failed',
                     readiness: 'فاشلة',
-                    notes: `شبكة: ${networkName} (فشل الشراء: تم استرجاع المبلغ لرصيدك)`,
+                    notes: `شبكة: ${networkName} (فشل الاتصال)`,
                     failedAt: new Date().toISOString()
                 });
                 refundBatch.update(baityOrderRef, {
                     status: 'failed',
                     failedAt: new Date().toISOString(),
-                    errorReason: result?.message || 'فشل الشراء من المزود'
+                    errorReason: error?.message || 'خطأ اتصال'
                 });
                 await refundBatch.commit();
             } catch (refErr) {
-                console.error("Refund commit error:", refErr);
+                console.error("Refund commit error on catch:", refErr);
             }
-
-            setIsConfirming(false);
-            toast({
-                variant: "destructive",
-                title: "فشل الشراء وتم استرجاع المبلغ",
-                description: "فشل الشراء\nيرجى التواصل مع الادارة 770326828\n(تمت إعادة المبلغ إلى رصيدك تلقائياً)",
-                duration: 9000
-            });
-        }
-    } catch (error: any) {
-        console.error("Order execution error:", error);
-        // في حال حدوث خطأ استثنائي أو انقطاع في الشبكة: إعادة المبلغ فوراً للعميل
-        try {
-            const refundBatch = writeBatch(firestore);
-            refundBatch.update(userDocRef!, { balance: increment(effectivePrice) });
-            refundBatch.update(txRef, {
-                status: 'failed',
-                readiness: 'فاشلة',
-                notes: `شبكة: ${networkName} (فشل الاتصال: تم استرجاع المبلغ لرصيدك)`,
-                failedAt: new Date().toISOString()
-            });
-            refundBatch.update(baityOrderRef, {
-                status: 'failed',
-                failedAt: new Date().toISOString(),
-                errorReason: error?.message || 'خطأ اتصال'
-            });
-            await refundBatch.commit();
-        } catch (refErr) {
-            console.error("Refund commit error on catch:", refErr);
         }
 
         setIsConfirming(false);
         toast({
             variant: "destructive",
-            title: "فشل الشراء وتم استرجاع المبلغ",
-            description: "فشل الشراء\nيرجى التواصل مع الادارة 770326828\n(تمت إعادة المبلغ إلى رصيدك تلقائياً)",
+            title: "فشل الشراء",
+            description: "فشل الشراء\nيرجى التواصل مع الادارة 770326828",
             duration: 9000
         });
     } finally {
@@ -417,20 +464,9 @@ function NetworkPurchasePageComponent() {
                                         <h3 className="font-bold text-base">{category.name}</h3>
                                         {(() => {
                                             const finalPrice = getEffectiveCardPrice(category.price);
-                                            const isDiscounted = finalPrice < category.price;
                                             return (
                                                 <div className="flex items-center gap-2">
-                                                    {isDiscounted && (
-                                                        <span className="text-xs text-muted-foreground line-through font-bold">
-                                                            {category.price.toLocaleString('en-US')}
-                                                        </span>
-                                                    )}
-                                                    <p className="font-black text-primary text-base">{finalPrice.toLocaleString('en-US')} ريال</p>
-                                                    {isDiscounted && (
-                                                        <span className="text-[8px] font-black bg-blue-500/10 text-blue-600 px-1.5 py-0.5 rounded border border-blue-500/20">
-                                                            سعر API
-                                                        </span>
-                                                    )}
+                                                    <p className="font-black text-primary text-base">{finalPrice.toLocaleString('en-US')}</p>
                                                 </div>
                                             );
                                         })()}
@@ -552,7 +588,6 @@ function NetworkPurchasePageComponent() {
                         <AlertDialogDescription className="text-center pt-2">
                             {(() => {
                                 const finalPrice = getEffectiveCardPrice(selectedCategory.price);
-                                const isDiscounted = finalPrice < selectedCategory.price;
                                 return (
                                     <>
                                         هل أنت متأكد من رغبتك في شراء كرت "{selectedCategory.name}"؟ سيتم خصم{' '}
@@ -560,11 +595,6 @@ function NetworkPurchasePageComponent() {
                                             {finalPrice.toLocaleString('en-US')} ريال
                                         </span>{' '}
                                         من رصيدك.
-                                        {isDiscounted && (
-                                            <span className="block text-xs font-black text-blue-600 dark:text-blue-400 mt-1">
-                                                (تم تطبيق سعر مفتاح الـ API المعتمد)
-                                            </span>
-                                        )}
                                     </>
                                 );
                             })()}
@@ -579,6 +609,31 @@ function NetworkPurchasePageComponent() {
                 </AlertDialogContent>
             )}
         </AlertDialog>
+
+        {/* Delayed Order Dialog (50s timeout) */}
+        <Dialog open={delayedOrderPopupOpen} onOpenChange={setDelayedOrderPopupOpen}>
+          <DialogContent className="rounded-[32px] max-w-sm p-6 z-[10002] bg-white dark:bg-slate-900 border-none shadow-2xl text-center" dir="rtl">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-16 h-16 rounded-full bg-amber-500/15 flex items-center justify-center text-amber-500 mb-1">
+                <Clock className="w-8 h-8 animate-pulse text-amber-500" />
+              </div>
+              <DialogTitle className="text-xl font-black text-slate-800 dark:text-white">
+                سنقوم بإرسال الكرت إليك بعد لحظات
+              </DialogTitle>
+              <DialogDescription className="text-sm font-bold text-slate-600 dark:text-slate-300 leading-relaxed">
+                طلبك قيد المعالجة لدى المزود وسيصلك الكرت وتجده في سجل العمليات فور صدوره.
+              </DialogDescription>
+              <Button 
+                className="w-full mt-3 h-12 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black text-base shadow-lg"
+                onClick={() => setDelayedOrderPopupOpen(false)}
+              >
+                حسناً
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {isProcessing && <ProcessingOverlay message="جاري تجهيز واستخراج الكرت من المزود... يرجى الانتظار" />}
     </>
   );
 }

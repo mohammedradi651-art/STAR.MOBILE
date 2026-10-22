@@ -265,18 +265,14 @@ export default function AlwadiPage() {
                     <div className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="cardNumber" className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mr-1">رقم الكرت</Label>
-                            <div className="relative">
-                                <Input
-                                    id="cardNumber"
-                                    type="tel"
-                                    placeholder="ادخل رقم الكرت"
-                                    value={cardNumber}
-                                    onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, ''))}
-                                    className="h-12 rounded-2xl bg-muted/10 border-2 border-primary/20 focus-visible:ring-primary pr-11 font-black text-lg text-right"
-                                />
-                                <CreditCard className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-primary opacity-60" />
-                            </div>
-                        </div>
+<Input
+    id="cardNumber"
+    type="tel"
+    placeholder="ادخل رقم الكرت"
+    value={cardNumber}
+    onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, ''))}
+    className="h-12 rounded-2xl bg-muted/10 border-2 border-primary/20 focus-visible:ring-primary font-black text-lg text-center"
+/>                        </div>
                         <button 
                             className="w-full h-11 rounded-2xl font-black bg-mesh-gradient text-white shadow-lg active:scale-95 transition-all border-none flex items-center justify-center"
                             onClick={handleInquiry}
@@ -325,17 +321,9 @@ export default function AlwadiPage() {
                     </div>
                 </div>
 
-                {isApiUser && (
-                    <div className="p-2.5 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-between text-blue-700 dark:text-blue-300 text-[11px] font-black">
-                        <span className="flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5" /> أسعار خاصة بمفتاح الـ API مطبقة تلقائياً</span>
-                        <span className="text-[9px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-black">خصم معتمد</span>
-                    </div>
-                )}
-
                 <div className="grid grid-cols-2 gap-4">
                     {PROVIDER_OPTIONS.map((opt) => {
                         const finalPrice = getFinalPrice(opt.price);
-                        const isDiscounted = finalPrice < opt.price;
                         return (
                             <button
                                 key={opt.id}
@@ -352,18 +340,8 @@ export default function AlwadiPage() {
                                 </div>
                                 <span className="text-[11px] font-black block text-foreground truncate w-full">{opt.title}</span>
                                 <div className='flex flex-col items-center gap-0.5'>
-                                    {isDiscounted && (
-                                        <span className="text-[9px] font-bold text-muted-foreground line-through opacity-60">
-                                            {opt.price.toLocaleString()}
-                                        </span>
-                                    )}
                                     <p className="text-base font-black text-primary">{finalPrice.toLocaleString('en-US')} <span className="text-[8px]">ر.ي</span></p>
                                 </div>
-                                {isDiscounted && (
-                                    <span className="text-[8px] font-black text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
-                                        سعر API
-                                    </span>
-                                )}
                             </button>
                         );
                     })}

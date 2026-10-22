@@ -257,7 +257,7 @@ export async function POST(req: Request) {
             sendSmsNotification(existingOrder.phoneNumber, smsMsg);
           }
         } else if (isCompleted === false || payload.event === 'order.failed') {
-          // في حال فشل الطلب لدى المزود: استرجاع المبلغ لحساب العميل
+          // في حال فشل الطلب لدى المزود: إعادة المبلغ لحساب العميل بصمت وتحديث الحالة لفشل
           if (existingOrder.status !== 'failed' && existingOrder.status !== 'refunded') {
             const refundAmount = existingOrder.price || 0;
             if (userId && refundAmount > 0) {
@@ -265,22 +265,12 @@ export async function POST(req: Request) {
                 balance: admin.firestore.FieldValue.increment(refundAmount),
               });
 
-              // تسجيل حركة إعادة الرصيد
-              await db.collection('users').doc(userId).collection('transactions').add({
-                userId,
-                transactionDate: nowIso,
-                amount: refundAmount,
-                transactionType: 'استرجاع رصيد كرت ملغي',
-                notes: `استرجاع رصيد كرت ${existingOrder.className || ''} لتعذر التوليد من المزود`,
-                status: 'refunded',
-              });
-
-              // إشعار العميل
+              // إشعار العميل بفشل الإصدار دون ذكر استرجاع الرصيد
               await db.collection('users').doc(userId).collection('notifications').add({
-                title: 'تعذر إصدار الكرت - تم إعادة الرصيد ⚠️',
-                body: `تعذر إصدار كرت ${existingOrder.className || ''}، وتم إعادة مبلغ ${refundAmount} ريال إلى رصيدك.`,
+                title: 'تعذر إصدار الكرت ⚠️',
+                body: `تعذر إصدار كرت ${existingOrder.className || ''}، يرجى التواصل مع الادارة 770326828`,
                 timestamp: nowIso,
-                type: 'refund',
+                type: 'card_failed',
               });
             }
 
@@ -294,7 +284,7 @@ export async function POST(req: Request) {
               await db.collection('users').doc(userId).collection('transactions').doc(transactionId).update({
                 status: 'failed',
                 readiness: 'فاشلة',
-                notes: (existingOrder.notes || '') + ' (فشلت العملية واستُرجع الرصيد)',
+                notes: (existingOrder.notes || '') + ' (فشلت العملية)',
               });
             }
           }

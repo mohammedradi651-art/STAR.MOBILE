@@ -94,7 +94,7 @@ export async function POST(request: Request) {
                          (!!referer && !!host && referer.includes(host));
 
     // استعلامات مجانية (لا تكلف رصيداً ولا تتطلب مفتاح API لعملاء التطبيق)
-    const isQueryAction = ['query', 'solfa', 'queryoffer', 'check', 'status'].includes(action);
+    const isQueryAction = ['query', 'solfa', 'queryoffer', 'check', 'status', 'queryadsl', 'queryphone'].includes(action) || action?.startsWith('query');
 
     // التمييز القاطع والصارم:
     // 1. إذا وجد incomingApiKey -> فهو مستخدم API ربط خارجي إلزامي ويجب فحص رصيده وحسمه بدقة.
@@ -485,8 +485,17 @@ export async function POST(request: Request) {
     } catch (fetchErr: any) {
       clearTimeout(timeoutId);
 
-      // إذا تأخر المزود عن 10 ثوانٍ (AbortError) -> نعتبرها مقبولة مبدئياً وقيد الانتظار مع بقاء الخصم
+      // إذا تأخر المزود عن 10 ثوانٍ (AbortError)
       if (fetchErr.name === 'AbortError') {
+        if (isQueryAction) {
+          return NextResponse.json({
+            resultCode: "-1",
+            status: "failed",
+            message: "تأخر السيرفر المزود في الرد على الاستعلام (انتهت المهلة). يرجى المحاولة لاحقاً.",
+            resultDesc: "تأخر السيرفر المزود في الرد على الاستعلام (انتهت المهلة). يرجى المحاولة لاحقاً."
+          }, { status: 504 });
+        }
+
         console.warn(`[Telecom API] Trans ${transid} exceeded 10s. Marking pending.`);
         return NextResponse.json({
           resultCode: "0",

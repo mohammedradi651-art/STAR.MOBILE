@@ -174,6 +174,9 @@ export default function LandlinePage() {
             const transid = Date.now().toString().slice(-8);
             const serviceType = activeTab === 'internet' ? 'adsl' : 'line';
             
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            
             const response = await fetch('/api/telecom', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-app-source': 'internal' },
@@ -183,8 +186,10 @@ export default function LandlinePage() {
                     service: 'post', 
                     type: serviceType, 
                     transid 
-                })
+                }),
+                signal: controller.signal
             });
+            clearTimeout(timeoutId);
             const result = await response.json();
             
             if (activeTab === 'internet') {
@@ -349,8 +354,11 @@ export default function LandlinePage() {
                 }
             }
         } catch (error: any) {
-            const cleanErr = (error.message || '').replace(/\s*\(?تمت?\s*إعادة\s*(المبلغ|الرصيد)\s*(إلى|الى)\s*رصيدك\)?/gi, '').trim();
-            toast({ variant: 'destructive', title: 'تنبيه من المزود', description: cleanErr || error.message });
+            const errorMsg = error.name === 'AbortError'
+                ? 'خادم المزود لا يستجيب حالياً (انتهت مهلة الاستعلام)، يرجى المحاولة لاحقاً.'
+                : ((error.message || '').replace(/\s*\(?تمت?\s*إعادة\s*(المبلغ|الرصيد)\s*(إلى|الى)\s*رصيدك\)?/gi, '').trim() || error.message);
+            toast({ variant: 'destructive', title: 'تنبيه من المزود', description: errorMsg });
+            setQueryResult(null);
         } finally {
             setIsSearching(false);
         }
@@ -411,7 +419,7 @@ export default function LandlinePage() {
                 amount: totalToDeduct,
                 transactionType: txType,
                 recipientPhoneNumber: phone,
-                notes: `رقم: ${phone}${isApiUser ? ' (سعر API معتمد)' : ` + عمولة: ${feeOrDiscount}`}`,
+                notes: `رقم: ${phone}${isApiUser ? '' : ` + عمولة: ${feeOrDiscount}`}`,
                 serviceCategory: 'الثابت والانترنت الارضي'
             });
 
@@ -490,7 +498,7 @@ export default function LandlinePage() {
                     )}
                 </div>
 
-                {phone.length === 8 && phone.startsWith('0') && (
+                {!isSearching && queryResult && (
                     <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
                         
                         {queryResult && (
@@ -586,9 +594,6 @@ export default function LandlinePage() {
                             <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">المبلغ:</span><span className="font-bold">{parseFloat(amount || '0').toLocaleString('en-US')} ريال</span></div>
                             {!isApiUser && (
                                 <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">العمولة الإدارية (5%):</span><span className="font-bold text-orange-600">{Math.ceil(parseFloat(amount || '0') * 0.05).toLocaleString('en-US')} ريال</span></div>
-                            )}
-                            {isApiUser && (
-                                <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">فئة العميل:</span><span className="font-bold text-amber-600 dark:text-amber-400">عميل API (نسب معتمدة)</span></div>
                             )}
                             <div className="flex justify-between items-center py-3 bg-muted/50 rounded-xl px-2 mt-2">
                                 <span className="font-black">إجمالي الخصم النهائي:</span>

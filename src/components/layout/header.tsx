@@ -37,8 +37,14 @@ const Header = () => {
   const [isInstallable, setIsInstallable] = useState(false);
 
   useEffect(() => {
-    const hour = new Date().getHours();
-    setGreeting(hour < 12 ? 'صباح الخير' : 'مساء الخير');
+    const now = new Date();
+    const isFriday = now.getDay() === 5;
+    if (isFriday) {
+      setGreeting('جمعة طيبة');
+    } else {
+      const hour = now.getHours();
+      setGreeting(hour < 12 ? 'صباح الخير' : 'مساء الخير');
+    }
 
     const savedTheme = localStorage.getItem('theme') || 'light';
     setIsDark(savedTheme === 'dark');
@@ -117,13 +123,14 @@ const Header = () => {
     router.push('/notifications');
   };
 
-  const getFirstAndLastName = (name?: string) => {
-    if (!name) return 'مستخدم شبكات';
+  const getFirstAndSecondName = (name?: string | null) => {
+    if (!name) return 'مستخدم ستار';
     const parts = name.trim().split(/\s+/);
-    return parts[0];
+    if (parts.length <= 1) return parts[0];
+    return `${parts[0]} ${parts[1]}`;
   };
 
-  const displayName = getFirstAndLastName(user?.displayName || userProfile?.displayName);
+  const displayName = getFirstAndSecondName(userProfile?.displayName || user?.displayName);
 
   return (
     <>

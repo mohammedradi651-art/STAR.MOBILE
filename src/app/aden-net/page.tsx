@@ -101,11 +101,6 @@ const PackageCard = ({
           <div className="flex flex-col items-start">
               <div className="flex items-center gap-2">
                 <h4 className="text-sm font-black text-foreground group-hover:text-[#1FB8C0] transition-colors">{offer.offerName}</h4>
-                {isApiUser && (
-                  <span className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold px-1.5 py-0.5 rounded-full border border-amber-500/20">
-                    سعر API
-                  </span>
-                )}
               </div>
               <div className="flex items-center gap-3 mt-1">
                 <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1"><Globe className="w-3 h-3 text-[#1FB8C0]"/> {offer.data}</span>
@@ -119,11 +114,6 @@ const PackageCard = ({
             <span className="text-xl font-black text-[#1FB8C0]">{displayPrice.toLocaleString('en-US')}</span>
             <span className="text-[10px] font-bold text-muted-foreground">ر.ي</span>
         </div>
-        {isApiUser && effectivePrice !== undefined && effectivePrice < offer.price && (
-          <span className="text-[10px] text-muted-foreground line-through font-bold">
-            {offer.price.toLocaleString('en-US')} ر.ي
-          </span>
-        )}
         <Button size="sm" className="h-7 rounded-lg text-[10px] font-black px-4 mt-1 bg-[#1FB8C0] hover:bg-[#1FB8C0]/90">سداد</Button>
       </div>
     </div>
@@ -233,7 +223,7 @@ export default function AdenNetPage() {
                 amount: totalToDeduct,
                 transactionType: `تفعيل ${selectedOffer.offerName}`,
                 recipientPhoneNumber: phone,
-                notes: `للرقم: ${phone}. سعر: ${basePrice}${isApiUser ? ' (سعر API معتمد)' : ` + عمولة: ${feeOrDiscount}`}.`,
+                notes: `للرقم: ${phone}. سعر: ${basePrice}${isApiUser ? '' : ` + عمولة: ${feeOrDiscount}`}.`,
                 serviceCategory: 'عدن نت'
             });
 
@@ -404,19 +394,13 @@ export default function AdenNetPage() {
                                 <span className="font-bold">{phone}</span>
                             </div>
                             <div className="flex justify-between items-center py-2 border-b border-dashed">
-                                <span className="text-muted-foreground">سعر الباقة الرسمي:</span>
-                                <span className="font-bold">{(selectedOffer?.price || 0).toLocaleString('en-US')} ريال</span>
+                                <span className="text-muted-foreground">سعر الباقة:</span>
+                                <span className="font-bold">{(isApiUser ? calculateFinalServicePrice(selectedOffer?.price || 0, config.aden_net) : (selectedOffer?.price || 0)).toLocaleString('en-US')} ريال</span>
                             </div>
                             {!isApiUser && (
                                 <div className="flex justify-between items-center py-2 border-b border-dashed">
                                     <span className="text-muted-foreground">النسبة (5%):</span>
                                     <span className="font-bold text-orange-600">{Math.ceil((selectedOffer?.price || 0) * 0.05).toLocaleString('en-US')} ريال</span>
-                                </div>
-                            )}
-                            {isApiUser && (
-                                <div className="flex justify-between items-center py-2 border-b border-dashed">
-                                    <span className="text-muted-foreground">فئة العميل:</span>
-                                    <span className="font-bold text-amber-600 dark:text-amber-400">عميل API (نسب معتمدة)</span>
                                 </div>
                             )}
                             <div className="flex justify-between items-center py-3 bg-muted/50 rounded-xl px-2 mt-2">

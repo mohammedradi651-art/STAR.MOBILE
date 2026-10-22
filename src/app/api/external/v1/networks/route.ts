@@ -201,8 +201,8 @@ export async function POST(req: Request) {
                 userId: effectiveUserId,
                 transactionDate: timestamp,
                 amount: discountedPrice,
-                transactionType: 'API: شراء كرت محلي',
-                notes: `شبكة: ${localSnap.data().name} (السعر الأصلي: ${originalPrice} ر.ي - سعر API: ${discountedPrice} ر.ي)${isAdmin ? ' (عبر البوت)' : ''}`,
+                transactionType: 'شراء كرت محلي',
+                notes: `شبكة: ${localSnap.data().name}${isAdmin ? ' (عبر البوت)' : ''}`,
                 cardNumber: cardData.cardNumber,
                 status: 'completed'
             });
@@ -319,8 +319,8 @@ export async function POST(req: Request) {
                 userId: effectiveUserId,
                 transactionDate: timestamp,
                 amount: discountedPrice,
-                transactionType: 'API: شراء كرت خارجي',
-                notes: `شبكة بيتي: ${networkId} (السعر الأصلي: ${originalPrice} ر.ي - سعر API: ${discountedPrice} ر.ي)${isAdmin ? ' (عبر البوت)' : ''}`,
+                transactionType: 'شراء كرت خارجي',
+                notes: `شبكة بيتي: ${networkId}${isAdmin ? ' (عبر البوت)' : ''}`,
                 status: 'pending',
                 externalRef: externalRef,
                 networkId: String(networkId),

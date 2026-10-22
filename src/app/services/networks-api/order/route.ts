@@ -56,8 +56,12 @@ export async function POST(
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`Order creation failed (${response.status}):`, errorText.substring(0, 200));
+      const isStockOut = /مخزون|نفاد|انتهى|stock/i.test(errorText);
+      const message = isStockOut 
+        ? 'فشل الشراء: انتهى المخزون\nيرجى التواصل مع الادارة 770326828' 
+        : 'فشل الشراء\nيرجى التواصل مع الادارة 770326828';
       return new NextResponse(
-        JSON.stringify({ message: 'فشل الشراء\nيرجى التواصل مع الادارة 770326828' }),
+        JSON.stringify({ message, isStockOut, error: errorText }),
         { status: response.status, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -67,8 +71,13 @@ export async function POST(
         
         // التحقق من حالة الطلب الداخلية بناءً على توثيق بيتي
         if (data.status !== 200) {
+            const rawMsg = data.message || data.error || JSON.stringify(data);
+            const isStockOut = /مخزون|نفاد|انتهى|stock/i.test(rawMsg);
+            const message = isStockOut 
+              ? 'فشل الشراء: انتهى المخزون\nيرجى التواصل مع الادارة 770326828' 
+              : 'فشل الشراء\nيرجى التواصل مع الادارة 770326828';
             return new NextResponse(
-                JSON.stringify({ message: 'فشل الشراء\nيرجى التواصل مع الادارة 770326828' }),
+                JSON.stringify({ message, isStockOut, details: data }),
                 { status: 400, headers: { 'Content-Type': 'application/json' } }
             );
         }
@@ -77,8 +86,12 @@ export async function POST(
     } else {
         const text = await response.text();
         console.error("Order API returned HTML:", text.substring(0, 300));
+        const isStockOut = /مخزون|نفاد|انتهى|stock/i.test(text);
+        const message = isStockOut 
+          ? 'فشل الشراء: انتهى المخزون\nيرجى التواصل مع الادارة 770326828' 
+          : 'فشل الشراء\nيرجى التواصل مع الادارة 770326828';
         return new NextResponse(
-            JSON.stringify({ message: 'فشل الشراء\nيرجى التواصل مع الادارة 770326828' }),
+            JSON.stringify({ message, isStockOut }),
             { status: 502, headers: { 'Content-Type': 'application/json' } }
         );
     }
@@ -86,7 +99,7 @@ export async function POST(
   } catch (error: any) {
     console.error('Order route exception on Vercel:', error);
     return new NextResponse(
-        JSON.stringify({ message: 'فشل الشراء\nيرجى التواصل مع الادارة 770326828' }),
+        JSON.stringify({ message: 'فشل الشراء\nيرجى التواصل مع الادارة 770326828', isStockOut: false }),
         { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
