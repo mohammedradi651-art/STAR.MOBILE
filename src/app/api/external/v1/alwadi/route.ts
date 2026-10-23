@@ -227,7 +227,7 @@ export async function POST(req: Request) {
             
             batch.set(txRef, {
                 userId, transactionDate: timestamp, amount: discountedPrice,
-                transactionType: 'تجديد تجريبي (API)', notes: `تجربة ربط للكرت: ${number} - تم الاسترجاع فوراً`,
+                transactionType: 'تجديد تجريبي', notes: `تجربة كرت: ${number} - تم الاسترجاع فوراً`,
                 status: 'success'
             });
 
@@ -270,8 +270,8 @@ export async function POST(req: Request) {
                 userId,
                 transactionDate: timestamp,
                 amount: discountedPrice,
-                transactionType: `تجديد منظومة الوادي (API)`,
-                notes: `كرت: ${number} - باقة: ${officialPrice} ر.ي (سعر الربط البرمجي: ${discountedPrice} ر.ي)`,
+                transactionType: `تجديد منظومة الوادي`,
+                notes: `كرت: ${number} - باقة: ${officialPrice} ر.ي`,
                 status: 'success'
             });
 

@@ -134,8 +134,8 @@ export async function POST(req: Request) {
                 userId: targetId,
                 transactionDate: timestamp,
                 amount: depositData.amount,
-                transactionType: `تغذية حساب (API)`,
-                notes: `مطابقة آلية عبر البوت - ${depositData.bank}`,
+                transactionType: `تغذية حساب`,
+                notes: `إيداع بنكي - ${depositData.bank}`,
                 status: 'success'
             });
 

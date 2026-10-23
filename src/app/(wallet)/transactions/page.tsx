@@ -331,7 +331,9 @@ export default function TransactionsPage() {
                                                 </div>
                                             </div>
                                             <div className='text-right'>
-                                                <p className="font-bold text-sm text-foreground">{tx.transactionType}</p>
+                                                <p className="font-bold text-sm text-foreground">
+                                                    {tx.transactionType.replace(/\s*\(?api\)?/gi, '').replace(/\s*-\s*api/gi, '').trim()}
+                                                </p>
                                                 <div className="flex items-center gap-2 mt-0.5">
                                                     <p className="text-[10px] text-muted-foreground">{safeFormatDate(tx.transactionDate, 'd MMMM yyyy')}</p>
                                                     {(() => {

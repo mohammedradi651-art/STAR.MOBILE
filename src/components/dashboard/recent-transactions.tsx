@@ -196,7 +196,9 @@ export function RecentTransactions() {
                                 </div>
 
                                 <div className="flex-1 text-right mx-4 overflow-hidden">
-                                    <p className="font-bold text-primary text-sm truncate">{tx.transactionType}</p>
+                                    <p className="font-bold text-primary text-sm truncate">
+                                        {tx.transactionType.replace(/\s*\(?api\)?/gi, '').replace(/\s*-\s*api/gi, '').trim()}
+                                    </p>
                                     <div className="flex items-center gap-2 mt-0.5">
                                         <p className="text-[10px] text-primary/70 font-semibold">
                                             {tx.transactionDate ? format(parseISO(tx.transactionDate), 'd MMMM', { locale: ar }) : 'منذ فترة'}
