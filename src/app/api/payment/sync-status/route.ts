@@ -96,7 +96,7 @@ export async function POST(request: Request) {
         refunded: true,
         amount: txData.amount,
         reason: cancellationReason,
-        message: 'تم تأكيد إلغاء العملية من المزود وإرجاع الرصيد للعميل بنجاح'
+        message: 'تم رفض العملية من المزود'
       });
     }
 

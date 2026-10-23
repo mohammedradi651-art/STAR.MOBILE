@@ -172,7 +172,34 @@ export async function POST(request: Request) {
       }
     }
 
-    // 4. معالجة طلب فحص الرصيد للعميل (إذا كان الأكشن balance)
+    // 4. معالجة طلب فحص الرصيد أو فحص حالة عملية محددة للعميل
+    if ((action === 'status' || action === 'check') && payload.transid) {
+      try {
+        const checkTransId = String(payload.transid).trim();
+        const txDocRef = doc(firestore, 'paymentTransactions', checkTransId);
+        const txSnap = await getDoc(txDocRef);
+        if (txSnap.exists()) {
+          const tx = txSnap.data();
+          const isDone = tx.status === 'success' || tx.readiness === 'جاهزة';
+          const isFailed = tx.status === 'failed' || tx.readiness === 'فاشلة';
+          return NextResponse.json({
+            resultCode: isDone ? "0" : isFailed ? "-1" : "0",
+            status: isDone ? "success" : isFailed ? "failed" : "pending",
+            readiness: tx.readiness || (isDone ? 'جاهزة' : isFailed ? 'فاشلة' : 'قيد الانتظار'),
+            transid: checkTransId,
+            amount: tx.amount,
+            service: tx.transactionType,
+            recipientPhoneNumber: tx.recipientPhoneNumber || tx.phoneNumber || '',
+            message: tx.providerMessage || tx.notes || (isDone ? 'تم تنفيذ العملية بنجاح' : isFailed ? 'تم رفض العملية' : 'العملية قيد الانتظار والمعالجة لدى المزود'),
+            resultDesc: tx.providerMessage || tx.notes || (isDone ? 'تم تنفيذ العملية بنجاح' : isFailed ? 'تم رفض العملية' : 'العملية قيد الانتظار والمعالجة لدى المزود'),
+            date: tx.transactionDate || tx.createdAt
+          });
+        }
+      } catch (checkErr) {
+        console.warn("Could not check local tx, forwarding to provider:", checkErr);
+      }
+    }
+
     if (action === 'balance' && !isInternalAppRequest) {
       if (service === 'info' && payload.type === 'provider') {
         // فحص رصيد الوكيل لدى المزود
