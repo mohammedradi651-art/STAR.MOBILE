@@ -26,7 +26,7 @@ import {
   AlertDialogDescription
 } from "@/components/ui/alert-dialog";
 import { useFirestore, useUser, useDoc, useMemoFirebase } from '@/firebase';
-import { doc, collection, writeBatch, increment } from 'firebase/firestore';
+import { doc, collection, writeBatch, increment, setDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { useRouter } from 'next/navigation';
@@ -172,9 +172,13 @@ export default function AlwadiPage() {
     const finalPrice = getFinalPrice(selectedOption.price);
 
     try {
+        const idToken = await user.getIdToken();
         const res = await fetch('/api/alwadi/renew', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`
+            },
             body: JSON.stringify({
                 userId: user.uid,
                 cardNumber: cardNumber,
@@ -186,30 +190,32 @@ export default function AlwadiPage() {
         const data = await res.json();
         if (!data.success) throw new Error(data.message || "فشلت عملية التجديد في المنظومة.");
 
-        const batch = writeBatch(firestore);
+        // إذا لم يتم الخصم في السيرفر (حالة احتياطية)، يتم الخصم هنا
+        if (!data.serverDeducted) {
+            const batch = writeBatch(firestore);
+            const now = new Date().toISOString();
+            batch.update(userDocRef, { balance: increment(-finalPrice) });
+            const txRef = doc(collection(firestore, 'users', user.uid, 'transactions'));
+            batch.set(txRef, {
+                userId: user.uid,
+                transactionDate: now,
+                amount: finalPrice,
+                transactionType: 'تجديد منظومة الوادي',
+                notes: `باقة: ${selectedOption.title} - رقم الكرت: ${cardNumber}`,
+                subscriberName: inquiryResult.data.name,
+                cardNumber: cardNumber
+            });
+            await batch.commit();
+        }
+
+        // تسجيل الإشعار بنجاح التجديد
         const now = new Date().toISOString();
-
-        batch.update(userDocRef, { balance: increment(-finalPrice) });
-
-        const txRef = doc(collection(firestore, 'users', user.uid, 'transactions'));
-        batch.set(txRef, {
-            userId: user.uid,
-            transactionDate: now,
-            amount: finalPrice,
-            transactionType: 'تجديد منظومة الوادي',
-            notes: `باقة: ${selectedOption.title} - رقم الكرت: ${cardNumber}`,
-            subscriberName: inquiryResult.data.name,
-            cardNumber: cardNumber
-        });
-
         const notifRef = doc(collection(firestore, 'users', user.uid, 'notifications'));
-        batch.set(notifRef, {
+        await setDoc(notifRef, {
             title: 'تم التجديد بنجاح',
             body: `تم تجديد باقة ${selectedOption.title} بنجاح لمشترك منظومة الوادي: ${inquiryResult.data.name}.`,
             timestamp: now
-        });
-
-        await batch.commit();
+        }).catch(e => console.warn("Failed to create notification:", e));
 
         // إرسال إشعار SMS تلقائي بالصيغة الملكية المطلوبة
         if (userProfile?.phoneNumber) {

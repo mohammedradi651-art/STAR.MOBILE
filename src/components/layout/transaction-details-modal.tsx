@@ -26,7 +26,8 @@ import {
   Share2,
   RefreshCw,
   Loader2,
-  User
+  User,
+  Trash2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -60,6 +61,9 @@ interface TransactionDetailsModalProps {
   transaction: TransactionModalData | null;
   onSyncStatus?: (transid: string) => Promise<void>;
   isSyncing?: boolean;
+  isAdmin?: boolean;
+  onActionStatus?: (status: 'success' | 'failed') => void;
+  onDeleteTransaction?: (tx: TransactionModalData) => void;
 }
 
 /**
@@ -421,7 +425,10 @@ export function TransactionDetailsModal({
   onOpenChange,
   transaction,
   onSyncStatus,
-  isSyncing = false
+  isSyncing = false,
+  isAdmin = false,
+  onActionStatus,
+  onDeleteTransaction
 }: TransactionDetailsModalProps) {
   const { toast } = useToast();
   const [isSharing, setIsSharing] = useState(false);
@@ -814,10 +821,41 @@ export function TransactionDetailsModal({
               {displayNotes}
             </div>
           </div>
+
+          {/* أزرار الإجراءات السريعة للمدير للعمليات المعلقة */}
+          {isAdmin && onActionStatus && isPending && (
+            <div className="bg-amber-500/10 p-3 rounded-2xl border border-amber-500/30 space-y-2 mt-2">
+              <div className="flex items-center justify-between text-xs font-black text-amber-900 dark:text-amber-300">
+                <span>إجراءات المدير على العملية المعلقة:</span>
+                <span className="text-[10px] font-bold bg-amber-500/20 px-2 py-0.5 rounded-full">معلقة</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-0.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => onActionStatus('success')}
+                  className="h-9 rounded-xl bg-green-600 hover:bg-green-700 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>تحديد كناجحة</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => onActionStatus('failed')}
+                  className="h-9 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <XCircle className="w-4 h-4" />
+                  <span>تحديد كفاشلة وإرجاع</span>
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* أزرار الإجراءات السفلية: مشاركة مباشرة لواتساب وإغلاق */}
-        <DialogFooter className="p-4 pt-2 grid grid-cols-2 gap-2">
+        {/* أزرار الإجراءات السفلية: مشاركة مباشرة لواتساب وحذف وإغلاق */}
+        <DialogFooter className={cn("p-4 pt-2 gap-2", isAdmin && onDeleteTransaction ? "grid grid-cols-3" : "grid grid-cols-2")}>
           <Button
             type="button"
             onClick={handleShareToWhatsApp}
@@ -837,6 +875,22 @@ export function TransactionDetailsModal({
               </>
             )}
           </Button>
+
+          {isAdmin && onDeleteTransaction && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (transaction) {
+                  onDeleteTransaction(transaction);
+                }
+              }}
+              className="w-full h-11 rounded-xl font-black text-xs sm:text-sm border-red-500/30 text-red-600 hover:bg-red-500/10 hover:text-red-700 flex items-center justify-center gap-1.5"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>حذف</span>
+            </Button>
+          )}
 
           <DialogClose asChild>
             <Button

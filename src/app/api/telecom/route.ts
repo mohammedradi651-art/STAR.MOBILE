@@ -224,7 +224,44 @@ export async function POST(request: Request) {
 
     // شرط الخصم والفحص الصارم لعملاء الـ API:
     // أي عميل يرسل مفتاح API ويطلب عملية سداد مالية يجب فحص رصيده أولاً ومنعه إذا لم يكن كافياً
-    const shouldPerformImmediateDeduction = Boolean(isApiUser && isBillingAction && !isInternalHandled && clientUserId);
+    const isFullBilling = isBillingAction || sLower === 'adenet' || sLower === 'aden_net';
+    const shouldPerformImmediateDeduction = Boolean(isApiUser && isFullBilling && !isInternalHandled && clientUserId);
+
+    // 🔒 التحقق الأمني الحاسم من عمليات السداد المالية غير الموثقة بمفتاح API:
+    // يمنع أي شخص أو هكر من إرسال طلب سداد مباشر للمسار بدون أن تكون العملية قد خُصمت ومسجلة في paymentTransactions
+    if (isFullBilling && !isApiUser && !isInternalHandled) {
+      const checkTransId = String(payload.transid || '').trim();
+      const checkBackpass = String(payload.backpass || '').trim();
+
+      if (!checkTransId || !checkBackpass) {
+        return NextResponse.json({
+          resultCode: "-401",
+          status: "failed",
+          message: "طلب غير مصرح به: بيانات المعاملة المالية مفقودة (transid و backpass مطلوبان لتأكيد السداد)."
+        }, { status: 401 });
+      }
+
+      const txDocRef = doc(firestore, 'paymentTransactions', checkTransId);
+      const txSnap = await getDoc(txDocRef);
+
+      if (!txSnap.exists()) {
+        return NextResponse.json({
+          resultCode: "-403",
+          status: "failed",
+          message: "طلب غير مصرح به: المعاملة المالية غير موجودة أو غير مسجلة في قاعدة البيانات."
+        }, { status: 403 });
+      }
+
+      const txData = txSnap.data();
+      // التحقق الصارم من أن backpass مطابق وأن العملية قيد الانتظار وخُصم رصيدها
+      if (txData.backpass !== checkBackpass || txData.status !== 'pending' || !txData.balanceProcessed) {
+        return NextResponse.json({
+          resultCode: "-403",
+          status: "failed",
+          message: "طلب غير مصرح به: بيانات المعاملة غير متطابقة أو تمت معالجتها مسبقاً."
+        }, { status: 403 });
+      }
+    }
 
     if (shouldPerformImmediateDeduction && clientUserId) {
       requiredCost = calculateApiTransactionCost({

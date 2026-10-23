@@ -256,7 +256,11 @@ export async function POST(req: Request) {
         // و. تنفيذ التجديد الفعلي (Renew)
         const response = await fetch(`${origin}/api/alwadi/renew`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': authHeader || '',
+                'x-internal-handled': 'true'
+            },
             body: JSON.stringify({ userId: userId, cardNumber: number, packageId, subscriberId })
         });
         const result = await response.json();

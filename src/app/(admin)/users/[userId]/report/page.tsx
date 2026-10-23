@@ -4,10 +4,20 @@ import React, { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { useDoc, useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { doc, collection, query, orderBy } from 'firebase/firestore';
+import { doc, collection, query, orderBy, writeBatch, increment } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { 
   User, 
   Phone, 
@@ -20,7 +30,10 @@ import {
   CheckCircle2,
   Clock3,
   XCircle,
-  Loader2
+  Loader2,
+  Trash2,
+  AlertTriangle,
+  Printer
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -34,78 +47,6 @@ import {
   generateNumericId 
 } from '@/components/layout/transaction-details-modal';
 import { useToast } from '@/hooks/use-toast';
-/**
- * توليد ملف PDF متوافق 100% مع معايير PDF-1.4 انطلاقاً من صورة الـ Canvas
- * خفيف الوزن ومستقل تماماً وبدون أي مكتبات خارجية لتجنب أخطاء Turbopack و SSR
- */
-function createPdfFromJpeg(jpegDataUrl: string, imgWidth = 1200, imgHeight = 1700): Blob {
-  const base64 = jpegDataUrl.replace(/^data:image\/jpeg;base64,/, '');
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-
-  // أبعاد A4 القياسية
-  const a4Width = 595.28;
-  const a4Height = 841.89;
-
-  const encoder = new TextEncoder();
-  const parts: (Uint8Array | string)[] = [];
-  const offsets: number[] = [];
-  let currentOffset = 0;
-
-  const pushPart = (content: string | Uint8Array) => {
-    if (typeof content === 'string') {
-      const b = encoder.encode(content);
-      parts.push(b);
-      currentOffset += b.length;
-    } else {
-      parts.push(content);
-      currentOffset += content.length;
-    }
-  };
-
-  // ترويسة ملف الـ PDF
-  pushPart('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
-
-  // الكائنات الأساسية
-  offsets[1] = currentOffset;
-  pushPart('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
-
-  offsets[2] = currentOffset;
-  pushPart('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n');
-
-  offsets[3] = currentOffset;
-  pushPart(
-    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${a4Width} ${a4Height}] /Resources << /XObject << /Im1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`
-  );
-
-  offsets[4] = currentOffset;
-  pushPart(
-    `4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${imgWidth} /Height ${imgHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${bytes.length} >>\nstream\n`
-  );
-  pushPart(bytes);
-  pushPart('\nendstream\nendobj\n');
-
-  offsets[5] = currentOffset;
-  const contentStream = `q ${a4Width} 0 0 ${a4Height} 0 0 cm /Im1 Do Q\n`;
-  pushPart(`5 0 obj\n<< /Length ${contentStream.length} >>\nstream\n${contentStream}endstream\nendobj\n`);
-
-  // جدول المراجع
-  const xrefOffset = currentOffset;
-  pushPart('xref\n0 6\n0000000000 65535 f \n');
-  for (let i = 1; i <= 5; i++) {
-    const offStr = String(offsets[i]).padStart(10, '0');
-    pushPart(`${offStr} 00000 n \n`);
-  }
-
-  // تذييل الملف
-  pushPart(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`);
-
-  return new Blob(parts as BlobPart[], { type: 'application/pdf' });
-}
-
 type UserProfile = {
   displayName: string;
   phoneNumber?: string;
@@ -163,7 +104,7 @@ const safeFormatDate = (dateVal: any, formatStr: string) => {
  * العمليات الناجحة فقط:
  * تسديدات يمن موبايل، الاتصالات، منظومة الوادي، الألعاب، كروت الشبكات
  */
-export function isEligibleForCommission(tx: Transaction): boolean {
+function isEligibleForCommission(tx: Transaction): boolean {
   const status = (tx.status || '').toLowerCase().trim();
   const readiness = (tx.readiness || '').trim();
 
@@ -207,6 +148,427 @@ export function isEligibleForCommission(tx: Transaction): boolean {
   return isTelecom || isAlwadi || isGames || isNetworks;
 }
 
+/**
+ * توليد كود HTML لكشف الحساب متعدد الصفحات مطابق 100% لتصميم الطباعة الفاخر
+ * يدعم الطباعة والتصدير كـ PDF متعدد الصفحات بمتجهات فائقة الدقة وبدون أي تشويش
+ */
+function generateStatementHtml(
+  userProfile: UserProfile,
+  txs: Transaction[],
+  periodLabel: string,
+  userId: string
+): string {
+  const eligibleTxs = txs.filter(isEligibleForCommission);
+  const totalEligibleAmount = eligibleTxs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+  const customerCommission = Math.round(totalEligibleAmount * 0.02);
+  const paidTxs = txs.filter(tx => {
+    const t = (tx.transactionType || '').toLowerCase();
+    return !t.includes('تغذية') && !t.includes('إيداع') && !t.includes('استلام') && !t.includes('أرباح') && !t.includes('استرجاع');
+  });
+  const totalPaidAmount = paidTxs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+  const currentBalance = userProfile.balance ?? 0;
+  const nowStr = format(new Date(), 'eeee، d MMMM yyyy - h:mm a', { locale: ar });
+  const refId = `SM-STMT-${userId.slice(0, 8).toUpperCase()}`;
+
+  const rawPhone = (userProfile.phoneNumber || '').replace(/\D/g, '').slice(-9);
+  const waMsg = encodeURIComponent(
+    `⭐ *تطبيق ستار موبايل - كشف حساب مالي تفصيلي*\n\n` +
+    `👤 *العميل:* ${userProfile.displayName}\n` +
+    `📅 *الفترة:* ${periodLabel}\n` +
+    `🔢 *عدد العمليات:* ${txs.length} عملية\n` +
+    `━━━━━━━━━━━━━━━\n` +
+    `💳 *إجمالي المسدد:* ${totalPaidAmount.toLocaleString('en-US')} ريال\n` +
+    `⭐ *عمولة العميل المعتمدة (2%):* ${customerCommission.toLocaleString('en-US')} ريال\n` +
+    `💰 *الرصيد المتاح الحالي:* ${currentBalance.toLocaleString('en-US')} ريال\n` +
+    `━━━━━━━━━━━━━━━\n` +
+    `تم توثيق كشف الحساب آلياً عبر نظام إدارة ستار موبايل.`
+  );
+  const waUrl = rawPhone ? `https://wa.me/967${rawPhone}?text=${waMsg}` : `https://web.whatsapp.com/send?text=${waMsg}`;
+
+  const rowsHtml = txs.map((tx, idx) => {
+    const isCredit = tx.transactionType.includes('تغذية') || 
+                     tx.transactionType.includes('إيداع') || 
+                     tx.transactionType.includes('استلام') || 
+                     tx.transactionType.includes('أرباح') || 
+                     tx.transactionType.includes('استرجاع');
+
+    const cleanTitle = (tx.transactionType || '')
+      .replace(/\s*\(?api\)?/gi, '')
+      .replace(/\s*-\s*api/gi, '')
+      .trim();
+
+    const phone = extractRecipientPhone(tx);
+    const alwadiInfo = getAlwadiSubscriberInfo(tx);
+    const readiness = getReadinessDetails(tx);
+    const dateStr = safeFormatDate(tx.transactionDate || tx.createdAt, 'yyyy/MM/dd - h:mm a');
+
+    let statusColor = '#16a34a';
+    let statusBg = '#dcfce7';
+    let statusBorder = '#86efac';
+    if (readiness.status === 'pending' || tx.status === 'pending') {
+      statusColor = '#d97706';
+      statusBg = '#fef3c7';
+      statusBorder = '#fde68a';
+    } else if (readiness.status === 'failed' || tx.status === 'failed') {
+      statusColor = '#dc2626';
+      statusBg = '#fee2e2';
+      statusBorder = '#fca5a5';
+    }
+
+    const titleWithInfo = alwadiInfo ? `${cleanTitle} <span style="color: #64748b; font-size: 11px;">(${alwadiInfo.name})</span>` : cleanTitle;
+    const phoneOrCard = phone || alwadiInfo?.number || tx.cardNumber || '—';
+
+    return `
+      <tr style="border-bottom: 1px solid #e2e8f0; background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+        <td style="padding: 9px 8px; text-align: center; font-weight: bold; color: #64748b; font-size: 11px;">${idx + 1}</td>
+        <td style="padding: 9px 8px; text-align: right; font-size: 11px; color: #475569; white-space: nowrap;">${dateStr}</td>
+        <td style="padding: 9px 8px; text-align: right; font-weight: bold; font-size: 12px; color: #0f172a;">${titleWithInfo}</td>
+        <td style="padding: 9px 8px; text-align: center; font-family: monospace; font-weight: bold; font-size: 12px; color: #1b52a4; direction: ltr;">${phoneOrCard}</td>
+        <td style="padding: 9px 8px; text-align: left; font-weight: 900; font-size: 13px; color: ${isCredit ? '#16a34a' : '#0f172a'}; white-space: nowrap;">${Number(tx.amount).toLocaleString('en-US')} <span style="font-size: 10px; font-weight: normal; color: #64748b;">ر.ي</span></td>
+        <td style="padding: 9px 8px; text-align: center; white-space: nowrap;">
+          <span style="display: inline-block; padding: 3px 9px; border-radius: 9999px; font-size: 10px; font-weight: 800; color: ${statusColor}; background: ${statusBg}; border: 1px solid ${statusBorder};">
+            ${readiness.text}
+          </span>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  return `<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="utf-8" />
+  <title>كشف حساب - ${userProfile.displayName || 'العميل'} - تطبيق ستار موبايل</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: 'Tajawal', Tahoma, Arial, sans-serif;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #f1f5f9;
+      color: #0f172a;
+      font-size: 12px;
+    }
+    .page-wrap {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .page-card {
+      background: #ffffff;
+      border-radius: 20px;
+      padding: 32px 36px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e2e8f0;
+    }
+    .header-table {
+      width: 100%;
+      border-bottom: 3px solid #1b52a4;
+      padding-bottom: 16px;
+      margin-bottom: 22px;
+    }
+    .brand-title {
+      font-size: 24px;
+      font-weight: 900;
+      color: #1b52a4;
+      margin: 0;
+      letter-spacing: -0.5px;
+    }
+    .brand-subtitle {
+      font-size: 13px;
+      color: #64748b;
+      font-weight: bold;
+      margin-top: 5px;
+    }
+    .meta-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 16px 20px;
+      margin-bottom: 22px;
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+    }
+    .meta-label {
+      font-size: 11px;
+      color: #64748b;
+      font-weight: 700;
+      margin-bottom: 3px;
+    }
+    .meta-value {
+      font-size: 14px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    table.tx-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 24px;
+    }
+    table.tx-table thead {
+      display: table-header-group;
+    }
+    table.tx-table tr {
+      page-break-inside: avoid;
+    }
+    table.tx-table th {
+      background: #1b52a4;
+      color: #ffffff;
+      padding: 11px 9px;
+      font-size: 11px;
+      font-weight: 800;
+      text-align: right;
+    }
+    .summary-card {
+      background: linear-gradient(135deg, #1b52a4 0%, #0f3875 100%);
+      color: #ffffff;
+      border-radius: 16px;
+      padding: 20px 24px;
+      margin-top: 24px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      text-align: center;
+      page-break-inside: avoid;
+      box-shadow: 0 6px 16px rgba(27, 82, 164, 0.2);
+    }
+    .summary-title {
+      font-size: 11px;
+      font-weight: bold;
+      opacity: 0.9;
+      margin-bottom: 5px;
+    }
+    .summary-number {
+      font-size: 19px;
+      font-weight: 900;
+    }
+    .footer-note {
+      text-align: center;
+      font-size: 11px;
+      color: #94a3b8;
+      font-weight: bold;
+      margin-top: 30px;
+      border-top: 1px dashed #cbd5e1;
+      padding-top: 14px;
+      page-break-inside: avoid;
+    }
+    .action-bar {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: #0f172a;
+      color: #fff;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+      border-bottom: 1px solid #334155;
+    }
+    .btn {
+      cursor: pointer;
+      border: none;
+      border-radius: 10px;
+      padding: 9px 18px;
+      font-weight: 800;
+      font-size: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .btn-print {
+      background: #1b52a4;
+      color: #fff;
+    }
+    .btn-print:hover {
+      background: #2563eb;
+    }
+    .btn-wa {
+      background: #16a34a;
+      color: #fff;
+    }
+    .btn-wa:hover {
+      background: #15803d;
+    }
+    .btn-close {
+      background: #334155;
+      color: #e2e8f0;
+    }
+    .btn-close:hover {
+      background: #475569;
+    }
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 12mm 10mm;
+      }
+      body {
+        background: #ffffff !important;
+        padding: 0 !important;
+      }
+      .page-wrap {
+        max-width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      .page-card {
+        padding: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      table.tx-table {
+        page-break-inside: auto;
+      }
+      table.tx-table thead {
+        display: table-header-group;
+      }
+      table.tx-table tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+      }
+      .summary-card, .meta-box, .header-table, .footer-note {
+        page-break-inside: avoid;
+      }
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+  </style>
+</head>
+<body>
+  <!-- شريط التحكم العلوي للمشرف (يختفي تلقائياً عند الطباعة) -->
+  <div class="action-bar no-print">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span style="font-weight: 900; font-size: 14px;">⭐ تطبيق ستار موبايل</span>
+      <span style="background: rgba(255,255,255,0.15); padding: 3px 10px; border-radius: 8px; font-size: 11px; font-weight: bold;">
+        كشف حساب: ${userProfile.displayName || 'العميل'} (${txs.length} عملية)
+      </span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <button class="btn btn-print" onclick="window.print()">
+        🖨️ طباعة أو حفظ كـ PDF متعدد الصفحات
+      </button>
+      <a class="btn btn-wa" href="${waUrl}" target="_blank">
+        📲 إرسال الكشف عبر واتساب للعميل
+      </a>
+      <button class="btn btn-close" onclick="window.close()">
+        ✖️ إغلاق
+      </button>
+    </div>
+  </div>
+
+  <div class="page-wrap">
+    <div class="page-card">
+      <table class="header-table">
+        <tr>
+          <td style="text-align: right; vertical-align: middle;">
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <img src="/logo.jpeg" alt="Logo" style="width: 60px; height: 60px; border-radius: 14px; object-fit: contain; border: 1px solid #e2e8f0;" onerror="this.style.display='none'" />
+              <div>
+                <h1 class="brand-title">تطبيق ستار موبايل</h1>
+                <div class="brand-subtitle">كشف حساب مالي تفصيلي معتمد</div>
+              </div>
+            </div>
+          </td>
+          <td style="text-align: left; vertical-align: middle;">
+            <div style="font-size: 11px; font-weight: bold; color: #64748b;">تاريخ ووقت الإصدار:</div>
+            <div style="font-size: 12px; font-weight: 800; color: #0f172a; margin-top: 1px;">${nowStr}</div>
+            <div style="font-size: 10px; color: #94a3b8; margin-top: 3px; font-family: monospace;">الرقم المرجعي: ${refId}</div>
+          </td>
+        </tr>
+      </table>
+
+      <div class="meta-box">
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">اسم العميل:</span>
+            <span class="meta-value">${userProfile.displayName || 'عميل معتمد'}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">رقم الهاتف:</span>
+            <span class="meta-value" style="font-family: monospace; color: #1b52a4;">${userProfile.phoneNumber || 'غير مسجل'}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">الرصيد المتاح الحالي:</span>
+            <span class="meta-value" style="color: #1b52a4;">${currentBalance.toLocaleString('en-US')} ريال</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">الفترة المحددة:</span>
+            <span class="meta-value">${periodLabel} (${txs.length} عملية)</span>
+          </div>
+        </div>
+      </div>
+
+      <table class="tx-table">
+        <thead>
+          <tr>
+            <th style="width: 35px; text-align: center;">#</th>
+            <th style="width: 140px; text-align: right;">التاريخ والوقت</th>
+            <th style="text-align: right;">الخدمة والعملية / المشترك</th>
+            <th style="width: 125px; text-align: center;">الرقم / الكرت</th>
+            <th style="width: 110px; text-align: left;">المبلغ</th>
+            <th style="width: 90px; text-align: center;">الحالة</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml || '<tr><td colspan="6" style="padding: 30px; text-align: center; color: #64748b; font-weight: bold;">لا توجد عمليات مسجلة في هذه الفترة المحددة</td></tr>'}
+        </tbody>
+      </table>
+
+      <!-- ملخص الحساب والعمولة 2% -->
+      <div class="summary-card">
+        <div>
+          <div class="summary-title">إجمالي المبالغ المسددة</div>
+          <div class="summary-number">${totalPaidAmount.toLocaleString('en-US')} <span style="font-size: 11px; font-weight: normal;">ر.ي</span></div>
+        </div>
+        <div style="border-right: 1px solid rgba(255,255,255,0.2); border-left: 1px solid rgba(255,255,255,0.2);">
+          <div class="summary-title">المبالغ المؤهلة للعمولة</div>
+          <div class="summary-number">${totalEligibleAmount.toLocaleString('en-US')} <span style="font-size: 11px; font-weight: normal;">ر.ي</span></div>
+        </div>
+        <div style="border-left: 1px solid rgba(255,255,255,0.2);">
+          <div class="summary-title">عمولة العميل المعتمدة (2%) ⭐</div>
+          <div class="summary-number" style="color: #fef08a;">${customerCommission.toLocaleString('en-US')} <span style="font-size: 11px; font-weight: normal; color: #fff;">ر.ي</span></div>
+        </div>
+        <div>
+          <div class="summary-title">الرصيد المتاح الحالي</div>
+          <div class="summary-number">${currentBalance.toLocaleString('en-US')} <span style="font-size: 11px; font-weight: normal;">ر.ي</span></div>
+        </div>
+      </div>
+
+      <div class="footer-note">
+        تم إصدار هذا الكشف آلياً عبر نظام إدارة تطبيق ستار موبايل لخدمات الاتصالات والمدفوعات الإلكترونية 💙
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // تشغيل حوار الطباعة وتصدير PDF تلقائياً بعد اكتمال تحميل الشعار والخطوط
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        window.print();
+      }, 500);
+    });
+  </script>
+</body>
+</html>`;
+}
+
 function UserReportPage() {
   const params = useParams();
   const userId = params.userId as string;
@@ -216,7 +578,161 @@ function UserReportPage() {
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  // إدارة تغيير حالة العملية المعلقة (نجاح / فشل) وخيار الملاحظة
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [statusTargetTx, setStatusTargetTx] = useState<Transaction | null>(null);
+  const [targetStatus, setTargetStatus] = useState<'success' | 'failed'>('success');
+  const [statusNote, setStatusNote] = useState<string>('تم التسديد بنجاح');
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
+  const openStatusModal = (tx: Transaction, status: 'success' | 'failed') => {
+    setStatusTargetTx(tx);
+    setTargetStatus(status);
+    setStatusNote(status === 'success' ? 'تم التسديد بنجاح' : 'فشلت العملية وتمت إعادة المبلغ للرصيد');
+    setStatusModalOpen(true);
+  };
+
+  const handleConfirmStatusChange = async () => {
+    if (!statusTargetTx || !firestore || !userId) return;
+    setIsUpdatingStatus(true);
+    try {
+      const now = new Date().toISOString();
+      const txId = statusTargetTx.id;
+      const transid = statusTargetTx.transid || txId;
+      const amount = Number(statusTargetTx.amount || 0);
+
+      const userDocRef = doc(firestore, 'users', userId);
+      const userTxRef = doc(firestore, `users/${userId}/transactions`, txId);
+      const globalTxRef = doc(firestore, 'paymentTransactions', transid);
+
+      const batch = writeBatch(firestore);
+
+      if (targetStatus === 'success') {
+        const updateData = {
+          status: 'success',
+          readiness: 'جاهزة',
+          notes: statusNote.trim() || 'تم التسديد بنجاح',
+          providerMessage: statusNote.trim() || 'تم التسديد بنجاح',
+          completedAt: now,
+          updatedAt: now,
+          manualUpdateBy: 'admin'
+        };
+        batch.update(userTxRef, updateData);
+        batch.update(globalTxRef, updateData);
+
+        const notifRef = doc(collection(firestore, `users/${userId}/notifications`));
+        batch.set(notifRef, {
+          title: 'اكتملت العملية بنجاح',
+          body: `تم تأكيد سداد عملية ${statusTargetTx.transactionType} بمبلغ ${amount.toLocaleString('en-US')} ريال. الملاحظة: ${statusNote.trim() || 'تم التسديد بنجاح'}.`,
+          timestamp: now
+        });
+      } else {
+        // فشل وإرجاع الرصيد للمستخدم
+        batch.update(userDocRef, { balance: increment(amount) });
+
+        const updateData = {
+          status: 'failed',
+          readiness: 'فاشلة',
+          refunded: true,
+          notes: statusNote.trim() || 'فشلت العملية وتمت إعادة المبلغ للرصيد',
+          providerMessage: statusNote.trim() || 'فشلت العملية وتمت إعادة المبلغ للرصيد',
+          failedAt: now,
+          updatedAt: now,
+          manualUpdateBy: 'admin'
+        };
+        batch.update(userTxRef, updateData);
+        batch.update(globalTxRef, updateData);
+
+        const notifRef = doc(collection(firestore, `users/${userId}/notifications`));
+        batch.set(notifRef, {
+          title: 'تم استرجاع الرصيد',
+          body: `تعذر تنفيذ عملية ${statusTargetTx.transactionType} وتمت إعادة مبلغ ${amount.toLocaleString('en-US')} ريال إلى محفظتك. الملاحظة: ${statusNote.trim() || 'فشلت العملية وتمت إعادة المبلغ للرصيد'}.`,
+          timestamp: now
+        });
+      }
+
+      await batch.commit();
+
+      toast({
+        title: targetStatus === 'success' ? 'تم تأكيد النجاح' : 'تم تأكيد الفشل وإعادة الرصيد',
+        description: targetStatus === 'success'
+          ? 'تم تغيير حالة العملية إلى جاهزة وحفظ الملاحظة.'
+          : `تم تغيير حالة العملية إلى فاشلة وإرجاع ${amount.toLocaleString('en-US')} ريال للعميل.`
+      });
+
+      if (selectedTx && (selectedTx.id === txId || selectedTx.transid === transid)) {
+        setSelectedTx(prev => prev ? {
+          ...prev,
+          status: targetStatus === 'success' ? 'success' : 'failed',
+          readiness: targetStatus === 'success' ? 'جاهزة' : 'فاشلة',
+          notes: statusNote.trim() || (targetStatus === 'success' ? 'تم التسديد بنجاح' : 'فشلت العملية وتمت إعادة المبلغ للرصيد')
+        } : null);
+      }
+
+      setStatusModalOpen(false);
+    } catch (err: any) {
+      console.error("Failed to update status:", err);
+      toast({
+        variant: 'destructive',
+        title: 'خطأ',
+        description: 'فشل تغيير حالة العملية: ' + err.message
+      });
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  // إدارة حذف العملية نهائياً دون تعديل رصيد العميل
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTargetTx, setDeleteTargetTx] = useState<Transaction | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const openDeleteDialog = (tx: Transaction) => {
+    setDeleteTargetTx(tx);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTargetTx || !firestore || !userId) return;
+    setIsDeleting(true);
+    try {
+      const txId = deleteTargetTx.id;
+      const transid = deleteTargetTx.transid || txId;
+
+      const userTxRef = doc(firestore, `users/${userId}/transactions`, txId);
+      const globalTxRef = doc(firestore, 'paymentTransactions', transid);
+
+      const batch = writeBatch(firestore);
+      // حذف المعاملة من سجل العميل ومن السجل العام فقط بدون المساس بالرصيد
+      batch.delete(userTxRef);
+      batch.delete(globalTxRef);
+
+      await batch.commit();
+
+      toast({
+        title: 'تم حذف العملية بنجاح',
+        description: 'تم حذف العملية من كشف الحساب نهائياً، ورصيد العميل كما هو دون أي تغيير.'
+      });
+
+      if (selectedTx && (selectedTx.id === txId || selectedTx.transid === transid)) {
+        setIsModalOpen(false);
+        setSelectedTx(null);
+      }
+
+      setDeleteDialogOpen(false);
+      setDeleteTargetTx(null);
+    } catch (err: any) {
+      console.error("Failed to delete transaction:", err);
+      toast({
+        variant: 'destructive',
+        title: 'خطأ',
+        description: 'تعذر حذف العملية: ' + err.message
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // خيارات التصفية: الافتراضي اليوم فقط
   const [filterPeriod, setFilterPeriod] = useState<'today' | 'current_month' | 'custom_month'>('today');
@@ -337,296 +853,61 @@ function UserReportPage() {
   };
 
   /**
-   * إنشاء ملف PDF عالي الجودة لكشف الحساب المحدد وإرساله مباشرة عبر واتساب (بدل الطباعة)
+   * فتح كشف الحساب المتعدد الصفحات بتصميم الطباعة الفاخر وحفظه كـ PDF مع خيار إرسال واتساب
    */
-  const handleSendPdfToWhatsApp = async () => {
-    if (!filteredTransactions || !userProfile || isGeneratingPdf) {
+  const handleOpenStatement = (sendWhatsApp: boolean = false) => {
+    if (!filteredTransactions || !userProfile) {
       toast({ variant: 'destructive', title: 'تنبيه', description: 'لا توجد بيانات متاحة في الفترة المحددة' });
       return;
     }
 
-    setIsGeneratingPdf(true);
+    const htmlContent = generateStatementHtml(userProfile, filteredTransactions, periodLabel, userId);
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast({
+        variant: 'destructive',
+        title: 'تنبيه النوافذ المنبثقة',
+        description: 'يرجى السماح بالنوافذ المنبثقة لفتح كشف الحساب وتصديره كـ PDF.'
+      });
+      return;
+    }
 
-    try {
-      // الحسابات المالية الدقيقة
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+
+    // إذا طلب أيضاً إرسال ملخص واتساب مباشرة للعميل
+    if (sendWhatsApp) {
+      const eligibleTxs = filteredTransactions.filter(isEligibleForCommission);
+      const totalEligibleAmount = eligibleTxs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+      const customerCommission = Math.round(totalEligibleAmount * 0.02);
       const paidTxs = filteredTransactions.filter(tx => {
         const t = (tx.transactionType || '').toLowerCase();
         return !t.includes('تغذية') && !t.includes('إيداع') && !t.includes('استلام') && !t.includes('أرباح') && !t.includes('استرجاع');
       });
       const totalPaidAmount = paidTxs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
-
-      const eligibleTxs = filteredTransactions.filter(isEligibleForCommission);
-      const totalEligibleAmount = eligibleTxs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
-      const customerCommission = Math.round(totalEligibleAmount * 0.02); // 2% فقط من المؤهلة
       const currentBalance = userProfile.balance ?? 0;
-
-      // إنشاء Canvas بجودة A4 عالية (1200 x 1700)
-      const canvas = document.createElement('canvas');
-      canvas.width = 1200;
-      canvas.height = 1700;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('تعذر تجهيز لوحة الرسم');
-
-      // خلفية بيضاء نقية
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // ترويسة التقرير بأزرق ستار موبايل الأصلي
-      const topBarH = 140;
-      ctx.fillStyle = '#1b52a4';
-      ctx.fillRect(0, 0, canvas.width, topBarH);
-
-      // تحميل الشعار ورسمه
-      try {
-        const logoImg = new window.Image();
-        logoImg.crossOrigin = 'anonymous';
-        await new Promise((resolve) => {
-          logoImg.onload = resolve;
-          logoImg.onerror = resolve;
-          logoImg.src = '/logo.jpeg';
-        });
-        if (logoImg.width) {
-          ctx.drawImage(logoImg, 40, 20, 100, 100);
-        }
-      } catch (e) {}
-
-      // نصوص الترويسة بدون إيموجي
-      ctx.textAlign = 'right';
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 36px "Almarai", Tahoma, Arial, sans-serif';
-      ctx.fillText('تطبيق ستار موبايل', canvas.width - 50, 60);
-
-      ctx.font = 'bold 18px "Almarai", Tahoma, Arial, sans-serif';
-      ctx.fillStyle = '#E2E8F0';
-      ctx.fillText('كشف حساب مالي تفصيلي معتمد', canvas.width - 50, 100);
-
-      // صندوق بيانات العميل
-      const metaBoxY = topBarH + 30;
-      const metaBoxH = 110;
-      const metaBoxW = canvas.width - 80;
-      const metaBoxX = 40;
-
-      ctx.fillStyle = '#f8fafc';
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(metaBoxX, metaBoxY, metaBoxW, metaBoxH, 16);
-      else ctx.rect(metaBoxX, metaBoxY, metaBoxW, metaBoxH);
-      ctx.fill();
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      const colW = metaBoxW / 4;
-      const drawMeta = (idx: number, label: string, val: string, isBlue = false) => {
-        const cx = metaBoxX + metaBoxW - (idx * colW) - (colW / 2);
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#64748b';
-        ctx.font = 'bold 14px "Almarai", Tahoma, Arial, sans-serif';
-        ctx.fillText(label, cx, metaBoxY + 40);
-
-        ctx.fillStyle = isBlue ? '#1b52a4' : '#0f172a';
-        ctx.font = 'bold 18px "Almarai", Tahoma, Arial, sans-serif';
-        ctx.fillText(val, cx, metaBoxY + 75);
-      };
-
-      drawMeta(0, 'اسم العميل', userProfile.displayName || 'عميل');
-      drawMeta(1, 'رقم الهاتف', userProfile.phoneNumber || 'غير مسجل');
-      drawMeta(2, 'الرصيد المتاح', `${currentBalance.toLocaleString('en-US')} ر.ي`, true);
-      drawMeta(3, 'الفترة المحددة', periodLabel);
-
-      // جدول العمليات
-      const tableY = metaBoxY + metaBoxH + 30;
-      const tableW = canvas.width - 80;
-      const tableX = 40;
-      const thH = 46;
-
-      ctx.fillStyle = '#1b52a4';
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(tableX, tableY, tableW, thH, [12, 12, 0, 0]);
-      else ctx.rect(tableX, tableY, tableW, thH);
-      ctx.fill();
-
-      // عناوين الجدول
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 15px "Almarai", Tahoma, Arial, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('#', tableX + tableW - 30, tableY + 26);
-      ctx.textAlign = 'right';
-      ctx.fillText('التاريخ والوقت', tableX + tableW - 220, tableY + 26);
-      ctx.fillText('الخدمة والعملية / المشترك', tableX + tableW - 600, tableY + 26);
-      ctx.textAlign = 'center';
-      ctx.fillText('الرقم / الكرت', tableX + tableW - 830, tableY + 26);
-      ctx.fillText('المبلغ (ر.ي)', tableX + tableW - 980, tableY + 26);
-      ctx.fillText('الحالة', tableX + 60, tableY + 26);
-
-      // صفوف العمليات
-      let currentY = tableY + thH;
-      const rowH = 48;
-      const maxRows = Math.min(filteredTransactions.length, 18);
-
-      for (let i = 0; i < maxRows; i++) {
-        const tx = filteredTransactions[i];
-        const isEven = i % 2 === 0;
-        ctx.fillStyle = isEven ? '#FFFFFF' : '#f8fafc';
-        ctx.fillRect(tableX, currentY, tableW, rowH);
-
-        ctx.strokeStyle = '#e2e8f0';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(tableX, currentY + rowH);
-        ctx.lineTo(tableX + tableW, currentY + rowH);
-        ctx.stroke();
-
-        const cleanTitle = (tx.transactionType || '')
-          .replace(/\s*\(?api\)?/gi, '')
-          .replace(/\s*-\s*api/gi, '')
-          .trim();
-
-        const phone = extractRecipientPhone(tx);
-        const alwadiInfo = getAlwadiSubscriberInfo(tx);
-        const readiness = getReadinessDetails(tx);
-        const dateStr = safeFormatDate(tx.transactionDate || tx.createdAt, 'yyyy/MM/dd - h:mm a');
-
-        // #
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#64748b';
-        ctx.font = 'bold 13px "Almarai", Tahoma, Arial, sans-serif';
-        ctx.fillText(String(i + 1), tableX + tableW - 30, currentY + 28);
-
-        // التاريخ
-        ctx.textAlign = 'right';
-        ctx.fillStyle = '#475569';
-        ctx.font = '13px "Almarai", Tahoma, Arial, sans-serif';
-        ctx.fillText(dateStr, tableX + tableW - 220, currentY + 28);
-
-        // الخدمة والمشترك
-        ctx.fillStyle = '#0f172a';
-        ctx.font = 'bold 14px "Almarai", Tahoma, Arial, sans-serif';
-        if (alwadiInfo) {
-          ctx.fillText(`${cleanTitle} (${alwadiInfo.name})`, tableX + tableW - 600, currentY + 28);
-        } else {
-          ctx.fillText(cleanTitle, tableX + tableW - 600, currentY + 28);
-        }
-
-        // الرقم / الكرت
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#1b52a4';
-        ctx.font = 'bold 14px monospace';
-        ctx.fillText(phone || alwadiInfo?.number || tx.cardNumber || '—', tableX + tableW - 830, currentY + 28);
-
-        // المبلغ
-        ctx.fillStyle = '#0f172a';
-        ctx.font = '900 15px "Almarai", Tahoma, Arial, sans-serif';
-        ctx.fillText(Number(tx.amount).toLocaleString('en-US'), tableX + tableW - 980, currentY + 28);
-
-        // الحالة
-        ctx.font = 'bold 12px "Almarai", Tahoma, Arial, sans-serif';
-        ctx.fillStyle = readiness.status === 'success' ? '#16a34a' : readiness.status === 'pending' ? '#d97706' : '#dc2626';
-        ctx.fillText(readiness.text, tableX + 60, currentY + 28);
-
-        currentY += rowH;
-      }
-
-      if (filteredTransactions.length === 0) {
-        ctx.fillStyle = '#f8fafc';
-        ctx.fillRect(tableX, currentY, tableW, 90);
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#64748b';
-        ctx.font = 'bold 16px "Almarai", Tahoma, Arial, sans-serif';
-        ctx.fillText('لا توجد عمليات مسجلة في هذه الفترة المحددة', tableX + tableW / 2, currentY + 50);
-        currentY += 90;
-      }
-
-      // صندوق الملخص المالي بالألوان الرسمية وحساب العمولة 2%
-      const summaryY = Math.max(currentY + 24, canvas.height - 240);
-      const summaryH = 120;
-      const summaryW = canvas.width - 80;
-      const summaryX = 40;
-
-      const sumGrad = ctx.createLinearGradient(summaryX, summaryY, summaryX + summaryW, summaryY);
-      sumGrad.addColorStop(0, '#0f3875');
-      sumGrad.addColorStop(1, '#1b52a4');
-      ctx.fillStyle = sumGrad;
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(summaryX, summaryY, summaryW, summaryH, 16);
-      else ctx.rect(summaryX, summaryY, summaryW, summaryH);
-      ctx.fill();
-
-      const sumColW = summaryW / 4;
-      const drawSummaryItem = (idx: number, title: string, numStr: string, isYellow = false) => {
-        const cx = summaryX + summaryW - (idx * sumColW) - (sumColW / 2);
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#E2E8F0';
-        ctx.font = 'bold 13px "Almarai", Tahoma, Arial, sans-serif';
-        ctx.fillText(title, cx, summaryY + 45);
-
-        ctx.fillStyle = isYellow ? '#FEF08A' : '#FFFFFF';
-        ctx.font = '900 24px "Almarai", Tahoma, Arial, sans-serif';
-        ctx.fillText(numStr, cx, summaryY + 85);
-      };
-
-      drawSummaryItem(0, 'إجمالي المبالغ المسددة', `${totalPaidAmount.toLocaleString('en-US')} ر.ي`);
-      drawSummaryItem(1, 'المبالغ المؤهلة للعمولة', `${totalEligibleAmount.toLocaleString('en-US')} ر.ي`);
-      drawSummaryItem(2, 'عمولة العميل المعتمدة (2%)', `${customerCommission.toLocaleString('en-US')} ر.ي`, true);
-      drawSummaryItem(3, 'الرصيد المتاح الحالي', `${currentBalance.toLocaleString('en-US')} ر.ي`);
-
-      // تذييل الصفحة
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#64748b';
-      ctx.font = 'bold 13px "Almarai", Tahoma, Arial, sans-serif';
-      ctx.fillText('تم إصدار هذا الكشف آلياً عبر نظام إدارة تطبيق ستار موبايل لخدمات الاتصالات والمدفوعات الإلكترونية', canvas.width / 2, canvas.height - 40);
-
-      // توليد ملف الـ PDF النقي المعتمد
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const pdfBlob = createPdfFromJpeg(imgData, canvas.width, canvas.height);
-
-      const fileName = `كشف_حساب_${(userProfile.displayName || 'العميل').replace(/\s+/g, '_')}.pdf`;
-      const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
-
-      // فتح واتساب مباشرة لإرسال ملف الـ PDF
-      if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-        try {
-          await navigator.share({
-            files: [pdfFile],
-            title: `كشف حساب - ${userProfile.displayName}`,
-            text: `كشف حساب مالي للعميل ${userProfile.displayName} عن ${periodLabel}`
-          });
-          return;
-        } catch (shareErr: any) {
-          if (shareErr.name === 'AbortError') return;
-        }
-      }
-
-      // بديل للمتصفحات الأخرى: تنزيل الـ PDF وفتح محادثة واتساب العميل مباشرة
-      const fileUrl = URL.createObjectURL(pdfBlob);
-      const a = document.createElement('a');
-      a.href = fileUrl;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(fileUrl);
 
       const rawPhone = (userProfile.phoneNumber || '').replace(/\D/g, '').slice(-9);
       const waMsg = encodeURIComponent(
-        `مرحباً ${userProfile.displayName}،\nمرفق لكم كشف الحساب المالي من تطبيق ستار موبايل عن ${periodLabel}.\nالرصيد المتاح: ${currentBalance.toLocaleString('en-US')} ريال.`
+        `⭐ *تطبيق ستار موبايل - كشف حساب مالي تفصيلي*\n\n` +
+        `👤 *العميل:* ${userProfile.displayName}\n` +
+        `📅 *الفترة:* ${periodLabel}\n` +
+        `🔢 *عدد العمليات:* ${filteredTransactions.length} عملية\n` +
+        `━━━━━━━━━━━━━━━\n` +
+        `💳 *إجمالي المسدد:* ${totalPaidAmount.toLocaleString('en-US')} ريال\n` +
+        `⭐ *عمولة العميل المعتمدة (2%):* ${customerCommission.toLocaleString('en-US')} ريال\n` +
+        `💰 *الرصيد المتاح الحالي:* ${currentBalance.toLocaleString('en-US')} ريال\n` +
+        `━━━━━━━━━━━━━━━\n` +
+        `تم توثيق كشف الحساب آلياً عبر نظام إدارة ستار موبايل.`
       );
       const waUrl = rawPhone ? `https://wa.me/967${rawPhone}?text=${waMsg}` : `https://web.whatsapp.com/send?text=${waMsg}`;
       window.open(waUrl, '_blank');
-
-      toast({
-        title: "تم استخراج ملف الـ PDF",
-        description: "تم تجهيز ملف كشف الحساب وفتح واتساب لإرساله للعميل مباشرة."
-      });
-    } catch (err: any) {
-      console.error('PDF WhatsApp share error:', err);
-      toast({
-        variant: 'destructive',
-        title: 'خطأ',
-        description: 'حدث خطأ أثناء استخراج ملف الـ PDF.'
-      });
-    } finally {
-      setIsGeneratingPdf(false);
     }
+
+    toast({
+      title: sendWhatsApp ? "تم فتح الكشف ومحادثة واتساب" : "تم فتح كشف الحساب",
+      description: "تم تجهيز كشف الحساب المتعدد الصفحات بتصميم الطباعة المعتمد."
+    });
   };
 
   // قائمة العمليات المعروضة في شريط أكبر ارتفاعاً ومريحاً
@@ -667,6 +948,8 @@ function UserReportPage() {
             .replace(/\s*\(?api\)?/gi, '')
             .replace(/\s*-\s*api/gi, '')
             .trim();
+
+          const isPending = tx.status === 'pending' || tx.readiness === 'قيد الانتظار' || readiness.text.includes('الانتظار');
 
           return (
             <Card 
@@ -714,14 +997,65 @@ function UserReportPage() {
                   </div>
                 </div>
 
-                {/* المبلغ والحالة */}
-                <div className="text-left shrink-0 space-y-1">
-                  <p className={cn("font-black text-base sm:text-lg", isCredit ? 'text-green-600' : 'text-foreground')}>
-                    {Number(tx.amount).toLocaleString('en-US')} ر.ي
-                  </p>
-                  <span className={cn("text-xs font-bold block", readiness.colorClass)}>
-                    {readiness.text}
-                  </span>
+                {/* المبلغ والحالة وأزرار الإجراءات للعمليات المعلقة */}
+                <div className="flex flex-col items-end justify-center gap-1.5 shrink-0">
+                  <div className="text-left space-y-0.5">
+                    <p className={cn("font-black text-base sm:text-lg", isCredit ? 'text-green-600' : 'text-foreground')}>
+                      {Number(tx.amount).toLocaleString('en-US')} ر.ي
+                    </p>
+                    <span className={cn("text-xs font-bold block", readiness.colorClass)}>
+                      {readiness.text}
+                    </span>
+                  </div>
+
+                  {/* أزرار الإجراءات */}
+                  <div className="flex items-center gap-1.5 pt-0.5">
+                    {/* أزرار نجاح / فشل للعملية المعلقة مباشرة في الكشف */}
+                    {isPending && (
+                      <>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openStatusModal(tx, 'success');
+                          }}
+                          className="h-7 px-2.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-black text-xs flex items-center gap-1 shadow-sm"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>نجاح</span>
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openStatusModal(tx, 'failed');
+                          }}
+                          className="h-7 px-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-black text-xs flex items-center gap-1 shadow-sm"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          <span>فشل</span>
+                        </Button>
+                      </>
+                    )}
+
+                    {/* زر حذف العملية نهائياً دون تعديل الرصيد */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      title="حذف العملية نهائياً (دون تعديل الرصيد)"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDeleteDialog(tx);
+                      }}
+                      className="h-7 px-2 text-xs font-bold text-muted-foreground hover:text-red-600 hover:bg-red-500/10 rounded-lg transition-colors flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">حذف</span>
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -736,7 +1070,7 @@ function UserReportPage() {
       <SimpleHeader title={userProfile ? `كشف حساب: ${userProfile.displayName}` : 'تحميل التقرير...'} />
       
       <div className="flex-1 overflow-y-auto p-4 space-y-4 max-w-4xl mx-auto w-full pb-20 no-scrollbar">
-        {/* كارت ملخص بيانات العميل مع زر إرسال PDF عبر واتساب مباشرة */}
+        {/* كارت ملخص بيانات العميل مع أزرار كشف الحساب المتعدد الصفحات */}
         <Card className="rounded-3xl border-border/60 shadow-sm overflow-hidden">
           <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -745,25 +1079,28 @@ function UserReportPage() {
                 بيانات حساب العميل
               </CardTitle>
 
-              {/* زر إرسال كشف حساب PDF عبر واتساب مباشرة بدلاً من الطباعة */}
-              <Button
-                type="button"
-                onClick={handleSendPdfToWhatsApp}
-                disabled={isLoading || isGeneratingPdf || !filteredTransactions || filteredTransactions.length === 0}
-                className="h-11 px-4 rounded-xl font-black text-xs sm:text-sm bg-[#16a34a] hover:bg-[#15803d] text-white shadow-sm flex items-center gap-2 self-start sm:self-auto"
-              >
-                {isGeneratingPdf ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>جاري تجهيز PDF...</span>
-                  </>
-                ) : (
-                  <>
-                    <Share2 className="w-4 h-4" />
-                    <span>إرسال كشف PDF عبر واتساب</span>
-                  </>
-                )}
-              </Button>
+              {/* أزرار كشف الحساب: زر إرسال واتساب وزر الطباعة و PDF متعدد الصفحات */}
+              <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+                <Button
+                  type="button"
+                  onClick={() => handleOpenStatement(true)}
+                  disabled={isLoading || !filteredTransactions || filteredTransactions.length === 0}
+                  className="h-11 px-4 rounded-xl font-black text-xs sm:text-sm bg-[#16a34a] hover:bg-[#15803d] text-white shadow-sm flex items-center gap-2"
+                >
+                  <Share2 className="w-4 h-4" />
+                  <span>إرسال كشف عبر واتساب</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={() => handleOpenStatement(false)}
+                  disabled={isLoading || !filteredTransactions || filteredTransactions.length === 0}
+                  className="h-11 px-4 rounded-xl font-black text-xs sm:text-sm bg-[#1b52a4] hover:bg-[#16468e] text-white shadow-sm flex items-center gap-2"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>كشف حساب للطباعة و PDF</span>
+                </Button>
+              </div>
             </div>
           </CardHeader>
 
@@ -893,7 +1230,183 @@ function UserReportPage() {
         transaction={selectedTx}
         onSyncStatus={handleSyncStatus}
         isSyncing={isSyncing}
+        isAdmin={true}
+        onActionStatus={(status) => {
+          if (selectedTx) {
+            openStatusModal(selectedTx, status);
+          }
+        }}
+        onDeleteTransaction={(tx) => {
+          openDeleteDialog(tx as any);
+        }}
       />
+
+      {/* نافذة تأكيد حذف العملية نهائياً دون تعديل الرصيد */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-md w-full rounded-3xl p-5" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black flex items-center gap-2 text-red-600">
+              <Trash2 className="w-5 h-5 text-red-600" />
+              <span>تأكيد حذف العملية</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground pt-1">
+              هل أنت متأكد من رغبتك في حذف هذه العملية نهائياً من كشف الحساب؟
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteTargetTx && (
+            <div className="bg-red-500/5 p-3 rounded-2xl border border-red-500/20 space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground font-semibold">العملية:</span>
+                <span className="font-bold text-foreground">{deleteTargetTx.transactionType}</span>
+              </div>
+              {extractRecipientPhone(deleteTargetTx) && (
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-semibold">رقم الهاتف/المشترك:</span>
+                  <span className="font-mono font-bold text-[#1b52a4]">{extractRecipientPhone(deleteTargetTx)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground font-semibold">المبلغ:</span>
+                <span className="font-black text-sm text-foreground">{Number(deleteTargetTx.amount).toLocaleString('en-US')} ريال</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground font-semibold">الحالة الحالية:</span>
+                <span className="font-bold text-muted-foreground">{deleteTargetTx.readiness || deleteTargetTx.status || 'غير محدد'}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/30 flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-[11px] font-bold text-amber-700 leading-relaxed">
+              تنبيه: سيتم حذف العملية فقط من سجل الكشف وسجل العمليات، ولن يتم تغيير أو خصم أو إضافة أي شيء إلى رصيد العميل نهائياً.
+            </p>
+          </div>
+
+          <DialogFooter className="grid grid-cols-2 gap-2 pt-2">
+            <Button
+              type="button"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+              className="h-11 rounded-xl font-black text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin ml-1.5" />
+                  <span>جاري الحذف...</span>
+                </>
+              ) : (
+                <span>حذف العملية نهائياً</span>
+              )}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={isDeleting}
+              className="h-11 rounded-xl font-black text-xs sm:text-sm"
+            >
+              إلغاء
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* نافذة تأكيد تغيير حالة العملية المعلقة وإدخال الملاحظة */}
+      <Dialog open={statusModalOpen} onOpenChange={setStatusModalOpen}>
+        <DialogContent className="max-w-md w-full rounded-3xl p-5" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black flex items-center gap-2">
+              {targetStatus === 'success' ? (
+                <>
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  <span>تأكيد نجاح العملية</span>
+                </>
+              ) : (
+                <>
+                  <XCircle className="w-5 h-5 text-red-600" />
+                  <span>تأكيد فشل العملية وإرجاع الرصيد</span>
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground pt-1">
+              {targetStatus === 'success' 
+                ? 'سيتم تحويل حالة هذه العملية إلى "جاهزة" وتأكيد إتمام السداد للعميل.' 
+                : `سيتم تحويل حالة هذه العملية إلى "فاشلة" وإعادة مبلغ (${Number(statusTargetTx?.amount || 0).toLocaleString('en-US')} ريال) إلى محفظة العميل فوراً.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          {statusTargetTx && (
+            <div className="bg-muted/40 p-3 rounded-2xl border border-border/60 space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground font-semibold">الخدمة:</span>
+                <span className="font-bold text-foreground">{statusTargetTx.transactionType}</span>
+              </div>
+              {extractRecipientPhone(statusTargetTx) && (
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-semibold">رقم الهاتف/المشترك:</span>
+                  <span className="font-mono font-bold text-[#1b52a4]">{extractRecipientPhone(statusTargetTx)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground font-semibold">المبلغ:</span>
+                <span className="font-black text-sm text-foreground">{Number(statusTargetTx.amount).toLocaleString('en-US')} ريال</span>
+              </div>
+            </div>
+          )}
+
+          {/* خيار الملاحظة (تلقائي "تم التسديد بنجاح" عند النجاح) */}
+          <div className="space-y-1.5 pt-1">
+            <Label className="text-xs font-black text-foreground flex items-center gap-1.5">
+              <span>الملاحظة المسجلة في السجل:</span>
+            </Label>
+            <Input
+              value={statusNote}
+              onChange={(e) => setStatusNote(e.target.value)}
+              placeholder="اكتب الملاحظة هنا..."
+              className="h-10 text-xs font-bold rounded-xl"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              {targetStatus === 'success' 
+                ? 'الملاحظة الافتراضية التلقائية هي: "تم التسديد بنجاح" ويمكنك تعديلها.' 
+                : 'ستظهر هذه الملاحظة للعميل في كشف حسابه لتوضيح سبب الرفض.'}
+            </p>
+          </div>
+
+          <DialogFooter className="grid grid-cols-2 gap-2 pt-2">
+            <Button
+              type="button"
+              onClick={handleConfirmStatusChange}
+              disabled={isUpdatingStatus}
+              className={cn(
+                "h-11 rounded-xl font-black text-xs sm:text-sm text-white",
+                targetStatus === 'success' ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"
+              )}
+            >
+              {isUpdatingStatus ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin ml-1.5" />
+                  <span>جاري التحديث...</span>
+                </>
+              ) : (
+                <span>{targetStatus === 'success' ? 'تأكيد النجاح' : 'تأكيد الفشل والإرجاع'}</span>
+              )}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setStatusModalOpen(false)}
+              disabled={isUpdatingStatus}
+              className="h-11 rounded-xl font-black text-xs sm:text-sm"
+            >
+              إلغاء
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
