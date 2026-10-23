@@ -599,6 +599,10 @@ export default function YemenMobilePage() {
     if (!phone || !amount || !user || !userDocRef || !firestore) return;
     const val = parseFloat(amount);
     if (isNaN(val) || val <= 0) return;
+    if (val < 21) {
+        toast({ variant: 'destructive', title: 'مبلغ غير مسموح', description: 'أقل مبلغ سداد مسموح به في يمن موبايل هو 21 ريال.' });
+        return;
+    }
     const costToDeduct = getEffectiveCreditCost(val);
     if ((userProfile?.balance ?? 0) < costToDeduct) {
         toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لإتمام عملية السداد.' });
@@ -611,15 +615,15 @@ export default function YemenMobilePage() {
             firestore,
             userId: user.uid,
             amount: costToDeduct,
-            transactionType: 'سداد يمن موبايل (رصيد)',
+            transactionType: 'يمن موبايل - سداد رصيد',
             recipientPhoneNumber: phone,
-            notes: `إلى رقم: ${phone}. مبلغ السداد: ${val}.`,
+            notes: `سداد رصيد للرقم: ${phone} بمبلغ: ${val} ريال`,
             serviceCategory: 'يمن موبايل'
         });
 
-        setLastTxDetails({ type: 'سداد رصيد يمن موبايل', phone: phone, amount: costToDeduct, transid: transid });
+        setLastTxDetails({ type: 'يمن موبايل - سداد رصيد', phone: phone, amount: costToDeduct, transid: transid });
 
-        // 2. إرسال الطلب للمزود مع مؤقت 10 ثوانٍ (إذا تأخر الرد تظهر نفس المنبثق تماماً)
+        // 2. إرسال الطلب للمزود مع مؤقت 45 ثانية
         await executeTelecomRequestWithTimeout({
             firestore,
             userId: user.uid,
@@ -651,17 +655,18 @@ export default function YemenMobilePage() {
     setIsActivatingOffer(true);
     try {
         // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
+        const pkgTitle = `يمن موبايل - ${selectedOffer.offerName}`;
         const { transid, backpass } = await initiateTelecomPayment({
             firestore,
             userId: user.uid,
             amount: totalToDeduct,
-            transactionType: `تفعيل ${selectedOffer.offerName}`,
+            transactionType: pkgTitle,
             recipientPhoneNumber: phone,
-            notes: `للرقم: ${phone}${isNumberLoaned ? ` (شامل سداد سلفة: ${loanAmt > 0 ? loanAmt : 'نعم'})` : ''}`,
+            notes: `تفعيل ${selectedOffer.offerName} للرقم: ${phone}${isNumberLoaned ? ` (شامل سداد سلفة: ${loanAmt > 0 ? loanAmt : 'نعم'})` : ''}`,
             serviceCategory: 'يمن موبايل'
         });
 
-        setLastTxDetails({ type: `تفعيل ${selectedOffer.offerName}`, phone: phone, amount: totalToDeduct, transid: transid });
+        setLastTxDetails({ type: pkgTitle, phone: phone, amount: totalToDeduct, transid: transid });
 
         // 2. إرسال الطلب للمزود مع مؤقت 10 ثوانٍ (إذا تأخر الرد تظهر نفس المنبثق تماماً)
         await executeTelecomRequestWithTimeout({

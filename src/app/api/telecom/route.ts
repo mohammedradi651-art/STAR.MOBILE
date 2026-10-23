@@ -7,7 +7,12 @@ import {
   SystemServicesConfig, 
   calculateApiTransactionCost 
 } from '@/lib/services-config';
-import { generateTransId, generateBackpass } from '@/lib/telecom-order';
+import { 
+  generateTransId, 
+  generateBackpass, 
+  validateTelecomRequest, 
+  resolveTelecomDetails 
+} from '@/lib/telecom-order';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -26,6 +31,21 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { action, service, ...payload } = body;
+
+    // التحقق الصارم من صحة الطلب والحدود الدنيا قبل أي عملية
+    const isBillingAction = !action || action === 'bill' || action === 'billoffer' || action === 'renew' || action === 'order' || service === 'sabaunits' || service === 'sabaoffer';
+    const sLower = (service || '').toLowerCase().trim();
+    if (isBillingAction || sLower === 'adenet' || sLower === 'aden_net') {
+      const validation = validateTelecomRequest(body);
+      if (!validation.valid) {
+        return NextResponse.json({
+          resultCode: "-400",
+          status: "failed",
+          message: validation.error,
+          resultDesc: validation.error
+        }, { status: 400 });
+      }
+    }
 
     // 1. استخراج بيانات الاعتماد من البيئة أولاً كقيم افتراضية
     let userId = process.env.TELECOM_USERID || '';
@@ -153,8 +173,6 @@ export async function POST(request: Request) {
     }
 
     // 4. معالجة طلب فحص الرصيد للعميل (إذا كان الأكشن balance)
-    const isBillingAction = !action || action === 'bill' || action === 'billoffer' || action === 'renew' || action === 'order' || service === 'sabaunits' || service === 'sabaoffer';
-
     if (action === 'balance' && !isInternalAppRequest) {
       if (service === 'info' && payload.type === 'provider') {
         // فحص رصيد الوكيل لدى المزود
@@ -214,21 +232,25 @@ export async function POST(request: Request) {
 
         batch.update(userRef, { balance: increment(-requiredCost) });
 
+        const telecomDetails = resolveTelecomDetails({ ...body, amount: requiredCost });
+        const finalRecipientPhone = telecomDetails.recipientPhoneNumber || targetMobile;
+
         const txRecord = {
           id: transid,
           userId: clientUserId,
           transactionDate: timestamp,
           createdAt: timestamp,
           amount: requiredCost,
-          transactionType: `API: ${service || 'yemen'} (${action || 'bill'})`,
-          recipientPhoneNumber: targetMobile,
-          notes: `سداد عبر الربط البرمجي API. الخدمة: ${service}. المبلغ: ${requiredCost} ر.ي. (قيد الانتظار)`,
+          transactionType: telecomDetails.transactionType,
+          recipientPhoneNumber: finalRecipientPhone,
+          phoneNumber: finalRecipientPhone,
+          notes: `${telecomDetails.notes} (قيد الانتظار)`,
           transid: transid,
           backpass: backpass,
           status: 'pending',
           readiness: 'قيد الانتظار',
           refunded: false,
-          serviceCategory: service || 'اتصالات'
+          serviceCategory: telecomDetails.serviceName || service || 'اتصالات'
         };
 
         batch.set(clientTxRef, txRecord);
@@ -284,9 +306,23 @@ export async function POST(request: Request) {
     } else if (service === 'post') {
       endpoint = 'post';
       apiRequestParams.action = action || 'bill';
-    } else if (service === 'adenet') {
+    } else if (service === 'adenet' || service === 'aden_net') {
       endpoint = 'adenet';
-      apiRequestParams.action = action || 'bill';
+      apiRequestParams.action = 'bill';
+      let pkgCode = String(payload.num || payload.packageid || payload.offerid || payload.amount || '3000').toLowerCase().trim();
+      const codeMap: Record<string, string> = {
+        '20gb': '3000',
+        '40gb': '6000',
+        '60gb': '9000',
+        '80gb': '12000',
+        '120gb': '30000',
+        '20': '3000',
+        '40': '6000',
+        '60': '9000',
+        '80': '12000',
+        '120': '30000'
+      };
+      apiRequestParams.num = codeMap[pkgCode] || pkgCode;
     } else if (service === 'sabaphone') {
       endpoint = 'sabaphone';
       apiRequestParams.action = action || 'bill';
@@ -349,11 +385,11 @@ export async function POST(request: Request) {
 
     const fullUrl = `${apiBaseUrl}${endpoint}?${params.toString()}`;
 
-    // 7. إرسال الطلب للمزود مع مهلة 10 ثوانٍ صارمة
-    // - إذا استجاب خلال 10 ثوانٍ بالنجاح -> اعتماد العملية وإرجاع النتيجة
-    // - إذا استجاب خلال 10 ثوانٍ بالرفض -> إرجاع الفلوس فوراً وإرجاع الخطأ للعميل
-    // - إذا تأخر المزود عن 10 ثوانٍ -> إرجاع رد ناجح للعميل كـ "قيد الانتظار" مع بقاء الخصم
-    const TIMEOUT_MS = 10000;
+    // 7. إرسال الطلب للمزود مع مهلة 45 ثانية متوافقة مع أنظمة الاتصالات ومزود اشحن لي
+    // - إذا استجاب بالنجاح -> اعتماد العملية وإرجاع النتيجة
+    // - إذا استجاب بالرفض -> إرجاع الفلوس لحساب العميل وإرجاع سبب الرفض فقط بدون كتابة عبارات استرجاع
+    // - إذا تأخر المزود -> إرجاع رد للعميل كـ "قيد الانتظار" مع بقاء الخصم
+    const TIMEOUT_MS = 45000;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -442,7 +478,7 @@ export async function POST(request: Request) {
       const isSuccess = data?.resultCode === "0" || data?.resultCode === 0 || data?.resultCode === "-2" || data?.resultCode === -2 || data?.status === 'success' || data?.action === 'done';
 
       if (isSuccess) {
-        // نجاح مؤكد من المزود خلال الـ 10 ثوانٍ -> تحديث المعاملة إلى جاهزة
+        // نجاح مؤكد من المزود -> تحديث المعاملة إلى جاهزة
         if (shouldPerformImmediateDeduction && clientUserId) {
           await markSuccessInDb(firestore, clientUserId, transid, data.resultDesc || data.message || 'تم السداد بنجاح');
         }
@@ -459,16 +495,12 @@ export async function POST(request: Request) {
         });
 
       } else {
-        // رفض مؤكد من المزود خلال الـ 10 ثوانٍ -> إرجاع الفلوس فوراً وإعلام العميل
+        // رفض مؤكد من المزود -> إرجاع الفلوس فوراً وإظهار سبب الرفض فقط (دون أي عبارات استرجاع)
         const failReason = data.resultDesc || data.message || 'تم رفض العملية من قبل مزود الخدمة.';
         if (shouldPerformImmediateDeduction && clientUserId) {
           await refundUser(firestore, clientUserId, transid, requiredCost, failReason);
           initialBalance += requiredCost;
         }
-
-        const formattedMessage = (shouldPerformImmediateDeduction && requiredCost > 0)
-          ? `${failReason} (تمت إعادة المبلغ إلى رصيدك)`
-          : failReason;
 
         return NextResponse.json({
           ...data,
@@ -477,15 +509,15 @@ export async function POST(request: Request) {
           refunded: Boolean(shouldPerformImmediateDeduction && requiredCost > 0),
           transid: transid,
           currentBalance: initialBalance,
-          message: formattedMessage,
-          resultDesc: formattedMessage
+          message: failReason,
+          resultDesc: failReason
         }, { status: 400 });
       }
 
     } catch (fetchErr: any) {
       clearTimeout(timeoutId);
 
-      // إذا تأخر المزود عن 10 ثوانٍ (AbortError)
+      // إذا تأخر المزود عن المهلة المحددة (AbortError) -> تظل قيد الانتظار دون استرجاع
       if (fetchErr.name === 'AbortError') {
         if (isQueryAction) {
           return NextResponse.json({
@@ -496,15 +528,15 @@ export async function POST(request: Request) {
           }, { status: 504 });
         }
 
-        console.warn(`[Telecom API] Trans ${transid} exceeded 10s. Marking pending.`);
+        console.warn(`[Telecom API] Trans ${transid} exceeded timeout. Keeping as pending.`);
         return NextResponse.json({
           resultCode: "0",
           status: "pending",
           transid: transid,
           chargedCost: requiredCost,
           remainingBalance: initialBalance,
-          message: "تم إرسال الطلب وهو قيد المعالجة لدى المزود (قيد الانتظار)",
-          resultDesc: "تم إرسال الطلب وهو قيد المعالجة لدى المزود (قيد الانتظار)"
+          message: "العملية قيد الانتظار، جاري معالجة الطلب لدى المزود",
+          resultDesc: "العملية قيد الانتظار، جاري معالجة الطلب لدى المزود"
         });
       }
 
@@ -573,7 +605,8 @@ async function refundUser(firestore: any, userId: string, transid: string, amoun
     }
 
     const currentNotes = snap.exists() ? (snap.data()?.notes || '') : '';
-    const updatedNotes = currentNotes ? `${currentNotes}\nسبب الرفض: ${reason}` : `سبب الرفض: ${reason}`;
+    const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
+    const updatedNotes = cleanNotes ? `${cleanNotes}\nسبب الرفض: ${reason}` : `سبب الرفض: ${reason}`;
 
     const updateData = {
       status: 'failed',

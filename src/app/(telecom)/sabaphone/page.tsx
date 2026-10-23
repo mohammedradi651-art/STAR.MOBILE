@@ -423,7 +423,7 @@ export default function SabaphonePage() {
 
         const cost = calculateUnitsCost(count);
         setConfirmData({
-            title: `شحن وحدات (${lineTypeTab === 'prepaid' ? 'دفع مسبق' : 'فوترة'})`,
+            title: `سبأفون - شحن وحدات (${count} وحدة)`,
             item: `${count} وحدة`,
             amount: cost,
             service: 'sabaunits',
@@ -441,7 +441,7 @@ export default function SabaphonePage() {
         const rate = isApiUser ? (config.sabafon?.instantNorthRate ?? 1) : 1;
         const finalCost = roundCurrency(item.price * rate);
         setConfirmData({
-            title: `شحن فوري شمال`,
+            title: `سبأفون - شحن فوري شمال (فئة ${item.category})`,
             item: `فئة ${item.category}`,
             amount: finalCost,
             service: 'sabaphone',
@@ -460,7 +460,7 @@ export default function SabaphonePage() {
         const rate = isApiUser ? (config.sabafon?.instantSouthRate ?? config.sabafon?.balanceRate ?? 3.0) : 3.0;
         const finalCost = roundCurrency(item.price * rate);
         setConfirmData({
-            title: `شحن فوري جنوب`,
+            title: `سبأفون - شحن فوري جنوب (فئة ${item.category})`,
             item: `فئة ${item.category}`,
             amount: finalCost,
             service: 'sbay',
@@ -479,7 +479,7 @@ export default function SabaphonePage() {
         const rate = isApiUser ? (config.sabafon?.packagesRate ?? config.sabafon?.rate ?? 1) : 1;
         const finalCost = roundCurrency(pkg.price * rate);
         setConfirmData({
-            title: `تفعيل ${pkg.name}`,
+            title: `سبأفون - ${pkg.name}`,
             item: pkg.name,
             amount: finalCost,
             service: 'sabaoffer',

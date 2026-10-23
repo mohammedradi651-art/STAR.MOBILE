@@ -2,11 +2,21 @@ import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
 import { collection, query, where, getDocs, doc, writeBatch, increment, getDoc } from 'firebase/firestore';
 import { DEFAULT_SERVICES_CONFIG, SystemServicesConfig, calculateApiTransactionCost } from '@/lib/services-config';
+import { 
+  validateTelecomRequest, 
+  resolveTelecomDetails, 
+  generateTransId, 
+  generateBackpass 
+} from '@/lib/telecom-order';
 
 /**
- * @fileOverview نقطة نهاية سداد العمليات الاحترافية v1.6
- * تدعم الخصم من رصيد العميل المستهدف إذا كان الطالب مديراً (Master Key Mode)
- * وتطبق الأسعار الدقيقة من الربط البرمجي
+ * @fileOverview نقطة نهاية سداد العمليات الاحترافية v2.0
+ * مطابقة تماماً لنظام الحساب العادي:
+ * 1. فحص الحدود الدنيا الصارمة والرفض الفوري دون خصم.
+ * 2. أسماء باقات واضحة ومباشرة من رقم الكود وبدون أي ذكر لكلمة API.
+ * 3. خصم الرصيد أولاً وتسجيل المعاملة كـ "قيد الانتظار".
+ * 4. إذا تأخر المزود تبقى "قيد الانتظار"، وإذا نجح تكتمل "جاهزة"، وإذا فشل يُعاد الرصيد بدون كتابة عبارة الإرجاع.
+ * 5. حفظ وتثبيت الرقم المسدد له دائماً.
  */
 
 const corsHeaders = {
@@ -61,11 +71,24 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { mobile, action, service } = body;
 
-    if (!mobile || !action || !service) {
+    if (!mobile || !service) {
       return NextResponse.json({
         success: false,
         code: 'SM_VALIDATION_ERROR',
-        message: 'Missing required fields (mobile, action, service)',
+        message: 'Missing required fields (mobile, service)',
+        transactionId: null,
+        data: null,
+        timestamp
+      }, { status: 400, headers: corsHeaders });
+    }
+
+    // 2. التحقق الصارم من الحدود الدنيا وضوابط الشركات (يمن موبايل 21، يو 100، سبأفون 50 وحدة، واي 100، إنترنت 250، هاتف 200، عدن نت باقات فقط)
+    const validation = validateTelecomRequest(body);
+    if (!validation.valid) {
+      return NextResponse.json({
+        success: false,
+        code: 'SM_VALIDATION_ERROR',
+        message: validation.error,
         transactionId: null,
         data: null,
         timestamp
@@ -83,23 +106,22 @@ export async function POST(req: Request) {
       console.warn("Could not read telecom_config in v1/pay:", e);
     }
 
-    // 2. منطق توجيه الخصم (Redirection Logic)
-    // إذا كان الطالب مديراً، نبحث عن العميل صاحب الرقم "mobile" لنخصم منه
+    // 3. توجيه الخصم (إذا كان الطالب مديراً، نبحث عن العميل صاحب الرقم "mobile" لنخصم منه)
     let effectiveUserId = requesterDoc.id;
     let effectiveUserData = requesterData;
 
     if (isAdmin) {
-        const cleanMobile = mobile.replace(/\D/g, '').slice(-9);
-        const targetQ = query(collection(firestore, 'users'), where('phoneNumber', '==', cleanMobile));
-        const targetSnap = await getDocs(targetQ);
-        
-        if (!targetSnap.empty) {
-            effectiveUserId = targetSnap.docs[0].id;
-            effectiveUserData = targetSnap.docs[0].data();
-        }
+      const cleanMobile = mobile.replace(/\D/g, '').slice(-9);
+      const targetQ = query(collection(firestore, 'users'), where('phoneNumber', '==', cleanMobile));
+      const targetSnap = await getDocs(targetQ);
+      
+      if (!targetSnap.empty) {
+        effectiveUserId = targetSnap.docs[0].id;
+        effectiveUserData = targetSnap.docs[0].data();
+      }
     }
 
-    // احتساب السعر الدقيق من الربط البرمجي مع تطبيق خصومات العميل
+    // احتساب السعر الدقيق من الربط البرمجي
     const payAmount = calculateApiTransactionCost(body, systemConfig, effectiveUserData);
     const clientBalance = Number(effectiveUserData.balance || 0);
 
@@ -119,62 +141,167 @@ export async function POST(req: Request) {
       }, { status: 400, headers: corsHeaders });
     }
 
-    // 3. استدعاء خدمة السداد الداخلية
-    const origin = new URL(req.url).origin;
-    const telecomResponse = await fetch(`${origin}/api/telecom`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'x-internal-handled': 'true',
-        'x-api-key': apiKey
-      },
-      body: JSON.stringify(body)
+    // 4. استخراج مسمى الخدمة واسم الباقة بالعربي بدقة وبدون أي ذكر لـ API
+    const telecomDetails = resolveTelecomDetails({
+      service,
+      action: action || 'bill',
+      amount: payAmount,
+      num: body.num,
+      offerid: body.offerid,
+      packageid: body.packageid,
+      israsid: body.israsid,
+      mobile: mobile,
+      recipientPhoneNumber: mobile
     });
 
-    const result = await telecomResponse.json();
-    const isSuccess = result.resultCode === "0" || result.resultCode === 0 || result.resultCode === "-2" || result.resultCode === -2;
+    const transactionId = body.transid || generateTransId();
+    const backpass = body.backpass || generateBackpass();
 
-    if (isSuccess) {
-      const batch = writeBatch(firestore);
-      const userRef = doc(firestore, 'users', effectiveUserId);
-      const transactionId = result.transid || `TX-${Date.now()}`;
+    // 5. خصم الرصيد أولاً وتسجيل المعاملة كـ "قيد الانتظار"
+    const userRef = doc(firestore, 'users', effectiveUserId);
+    const txRef = doc(firestore, `users/${effectiveUserId}/transactions`, transactionId);
+    const globalTxRef = doc(firestore, 'paymentTransactions', transactionId);
 
-      // الخصم من المستخدم الفعلي (العميل)
-      batch.update(userRef, { balance: increment(-payAmount) });
+    const initBatch = writeBatch(firestore);
+    initBatch.update(userRef, { balance: increment(-payAmount) });
 
-      // تسجيل العملية في حساب العميل
-      const txRef = doc(collection(firestore, `users/${effectiveUserId}/transactions`));
-      batch.set(txRef, {
-        userId: effectiveUserId,
-        transactionDate: timestamp,
-        amount: payAmount,
-        transactionType: `API: ${service}`,
-        notes: isAdmin ? `طلب عبر البوت للرقم: ${mobile}` : `طلب ربط خارجي للرقم: ${mobile}`,
-        recipientPhoneNumber: mobile,
-        transid: transactionId
+    const txRecord = {
+      id: transactionId,
+      userId: effectiveUserId,
+      transactionDate: timestamp,
+      createdAt: timestamp,
+      amount: payAmount,
+      transactionType: telecomDetails.transactionType,
+      notes: telecomDetails.notes,
+      recipientPhoneNumber: telecomDetails.recipientPhoneNumber || mobile,
+      transid: transactionId,
+      backpass: backpass,
+      status: 'pending',
+      readiness: 'قيد الانتظار',
+      refunded: false,
+      serviceCategory: telecomDetails.serviceName
+    };
+
+    initBatch.set(txRef, txRecord);
+    initBatch.set(globalTxRef, txRecord);
+    await initBatch.commit();
+
+    // 6. استدعاء محرك السداد الداخلي
+    const origin = new URL(req.url).origin;
+    let telecomResponse: Response;
+    let result: any = {};
+
+    try {
+      telecomResponse = await fetch(`${origin}/api/telecom`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-internal-handled': 'true',
+          'x-api-key': apiKey
+        },
+        body: JSON.stringify({
+          ...body,
+          transid: transactionId,
+          backpass: backpass
+        })
       });
 
-      await batch.commit();
+      result = await telecomResponse.json().catch(() => ({}));
+    } catch (fetchErr: any) {
+      console.warn("Fetch telecom internal route timed out or error:", fetchErr);
+      // إذا تأخر الاتصال، تبقى العملية "قيد الانتظار" والرصيد مخصوم
+      return NextResponse.json({
+        success: true,
+        code: 'SM_PENDING',
+        message: 'تم إرسال الطلب وهو قيد المعالجة لدى المزود (قيد الانتظار)',
+        transactionId: transactionId,
+        data: {
+          mobile: telecomDetails.recipientPhoneNumber || mobile,
+          amount: payAmount,
+          service: telecomDetails.transactionType,
+          status: 'pending'
+        },
+        timestamp
+      }, { headers: corsHeaders });
+    }
+
+    const isSuccess = result.resultCode === "0" || result.resultCode === 0 || result.resultCode === "-2" || result.resultCode === -2;
+    const isPending = result.status === 'pending';
+
+    if (isSuccess && !isPending) {
+      // نجاح العملية -> تحديث الحالة إلى جاهزة
+      const successPayload = {
+        status: 'success',
+        readiness: 'جاهزة',
+        providerMessage: result.resultDesc || result.message || 'تم تنفيذ العملية بنجاح',
+        completedAt: new Date().toISOString()
+      };
+
+      const successBatch = writeBatch(firestore);
+      successBatch.update(txRef, successPayload);
+      successBatch.set(globalTxRef, successPayload, { merge: true });
+      await successBatch.commit();
 
       return NextResponse.json({
         success: true,
         code: 'SM_SUCCESS',
-        message: 'Transaction processed successfully',
+        message: 'تم تنفيذ العملية بنجاح',
         transactionId: transactionId,
         data: {
-            mobile: mobile,
-            amount: payAmount,
-            clientName: effectiveUserData.displayName,
-            newBalance: (effectiveUserData.balance || 0) - payAmount
+          mobile: telecomDetails.recipientPhoneNumber || mobile,
+          amount: payAmount,
+          service: telecomDetails.transactionType,
+          clientName: effectiveUserData.displayName,
+          newBalance: clientBalance - payAmount
         },
         timestamp
       }, { headers: corsHeaders });
+
+    } else if (isPending) {
+      // قيد الانتظار لدى المزود
+      return NextResponse.json({
+        success: true,
+        code: 'SM_PENDING',
+        message: 'تم إرسال الطلب وهو قيد المعالجة لدى المزود (قيد الانتظار)',
+        transactionId: transactionId,
+        data: {
+          mobile: telecomDetails.recipientPhoneNumber || mobile,
+          amount: payAmount,
+          service: telecomDetails.transactionType,
+          status: 'pending'
+        },
+        timestamp
+      }, { headers: corsHeaders });
+
     } else {
+      // فشل ورفض من المزود -> إرجاع الرصيد وتحديث المعاملة إلى فاشلة بدون كتابة "تم إرجاع المبلغ"
+      const rawError = result.resultDesc || result.message || 'فشلت العملية من المزود.';
+      const cleanError = rawError
+        .replace(/تمت?\s*إعادة\s*المبلغ[^\n.]*/gi, '')
+        .replace(/تم\s*استرجاع\s*المبلغ[^\n.]*/gi, '')
+        .trim() || 'تم رفض العملية من قبل مزود الخدمة.';
+
+      const refundBatch = writeBatch(firestore);
+      refundBatch.update(userRef, { balance: increment(payAmount) });
+
+      const failPayload = {
+        status: 'failed',
+        readiness: 'فاشلة',
+        refunded: true,
+        providerMessage: cleanError,
+        notes: `${telecomDetails.notes}\nالسبب: ${cleanError}`,
+        failedAt: new Date().toISOString()
+      };
+
+      refundBatch.update(txRef, failPayload);
+      refundBatch.set(globalTxRef, failPayload, { merge: true });
+      await refundBatch.commit();
+
       return NextResponse.json({
         success: false,
         code: 'SM_PROVIDER_ERROR',
-        message: result.resultDesc || 'Provider failed',
-        transactionId: null,
+        message: cleanError,
+        transactionId: transactionId,
         data: result,
         timestamp
       }, { status: 400, headers: corsHeaders });

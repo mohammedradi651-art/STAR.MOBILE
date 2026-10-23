@@ -396,6 +396,15 @@ export default function LandlinePage() {
         const baseAmount = parseFloat(amount);
         if (isNaN(baseAmount) || baseAmount <= 0) return;
 
+        if (activeTab === 'internet' && baseAmount < 250) {
+            toast({ variant: 'destructive', title: 'مبلغ غير مسموح', description: 'أقل مبلغ سداد للإنترنت الأرضي هو 250 ريال.' });
+            return;
+        }
+        if (activeTab === 'landline' && baseAmount < 200) {
+            toast({ variant: 'destructive', title: 'مبلغ غير مسموح', description: 'أقل مبلغ سداد للهاتف الثابت هو 200 ريال.' });
+            return;
+        }
+
         const totalToDeduct = isApiUser
             ? calculateFinalServicePrice(baseAmount, config.landline_adsl)
             : baseAmount + Math.ceil(baseAmount * 0.05);
@@ -410,7 +419,10 @@ export default function LandlinePage() {
         setIsProcessing(true);
         try {
             const serviceType = activeTab === 'internet' ? 'adsl' : 'line';
-            const txType = `سداد ${activeTab === 'internet' ? 'ADSL' : 'هاتف ثابت'}`;
+            const txType = activeTab === 'internet' ? 'الإنترنت المنزلي ADSL - سداد' : 'الهاتف الثابت - سداد فاتورة';
+            const txNotes = activeTab === 'internet' 
+                ? `سداد اشتراك الإنترنت الأرضي ADSL للرقم: ${phone} بمبلغ: ${baseAmount} ريال`
+                : `سداد فاتورة الهاتف الثابت للرقم: ${phone} بمبلغ: ${baseAmount} ريال`;
 
             // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
             const { transid, backpass } = await initiateTelecomPayment({
@@ -419,11 +431,11 @@ export default function LandlinePage() {
                 amount: totalToDeduct,
                 transactionType: txType,
                 recipientPhoneNumber: phone,
-                notes: `رقم: ${phone}${isApiUser ? '' : ` + عمولة: ${feeOrDiscount}`}`,
+                notes: txNotes,
                 serviceCategory: 'الثابت والانترنت الارضي'
             });
 
-            setLastTxDetails({ type: `سداد ${activeTab === 'internet' ? 'الإنترنت' : 'الثابت'}`, phone, amount: totalToDeduct, transid });
+            setLastTxDetails({ type: txType, phone, amount: totalToDeduct, transid });
 
             // 2. إرسال الطلب للمزود مع مؤقت 10 ثوانٍ (إذا تأخر الرد تظهر نفس المنبثق تماماً)
             await executeTelecomRequestWithTimeout({

@@ -12,7 +12,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import Image from 'next/image';
-import DashboardPage from '@/app/login/page';
+import DashboardPage from '@/app/(auth)/login/page';
 
 export const dynamic = 'force-dynamic';
 

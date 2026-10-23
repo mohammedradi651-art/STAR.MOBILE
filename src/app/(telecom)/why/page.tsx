@@ -192,6 +192,11 @@ export default function WhyPage() {
     const handleProcessPayment = async (payAmount: number, typeLabel: string, extraPayload: any) => {
         if (!phone || !user || !userDocRef || !firestore) return;
         
+        if (extraPayload?.israsid === '1' && payAmount < 100) {
+            toast({ variant: 'destructive', title: 'مبلغ غير مسموح', description: 'أقل مبلغ سداد للرصيد في شركة واي هو 100 ريال.' });
+            return;
+        }
+
         const finalToDeduct = roundCurrency(payAmount * whyEffectiveRate);
 
         if ((userProfile?.balance ?? 0) < finalToDeduct) {
@@ -201,18 +206,22 @@ export default function WhyPage() {
 
         setIsProcessing(true);
         try {
+            const isOffer = extraPayload?.israsid !== '1';
+            const txTitle = isOffer ? `واي - ${typeLabel}` : 'واي - سداد رصيد';
+            const txNotes = isOffer ? `تفعيل ${typeLabel} واي للرقم: ${phone}` : `سداد رصيد واي للرقم: ${phone} بمبلغ: ${payAmount} ريال`;
+
             // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
             const { transid, backpass } = await initiateTelecomPayment({
                 firestore,
                 userId: user.uid,
                 amount: finalToDeduct,
-                transactionType: `سداد واي (${typeLabel})`,
+                transactionType: txTitle,
                 recipientPhoneNumber: phone,
-                notes: `للرقم: ${phone}`,
+                notes: txNotes,
                 serviceCategory: 'واي'
             });
 
-            setLastTxDetails({ type: `سداد واي ${typeLabel}`, phone: phone, amount: finalToDeduct, transid: transid });
+            setLastTxDetails({ type: txTitle, phone: phone, amount: finalToDeduct, transid: transid });
 
             // 2. إرسال الطلب للمزود مع مؤقت 10 ثوانٍ (إذا تأخر الرد تظهر نفس المنبثق تماماً)
             await executeTelecomRequestWithTimeout({

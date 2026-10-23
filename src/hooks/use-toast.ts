@@ -151,7 +151,7 @@ function toast({ ...props }: Toast) {
   // If this is a destructive toast (an error), trigger the global custom error modal
   if (props.variant === 'destructive') {
     const msg = (props.description || props.title || "حدث خطأ غير متوقع") as string;
-    errorEmitter.emit('custom-error', msg);
+    errorEmitter.emit('custom-error', { message: msg, source: 'local' });
     // Return a dummy object to satisfy the expected return type
     return {
       id: "0",

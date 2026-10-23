@@ -221,14 +221,14 @@ export default function AdenNetPage() {
                 firestore,
                 userId: user.uid,
                 amount: totalToDeduct,
-                transactionType: `تفعيل ${selectedOffer.offerName}`,
+                transactionType: `عدن نت - ${selectedOffer.offerName}`,
                 recipientPhoneNumber: phone,
-                notes: `للرقم: ${phone}. سعر: ${basePrice}${isApiUser ? '' : ` + عمولة: ${feeOrDiscount}`}.`,
+                notes: `تفعيل ${selectedOffer.offerName} للرقم: ${phone}`,
                 serviceCategory: 'عدن نت'
             });
 
             setLastTxDetails({
-                type: `تفعيل ${selectedOffer.offerName}`,
+                type: `عدن نت - ${selectedOffer.offerName}`,
                 phone: phone,
                 amount: totalToDeduct,
                 transid: transid

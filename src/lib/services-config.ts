@@ -342,7 +342,43 @@ export const KNOWN_PACKAGE_PRICES: Record<string, number> = {
   'why_250': 250,
   'why_500': 500,
   'why_900': 900,
-  'why_2000': 2000
+  'why_2000': 2000,
+
+  // عدن نت
+  'adenet_20gb': 3000,
+  'adenet_3000': 3000,
+  'adenet_40gb': 6000,
+  'adenet_6000': 6000,
+  'adenet_60gb': 9000,
+  'adenet_9000': 9000,
+  'adenet_80gb': 12000,
+  'adenet_12000': 12000,
+  'adenet_120gb': 30000,
+  'adenet_30000': 30000,
+  '20gb': 3000,
+  '3000': 3000,
+  '40gb': 6000,
+  '6000': 6000,
+  '60gb': 9000,
+  '9000': 9000,
+  '80gb': 12000,
+  '12000': 12000,
+  '120gb': 30000,
+  '30000': 30000,
+
+  // يمن فورجي 4G
+  '4g_15gb': 2400,
+  '4G_15GB': 2400,
+  '4g_25gb': 4000,
+  '4G_25GB': 4000,
+  '4g_60gb': 8000,
+  '4G_60GB': 8000,
+  '4g_130gb': 16000,
+  '4G_130GB': 16000,
+  '4g_250gb': 26000,
+  '4G_250GB': 26000,
+  '4g_500gb': 46000,
+  '4G_500GB': 46000
 };
 
 /**
@@ -424,12 +460,14 @@ export function calculateApiTransactionCost(
 
   // 8. يمن فورجي 4G
   if (service === 'yem4g') {
-    return calculateFinalServicePrice(rawAmount, config.yemen_4g);
+    const base4gPrice = KNOWN_PACKAGE_PRICES[packageKey] || rawAmount;
+    return calculateFinalServicePrice(base4gPrice, config.yemen_4g);
   }
 
-  // 9. عدن نت
-  if (service === 'adenet') {
-    return calculateFinalServicePrice(rawAmount, config.aden_net);
+  // 9. عدن نت (باقات فقط)
+  if (service === 'adenet' || service === 'aden_net') {
+    const adenBasePrice = KNOWN_PACKAGE_PRICES[`adenet_${packageKey}`] || KNOWN_PACKAGE_PRICES[packageKey] || rawAmount;
+    return calculateFinalServicePrice(adenBasePrice, config.aden_net);
   }
 
   // 10. الهاتف الثابت والإنترنت المنزلي ADSL

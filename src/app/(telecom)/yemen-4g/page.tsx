@@ -312,13 +312,13 @@ export default function Yemen4GPage() {
                 firestore,
                 userId: user.uid,
                 amount: totalToDeduct,
-                transactionType: 'سداد يمن فورجي',
+                transactionType: 'يمن فورجي - سداد رصيد',
                 recipientPhoneNumber: phone,
-                notes: `إلى رقم: ${phone}. مبلغ: ${baseAmount}${isApiUser ? '' : ` + عمولة: ${feeOrDiscount}`}.`,
+                notes: `سداد رصيد يمن فورجي للرقم: ${phone} بمبلغ: ${baseAmount} ريال`,
                 serviceCategory: 'يمن فورجي'
             });
 
-            setLastTxDetails({ type: 'سداد رصيد يمن فورجي', phone: phone, amount: totalToDeduct, transid: transid });
+            setLastTxDetails({ type: 'يمن فورجي - سداد رصيد', phone: phone, amount: totalToDeduct, transid: transid });
 
             // 2. إرسال الطلب للمزود مع مؤقت 10 ثوانٍ (إذا تأخر الرد تظهر نفس المنبثق تماماً)
             await executeTelecomRequestWithTimeout({
@@ -368,18 +368,19 @@ export default function Yemen4GPage() {
 
         setIsActivatingOffer(true);
         try {
+            const pkgTitle = `يمن فورجي - ${selectedOffer.offerName}`;
             // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
             const { transid, backpass } = await initiateTelecomPayment({
                 firestore,
                 userId: user.uid,
                 amount: totalToDeduct,
-                transactionType: `تفعيل ${selectedOffer.offerName}`,
+                transactionType: pkgTitle,
                 recipientPhoneNumber: phone,
-                notes: `للرقم: ${phone}. سعر: ${basePrice}${isApiUser ? '' : ` + عمولة: ${feeOrDiscount}`}.`,
+                notes: `تفعيل ${selectedOffer.offerName} للرقم: ${phone}`,
                 serviceCategory: 'يمن فورجي'
             });
 
-            setLastTxDetails({ type: `تفعيل ${selectedOffer.offerName}`, phone: phone, amount: totalToDeduct, transid: transid });
+            setLastTxDetails({ type: pkgTitle, phone: phone, amount: totalToDeduct, transid: transid });
 
             // 2. إرسال الطلب للمزود مع مؤقت 10 ثوانٍ (إذا تأخر الرد تظهر نفس المنبثق تماماً)
             await executeTelecomRequestWithTimeout({

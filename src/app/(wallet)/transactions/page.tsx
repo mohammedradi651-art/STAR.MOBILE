@@ -33,15 +33,7 @@ import {
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay, isValid } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { isTelecomService, getReadinessDetails } from '@/lib/telecom-order';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
-} from '@/components/ui/dialog';
+import { TransactionDetailsModal, extractRecipientPhone } from '@/components/layout/transaction-details-modal';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -340,7 +332,18 @@ export default function TransactionsPage() {
                                             </div>
                                             <div className='text-right'>
                                                 <p className="font-bold text-sm text-foreground">{tx.transactionType}</p>
-                                                <p className="text-[10px] text-muted-foreground mt-0.5">{safeFormatDate(tx.transactionDate, 'd MMMM yyyy')}</p>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <p className="text-[10px] text-muted-foreground">{safeFormatDate(tx.transactionDate, 'd MMMM yyyy')}</p>
+                                                    {(() => {
+                                                        const p = extractRecipientPhone(tx);
+                                                        if (!p) return null;
+                                                        return (
+                                                            <span className="text-[10px] font-mono font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded-md">
+                                                                {p}
+                                                            </span>
+                                                        );
+                                                    })()}
+                                                </div>
                                             </div>
                                         </div>
                                         <div className="text-left">
@@ -376,74 +379,13 @@ export default function TransactionsPage() {
         </div>
       </div>
       
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="rounded-[32px] max-w-[90vw] sm:max-w-md bg-white dark:bg-slate-900 outline-none">
-              <DialogHeader>
-                  <DialogTitle className="text-center font-black">تفاصيل العملية</DialogTitle>
-                  <DialogDescription className="text-center">الرقم المرجعي: {selectedTx ? generateNumericId(selectedTx.id) : '...'}</DialogDescription>
-              </DialogHeader>
-              {selectedTx && (
-                  <div className="space-y-4 py-4 text-sm" dir="rtl">
-                      <div className="flex justify-between items-center py-2 border-b border-dashed">
-                          <span className="text-muted-foreground flex items-center gap-2"><Tag className="h-4 w-4 text-primary"/> النوع:</span>
-                          <span className="font-bold">{selectedTx.transactionType}</span>
-                      </div>
-                      <div className="flex justify-between items-center py-2 border-b border-dashed">
-                          <span className="text-muted-foreground flex items-center gap-2"><Banknote className="h-4 w-4 text-primary"/> المبلغ:</span>
-                          <span className="font-black text-lg text-primary">{selectedTx.amount.toLocaleString()} ريال</span>
-                      </div>
-                      <div className="flex justify-between items-center py-2 border-b border-dashed">
-                          <span className="text-muted-foreground flex items-center gap-2"><Calendar className="h-4 w-4 text-primary"/> التاريخ:</span>
-                          <span className="font-bold">{safeFormatDate(selectedTx.transactionDate, 'eeee, d MMMM yyyy')}</span>
-                      </div>
-                      <div className="flex justify-between items-center py-2 border-b border-dashed">
-                          <span className="text-muted-foreground flex items-center gap-2"><Clock className="h-4 w-4 text-primary"/> الوقت:</span>
-                          <span className="font-bold">{safeFormatDate(selectedTx.transactionDate, 'h:mm:ss a')}</span>
-                      </div>
-                      {(isTelecomService(selectedTx.transactionType) || selectedTx.transactionType.includes('شراء كرت') || selectedTx.status) && (() => {
-                          const readiness = getReadinessDetails(selectedTx);
-                          return (
-                              <div className="flex justify-between items-center py-2 border-b border-dashed">
-                                  <span className="text-muted-foreground flex items-center gap-2"><Activity className="h-4 w-4 text-primary"/> الجاهزية:</span>
-                                  <div className="flex items-center gap-1.5">
-                                      <span className={cn("font-black text-xs px-3 py-0.5 rounded-full border", readiness.bgClass)}>
-                                          {readiness.text}
-                                      </span>
-                                      {isSyncing && readiness.status === 'pending' && (
-                                          <RefreshCw className="h-3.5 w-3.5 animate-spin text-amber-600 dark:text-amber-400" />
-                                      )}
-                                  </div>
-                              </div>
-                          );
-                      })()}
-                      {selectedTx.status === 'failed' && (
-                          <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-2xl text-center text-xs font-bold leading-relaxed">
-                              تم استرجاع المبلغ لحسابك تلقائياً لتعذر إصدار الكرت من المزود.
-                          </div>
-                      )}
-                      {selectedTx.cardNumber && (
-                          <div className="pt-4 bg-muted/30 p-4 rounded-2xl">
-                              <h4 className="font-bold text-xs mb-3 flex items-center gap-2 text-primary"><CreditCard className="w-3.5 h-3.5"/> تفاصيل الكرت المستلم</h4>
-                              <div className="flex justify-between items-center bg-background p-3 rounded-xl border border-dashed">
-                                  <span className="text-[10px] text-muted-foreground">رقم الكرت:</span>
-                                  <div className="flex items-center gap-3">
-                                      <span className="font-mono font-black text-base tracking-widest">{selectedTx.cardNumber}</span>
-                                      <button onClick={() => handleCopy(selectedTx.cardNumber!, 'الكرت')}><Copy className="h-3.5 w-3.5 text-primary"/></button>
-                                  </div>
-                              </div>
-                          </div>
-                      )}
-                      {selectedTx.notes && (
-                          <div className="pt-2">
-                              <p className="text-[10px] font-black text-muted-foreground uppercase mb-1">ملاحظات</p>
-                              <p className="text-xs font-bold bg-muted/50 p-3 rounded-xl">{selectedTx.notes}</p>
-                          </div>
-                      )}
-                  </div>
-              )}
-              <DialogFooter><DialogClose asChild><Button className="w-full h-12 rounded-2xl font-black">إغلاق</Button></DialogClose></DialogFooter>
-          </DialogContent>
-      </Dialog>
+      <TransactionDetailsModal
+          isOpen={isDialogOpen}
+          onOpenChange={setIsDialogOpen}
+          transaction={selectedTx}
+          onSyncStatus={handleSyncStatus}
+          isSyncing={isSyncing}
+      />
       <Toaster />
     </>
   );

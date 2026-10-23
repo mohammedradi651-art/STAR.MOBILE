@@ -15,8 +15,9 @@ export function AppErrorDialog() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const handleError = (message: string) => {
-      setErrorMessage(message);
+    const handleError = (payload: any) => {
+      const msg = typeof payload === 'string' ? payload : (payload?.message || 'حدث خطأ غير متوقع');
+      setErrorMessage(msg);
     };
 
     errorEmitter.on('custom-error', handleError);

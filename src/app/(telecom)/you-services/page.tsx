@@ -334,6 +334,11 @@ export default function YouServicesPage() {
             return;
         }
 
+        if (typeLabel === 'رصيد' && payAmount < 100) {
+            toast({ variant: 'destructive', title: 'مبلغ غير مسموح', description: 'أقل مبلغ سداد للرصيد في شركة يو هو 100 ريال.' });
+            return;
+        }
+
         const multiplier = isApiUser ? (config.you?.balanceRate ?? 3.0) : 3.0;
         const packageRate = isApiUser ? (config.you?.rate ?? 1.0) : 1.0;
         const finalToDeduct = typeLabel.includes('شحن') 
@@ -361,20 +366,21 @@ export default function YouServicesPage() {
                 apiPayload.num = numCode;
             }
 
+            const txTitle = `يو - سداد ${typeLabel}`;
             // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
             const { transid, backpass } = await initiateTelecomPayment({
                 firestore,
                 userId: user.uid,
                 amount: finalToDeduct,
-                transactionType: `سداد YOU ${typeLabel}`,
+                transactionType: txTitle,
                 recipientPhoneNumber: phone,
-                notes: `إلى رقم: ${phone}`,
+                notes: `سداد ${typeLabel} يو للرقم: ${phone} بمبلغ: ${payAmount} ريال`,
                 serviceCategory: 'يو'
             });
 
-            setLastTxDetails({ type: `سداد YOU ${typeLabel}`, phone: phone, amount: finalToDeduct, transid: transid });
+            setLastTxDetails({ type: txTitle, phone: phone, amount: finalToDeduct, transid: transid });
 
-            // 2. إرسال الطلب للمزود مع مؤقت 10 ثوانٍ (إذا تأخر الرد تظهر نفس المنبثق تماماً)
+            // 2. إرسال الطلب للمزود مع مؤقت 45 ثانية
             await executeTelecomRequestWithTimeout({
                 firestore,
                 userId: user.uid,
@@ -412,19 +418,20 @@ export default function YouServicesPage() {
 
         setIsActivatingOffer(true);
         try {
+            const pkgTitle = `يو - ${selectedOffer.offerName}`;
             // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
             const { transid, backpass } = await initiateTelecomPayment({
                 firestore,
                 userId: user.uid,
                 amount: totalToDeduct,
-                transactionType: `تفعيل باقة YOU: ${selectedOffer.offerName}`,
+                transactionType: pkgTitle,
                 recipientPhoneNumber: phone,
-                notes: `للرقم: ${phone}`,
+                notes: `تفعيل ${selectedOffer.offerName} للرقم: ${phone}`,
                 serviceCategory: 'يو'
             });
 
             setLastTxDetails({
-                type: `تفعيل ${selectedOffer.offerName}`,
+                type: pkgTitle,
                 phone: phone,
                 amount: totalToDeduct,
                 transid: transid

@@ -375,7 +375,7 @@ export default function CombinedNetworksPage() {
                 // استرجاع المبلغ فوراً لعدم توفر كروت
                 await updateDoc(userDocRef, { balance: increment(effectivePrice) });
                 localBalanceDeducted = false;
-                throw new Error('لا توجد كروت متاحة حالياً في هذه الفئة (تم استرجاع المبلغ لرصيدك تلقائياً).');
+                throw new Error('لا توجد كروت متاحة حالياً في هذه الفئة.');
             }
             
             const cardToPurchaseDoc = availableCardsSnapshot.docs[0];
