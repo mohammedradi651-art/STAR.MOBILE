@@ -185,6 +185,7 @@ export async function POST(req: Request) {
         const discountedPrice = Math.round(officialPrice * alwadiRate);
 
         // ج. المطابقة الذكية: التحقق من أن subscriberId المرسل يطابق رقم الكرت فعلياً
+        let resolvedSubscriberName = '';
         try {
             const checkRes = await fetch(`${origin}/api/alwadi/lookup`, {
                 method: 'POST',
@@ -201,6 +202,7 @@ export async function POST(req: Request) {
                     timestamp 
                 }, { status: 400, headers: corsHeaders });
             }
+            resolvedSubscriberName = checkData?.data?.name || '';
         } catch (e) {
             return NextResponse.json({ 
                 success: false, 
@@ -271,7 +273,11 @@ export async function POST(req: Request) {
                 transactionDate: timestamp,
                 amount: discountedPrice,
                 transactionType: `تجديد منظومة الوادي`,
-                notes: `كرت: ${number} - باقة: ${officialPrice} ر.ي`,
+                subscriberName: resolvedSubscriberName,
+                cardNumber: number,
+                accountNumber: number,
+                recipientPhoneNumber: number,
+                notes: `المشترك: ${resolvedSubscriberName || 'مشترك'} - رقم الكرت: ${number} - باقة: ${officialPrice} ر.ي`,
                 status: 'success'
             });
 

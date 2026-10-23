@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -25,7 +25,8 @@ import {
   XCircle,
   Share2,
   RefreshCw,
-  Loader2
+  Loader2,
+  User
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -50,6 +51,7 @@ export interface TransactionModalData {
   readiness?: string;
   transid?: string;
   providerMessage?: string;
+  accountNumber?: string;
 }
 
 interface TransactionDetailsModalProps {
@@ -81,6 +83,40 @@ export function extractRecipientPhone(tx?: TransactionModalData | null): string 
   return '';
 }
 
+/**
+ * استخراج بيانات المشترك لمنظومة الوادي
+ */
+export function getAlwadiSubscriberInfo(tx?: TransactionModalData | null): { name: string; number: string; display: string } | null {
+  if (!tx) return null;
+  const isAlwadi = (tx.transactionType || '').includes('الوادي') || (tx.transactionType || '').includes('وادي');
+  
+  let name = tx.subscriberName || '';
+  let num = tx.cardNumber || tx.recipientPhoneNumber || tx.phone || tx.accountNumber || '';
+
+  if (tx.notes) {
+    if (!name) {
+      const nameMatch = tx.notes.match(/(?:المشترك|اسم المشترك|الاسم)\s*:?\s*([^-\n,]+)/);
+      if (nameMatch && nameMatch[1]) name = nameMatch[1].trim();
+    }
+    if (!num) {
+      const cardMatch = tx.notes.match(/(?:كرت|رقم الكرت|الكرت)\s*:?\s*([0-9a-zA-Z]+)/);
+      if (cardMatch && cardMatch[1]) num = cardMatch[1].trim();
+    }
+  }
+
+  if (isAlwadi || name) {
+    const parts = [];
+    if (name) parts.push(name);
+    if (num) parts.push(`كرت: ${num}`);
+    return {
+      name: name || 'مشترك الوادي',
+      number: num,
+      display: parts.length > 0 ? parts.join(' - ') : (num ? `كرت: ${num}` : 'مشترك الوادي')
+    };
+  }
+  return null;
+}
+
 export const generateNumericId = (id: string): string => {
   if (!id) return '000000';
   let hash = 0;
@@ -106,9 +142,9 @@ const safeFormatDate = (dateVal: any, formatStr: string) => {
 };
 
 /**
- * رسم سند المعاملة على Canvas بجودة عالية ومظهر ملكي
+ * رسم بطاقة السند على Canvas مطابقة لتصميم المنبثق بنسبة 100% وبجودة عالية فائقة
  */
-function drawReceiptToCanvas(
+function drawModalExactToCanvas(
   canvas: HTMLCanvasElement,
   data: {
     serviceName: string;
@@ -120,31 +156,29 @@ function drawReceiptToCanvas(
     timeText: string;
     notesText: string;
     cardNumber?: string;
+    subscriberName?: string;
+    isAlwadi?: boolean;
   }
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  const width = canvas.width;
-  const height = canvas.height;
+  const width = canvas.width;   // 720
+  const height = canvas.height; // 940
 
-  // خلفية متدرجة فخمة
-  const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
-  bgGrad.addColorStop(0, '#041B3B');
-  bgGrad.addColorStop(0.35, '#0B254E');
-  bgGrad.addColorStop(1, '#061329');
-  ctx.fillStyle = bgGrad;
+  // 1. خلفية خارجية ناعمة
+  ctx.fillStyle = '#f1f5f9';
   ctx.fillRect(0, 0, width, height);
 
-  // بطاقة السند الداخلية
-  const cardX = 35;
-  const cardY = 35;
-  const cardW = width - 70;
-  const cardH = height - 70;
-  const cardR = 26;
+  // 2. بطاقة المنبثق البيضاء الرئيسية (مطابقة لمنبثق التطبيق تماماً)
+  const cardX = 30;
+  const cardY = 30;
+  const cardW = width - 60;
+  const cardH = height - 60;
+  const cardR = 32;
 
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-  ctx.shadowBlur = 25;
-  ctx.shadowOffsetY = 10;
+  ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
+  ctx.shadowBlur = 30;
+  ctx.shadowOffsetY = 12;
 
   ctx.fillStyle = '#FFFFFF';
   ctx.beginPath();
@@ -156,62 +190,120 @@ function drawReceiptToCanvas(
   ctx.fill();
   ctx.shadowColor = 'transparent';
 
-  // شريط الرأس للبطاقة
-  const headerGrad = ctx.createLinearGradient(cardX, cardY, cardX + cardW, cardY);
-  headerGrad.addColorStop(0, '#0284c7');
-  headerGrad.addColorStop(1, '#0369a1');
+  // 3. ترويسة المنبثق بتدرج الحالة الدقيق
+  const isSuccess = data.status === 'success';
+  const isPending = data.status === 'pending';
+  const isFailed = data.status === 'failed';
+
+  const gradH = 175;
+  const headerGrad = ctx.createLinearGradient(0, cardY, 0, cardY + gradH);
+  if (isSuccess) {
+    headerGrad.addColorStop(0, 'rgba(34, 197, 94, 0.15)');
+    headerGrad.addColorStop(0.6, 'rgba(34, 197, 94, 0.05)');
+    headerGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  } else if (isPending) {
+    headerGrad.addColorStop(0, 'rgba(245, 158, 11, 0.15)');
+    headerGrad.addColorStop(0.6, 'rgba(245, 158, 11, 0.05)');
+    headerGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  } else {
+    headerGrad.addColorStop(0, 'rgba(239, 68, 68, 0.15)');
+    headerGrad.addColorStop(0.6, 'rgba(239, 68, 68, 0.05)');
+    headerGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  }
+
   ctx.fillStyle = headerGrad;
   ctx.beginPath();
   if (ctx.roundRect) {
-    ctx.roundRect(cardX, cardY, cardW, 110, [cardR, cardR, 0, 0]);
+    ctx.roundRect(cardX, cardY, cardW, gradH, [cardR, cardR, 0, 0]);
   } else {
-    ctx.rect(cardX, cardY, cardW, 110);
+    ctx.rect(cardX, cardY, cardW, gradH);
   }
   ctx.fill();
 
-  // نصوص الرأس
-  ctx.fillStyle = '#FFFFFF';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = 'bold 30px "Segoe UI", Tahoma, Arial, sans-serif';
-  ctx.fillText('ستار موبايل | STAR MOBILE', cardX + cardW / 2, cardY + 44);
+  // أيقونة الحالة الدائرية في المنتصف
+  const iconBoxSize = 58;
+  const iconX = cardX + (cardW - iconBoxSize) / 2;
+  const iconY = cardY + 20;
+  const iconColor = isSuccess ? '#16a34a' : isPending ? '#f59e0b' : '#dc2626';
 
-  ctx.font = 'bold 15px "Segoe UI", Tahoma, Arial, sans-serif';
-  ctx.fillStyle = '#E0F2FE';
-  ctx.fillText('سند عملية إلكتروني معتمد', cardX + cardW / 2, cardY + 80);
-
-  // حالة العملية
-  const statusColor = data.status === 'success' ? '#16a34a' : data.status === 'pending' ? '#d97706' : '#dc2626';
-  const statusBg = data.status === 'success' ? '#dcfce7' : data.status === 'pending' ? '#fef3c7' : '#fee2e2';
-  const statusText = data.status === 'success' ? 'تم التسديد بنجاح ✓' : data.status === 'pending' ? 'قيد الانتظار ⏳' : 'فاشلة ✕';
-
-  const badgeY = cardY + 145;
-  ctx.fillStyle = statusBg;
+  ctx.fillStyle = iconColor;
   ctx.beginPath();
   if (ctx.roundRect) {
-    ctx.roundRect(cardX + cardW / 2 - 120, badgeY - 18, 240, 36, 18);
+    ctx.roundRect(iconX, iconY, iconBoxSize, iconBoxSize, 18);
   } else {
-    ctx.rect(cardX + cardW / 2 - 120, badgeY - 18, 240, 36);
+    ctx.rect(iconX, iconY, iconBoxSize, iconBoxSize);
   }
   ctx.fill();
-  ctx.strokeStyle = statusColor;
-  ctx.lineWidth = 1.5;
+
+  // رسم علامة الأيقونة داخل المربع بدقة
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  if (isSuccess) {
+    // Checkmark
+    ctx.moveTo(iconX + 16, iconY + 29);
+    ctx.lineTo(iconX + 25, iconY + 39);
+    ctx.lineTo(iconX + 43, iconY + 19);
+  } else if (isPending) {
+    // Clock
+    ctx.arc(iconX + 29, iconY + 29, 14, 0, Math.PI * 2);
+    ctx.moveTo(iconX + 29, iconY + 20);
+    ctx.lineTo(iconX + 29, iconY + 29);
+    ctx.lineTo(iconX + 36, iconY + 29);
+  } else {
+    // X mark
+    ctx.moveTo(iconX + 18, iconY + 18);
+    ctx.lineTo(iconX + 40, iconY + 40);
+    ctx.moveTo(iconX + 40, iconY + 18);
+    ctx.lineTo(iconX + 18, iconY + 40);
+  }
   ctx.stroke();
 
-  ctx.fillStyle = statusColor;
-  ctx.font = 'bold 18px "Segoe UI", Tahoma, Arial, sans-serif';
-  ctx.fillText(statusText, cardX + cardW / 2, badgeY);
+  // عنوان المنبثق
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 24px "Almarai", "Segoe UI", Tahoma, Arial, sans-serif';
+  ctx.fillText('تفاصيل العملية', cardX + cardW / 2, iconY + iconBoxSize + 24);
 
   // الرقم المرجعي
+  ctx.font = 'bold 14px "Almarai", "Segoe UI", Tahoma, Arial, sans-serif';
   ctx.fillStyle = '#64748b';
-  ctx.font = 'bold 14px "Segoe UI", Tahoma, Arial, sans-serif';
-  ctx.fillText(`الرقم المرجعي: ${data.refId}`, cardX + cardW / 2, badgeY + 36);
+  ctx.fillText(`الرقم المرجعي: ${data.refId}`, cardX + cardW / 2, iconY + iconBoxSize + 48);
 
-  // مربع المبلغ
-  const amountBoxY = badgeY + 60;
-  const amountBoxH = 95;
-  const amountBoxW = cardW - 70;
-  const amountBoxX = cardX + 35;
+  // شارة الجاهزية (الـ Badge الأخضر / الكهرماني / الأحمر)
+  const badgeText = isSuccess ? 'تم التسديد بنجاح' : isPending ? 'قيد الانتظار' : 'فاشلة';
+  const badgeBg = isSuccess ? '#dcfce7' : isPending ? '#fef3c7' : '#fee2e2';
+  const badgeBorder = isSuccess ? '#86efac' : isPending ? '#fde68a' : '#fca5a5';
+  const badgeColor = isSuccess ? '#15803d' : isPending ? '#b45309' : '#b91c1c';
+
+  const badgeY = iconY + iconBoxSize + 76;
+  const badgeW = 160;
+  const badgeH = 30;
+
+  ctx.fillStyle = badgeBg;
+  ctx.beginPath();
+  if (ctx.roundRect) {
+    ctx.roundRect(cardX + (cardW - badgeW) / 2, badgeY - badgeH / 2, badgeW, badgeH, 15);
+  } else {
+    ctx.rect(cardX + (cardW - badgeW) / 2, badgeY - badgeH / 2, badgeW, badgeH);
+  }
+  ctx.fill();
+  ctx.strokeStyle = badgeBorder;
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  ctx.fillStyle = badgeColor;
+  ctx.font = 'bold 13px "Almarai", "Segoe UI", Tahoma, Arial, sans-serif';
+  ctx.fillText(badgeText, cardX + cardW / 2, badgeY);
+
+  // 4. صندوق المبلغ المدفوع
+  const amountBoxY = badgeY + 28;
+  const amountBoxH = 80;
+  const amountBoxW = cardW - 60;
+  const amountBoxX = cardX + 30;
 
   ctx.fillStyle = '#f8fafc';
   ctx.beginPath();
@@ -226,21 +318,22 @@ function drawReceiptToCanvas(
   ctx.stroke();
 
   ctx.fillStyle = '#64748b';
-  ctx.font = 'bold 13px "Segoe UI", Tahoma, Arial, sans-serif';
-  ctx.fillText('المبلغ المدفوع', cardX + cardW / 2, amountBoxY + 28);
+  ctx.font = 'bold 11px "Almarai", "Segoe UI", Tahoma, Arial, sans-serif';
+  ctx.fillText('المبلغ المدفوع', cardX + cardW / 2, amountBoxY + 24);
 
   ctx.fillStyle = '#0f172a';
-  ctx.font = '900 34px "Segoe UI", Tahoma, Arial, sans-serif';
-  ctx.fillText(`${data.amount.toLocaleString('en-US')} ريال يمني`, cardX + cardW / 2, amountBoxY + 65);
+  ctx.font = '900 30px "Almarai", "Segoe UI", Tahoma, Arial, sans-serif';
+  ctx.fillText(`${data.amount.toLocaleString('en-US')} ريال يمني`, cardX + cardW / 2, amountBoxY + 56);
 
-  // صفوف التفاصيل
-  let rowY = amountBoxY + amountBoxH + 32;
-  const rowLeft = amountBoxX + 10;
-  const rowRight = amountBoxX + amountBoxW - 10;
+  // 5. صفوف التفاصيل (مع خطوط مقطعة مطابقة تماماً للمنبثق)
+  let rowY = amountBoxY + amountBoxH + 28;
+  const rowLeft = amountBoxX + 6;
+  const rowRight = amountBoxX + amountBoxW - 6;
 
-  const drawRow = (label: string, value: string, isHighlight = false) => {
-    ctx.strokeStyle = '#f1f5f9';
-    ctx.lineWidth = 1.5;
+  const drawRow = (label: string, value: string, isBlue = false) => {
+    // خط مقطع
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
     ctx.moveTo(rowLeft, rowY + 12);
@@ -248,48 +341,79 @@ function drawReceiptToCanvas(
     ctx.stroke();
     ctx.setLineDash([]);
 
+    // التسمية
     ctx.textAlign = 'right';
     ctx.fillStyle = '#64748b';
-    ctx.font = 'bold 15px "Segoe UI", Tahoma, Arial, sans-serif';
+    ctx.font = 'bold 13px "Almarai", "Segoe UI", Tahoma, Arial, sans-serif';
     ctx.fillText(label, rowRight, rowY);
 
+    // القيمة
     ctx.textAlign = 'left';
-    ctx.fillStyle = isHighlight ? '#0284c7' : '#1e293b';
-    ctx.font = isHighlight ? 'bold 16px "Segoe UI", Tahoma, Arial, sans-serif' : '600 15px "Segoe UI", Tahoma, Arial, sans-serif';
-    
+    ctx.fillStyle = isBlue ? '#1b52a4' : '#0f172a';
+    ctx.font = isBlue ? 'bold 14px "Almarai", "Segoe UI", Tahoma, Arial, sans-serif' : '700 13px "Almarai", "Segoe UI", Tahoma, Arial, sans-serif';
+
     let displayVal = value;
-    if (ctx.measureText(displayVal).width > 340) {
-      while (ctx.measureText(displayVal + '...').width > 340 && displayVal.length > 0) {
+    if (ctx.measureText(displayVal).width > 320) {
+      while (ctx.measureText(displayVal + '...').width > 320 && displayVal.length > 0) {
         displayVal = displayVal.slice(0, -1);
       }
       displayVal += '...';
     }
     ctx.fillText(displayVal, rowLeft, rowY);
 
-    rowY += 44;
+    rowY += 40;
   };
 
   drawRow('الخدمة:', data.serviceName, true);
-  if (data.phone) {
-    drawRow('الرقم المسدد له:', data.phone);
+
+  if (data.isAlwadi && data.subscriberName) {
+    drawRow('اسم المشترك:', data.subscriberName, true);
   }
+
   if (data.cardNumber) {
     drawRow('رقم الكرت:', data.cardNumber, true);
   }
+
+  if (data.phone) {
+    drawRow('الرقم المسدد له:', data.phone);
+  }
+
   drawRow('التاريخ:', data.dateText);
   drawRow('الوقت:', data.timeText);
-  drawRow('ملاحظات العملية:', data.notesText);
 
-  // التذييل
-  const footerY = cardY + cardH - 52;
+  // 6. صندوق ملاحظات العملية
+  const notesBoxY = rowY + 6;
+  const notesBoxH = 46;
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#64748b';
+  ctx.font = 'bold 11px "Almarai", "Segoe UI", Tahoma, Arial, sans-serif';
+  ctx.fillText('ملاحظات العملية', rowRight, notesBoxY);
+
+  const notesY = notesBoxY + 10;
+  ctx.fillStyle = isSuccess ? '#dcfce7' : isPending ? '#fef3c7' : '#fee2e2';
+  ctx.beginPath();
+  if (ctx.roundRect) {
+    ctx.roundRect(amountBoxX, notesY, amountBoxW, notesBoxH, 12);
+  } else {
+    ctx.rect(amountBoxX, notesY, amountBoxW, notesBoxH);
+  }
+  ctx.fill();
+  ctx.strokeStyle = isSuccess ? '#86efac' : isPending ? '#fde68a' : '#fca5a5';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = isSuccess ? '#15803d' : isPending ? '#b45309' : '#b91c1c';
+  ctx.font = 'bold 12px "Almarai", "Segoe UI", Tahoma, Arial, sans-serif';
+  ctx.fillText(data.notesText, rowRight - 12, notesY + notesBoxH / 2);
+
+  // 7. تذييل البطاقة بهوية ستار موبايل
+  const footerY = cardY + cardH - 30;
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#0284c7';
-  ctx.font = 'bold 15px "Segoe UI", Tahoma, Arial, sans-serif';
-  ctx.fillText('شكراً لاستخدامكم ستار موبايل 💙', cardX + cardW / 2, footerY);
-
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = 'bold 12px "Segoe UI", Tahoma, Arial, sans-serif';
-  ctx.fillText('خدمات تسديد وباقات وشحن فوري على مدار الساعة', cardX + cardW / 2, footerY + 22);
+  ctx.fillStyle = '#1b52a4';
+  ctx.font = 'bold 14px "Almarai", "Segoe UI", Tahoma, Arial, sans-serif';
+  ctx.fillText('تطبيق ستار موبايل | STAR MOBILE', cardX + cardW / 2, footerY);
 }
 
 export function TransactionDetailsModal({
@@ -302,9 +426,60 @@ export function TransactionDetailsModal({
   const { toast } = useToast();
   const [isSharing, setIsSharing] = useState(false);
 
-  if (!transaction) return null;
+  // حالة اسم ورقم مشترك الوادي
+  const [resolvedSubscriberName, setResolvedSubscriberName] = useState<string>('');
+  const [resolvedCardNumber, setResolvedCardNumber] = useState<string>('');
 
   const phone = extractRecipientPhone(transaction);
+  const isAlwadi = Boolean(transaction?.transactionType?.includes('الوادي') || transaction?.transactionType?.includes('وادي'));
+
+  // استخراج وتحديث اسم المشترك ورقم الكرت لمنظومة الوادي
+  useEffect(() => {
+    if (!transaction) {
+      setResolvedSubscriberName('');
+      setResolvedCardNumber('');
+      return;
+    }
+
+    if (transaction.subscriberName) {
+      setResolvedSubscriberName(transaction.subscriberName);
+    }
+    if (transaction.cardNumber) {
+      setResolvedCardNumber(transaction.cardNumber);
+    }
+
+    if (isAlwadi) {
+      const cardMatch = (transaction.notes || '').match(/(?:كرت|رقم الكرت|الكرت)\s*:?\s*([0-9a-zA-Z]+)/);
+      const nameMatch = (transaction.notes || '').match(/(?:المشترك|اسم المشترك|الاسم)\s*:?\s*([^-\n,]+)/);
+      
+      const cardNum = transaction.cardNumber || (cardMatch ? cardMatch[1] : '') || transaction.recipientPhoneNumber || '';
+      if (cardNum && !resolvedCardNumber) {
+        setResolvedCardNumber(cardNum);
+      }
+
+      if (nameMatch && nameMatch[1] && !transaction.subscriberName) {
+        setResolvedSubscriberName(nameMatch[1].trim());
+      } else if (!transaction.subscriberName && cardNum) {
+        // فحص تلقائي لحظي من السيرفر لمعرفة اسم المشترك الحقيقي
+        fetch('/api/alwadi/lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ number: cardNum })
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data?.success && data?.data?.name) {
+              setResolvedSubscriberName(data.data.name);
+              if (data.data.cardNumber) setResolvedCardNumber(data.data.cardNumber);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [transaction, isAlwadi]);
+
+  if (!transaction) return null;
+
   const readiness = getReadinessDetails(transaction);
   const transId = transaction.transid || transaction.id;
   const isFailed = readiness.status === 'failed' || transaction.status === 'failed';
@@ -317,7 +492,7 @@ export function TransactionDetailsModal({
     .replace(/\s*-\s*api/gi, '')
     .trim();
 
-  // استخراج سبب الرفض إن وجد بدون أي ذكر لاسترجاع الرصيد
+  // استخراج سبب الرفض إن وجد
   let cleanProviderReason = '';
   if (transaction.providerMessage) {
     cleanProviderReason = transaction.providerMessage;
@@ -334,7 +509,7 @@ export function TransactionDetailsModal({
     .trim();
   if (!cleanProviderReason) cleanProviderReason = 'فشلت المعاملة من قبل المزود';
 
-  // الملاحظات الثابتة حسب متطلبات المستخدم بدقة
+  // نصوص الملاحظات الثابتة
   const displayNotes = isSuccess
     ? 'تم التسديد بنجاح'
     : isPending
@@ -351,22 +526,22 @@ export function TransactionDetailsModal({
   };
 
   /**
-   * توليد صورة السند ومشاركتها مباشرة كصورة عبر الواتساب أو منصات التواصل
+   * توليد صورة السند المطابقة للمنبثق 100% وفتح واتساب مباشرة
    */
-  const handleShareReceiptImage = async () => {
+  const handleShareToWhatsApp = async () => {
     if (!transaction || isSharing) return;
     setIsSharing(true);
 
     try {
       const canvas = document.createElement('canvas');
-      canvas.width = 750;
-      canvas.height = 960;
+      canvas.width = 720;
+      canvas.height = 940;
 
       const refId = generateNumericId(transaction.id);
-      const dateText = safeFormatDate(transaction.transactionDate || transaction.createdAt, 'yyyy/MM/dd');
+      const dateText = safeFormatDate(transaction.transactionDate || transaction.createdAt, 'eeee، d MMMM yyyy');
       const timeText = safeFormatDate(transaction.transactionDate || transaction.createdAt, 'h:mm:ss a');
 
-      drawReceiptToCanvas(canvas, {
+      drawModalExactToCanvas(canvas, {
         serviceName: cleanTxType,
         phone: phone || undefined,
         amount: transaction.amount,
@@ -375,26 +550,26 @@ export function TransactionDetailsModal({
         dateText,
         timeText,
         notesText: displayNotes,
-        cardNumber: transaction.cardNumber
+        cardNumber: resolvedCardNumber || transaction.cardNumber,
+        subscriberName: resolvedSubscriberName || undefined,
+        isAlwadi
       });
 
       const blob = await new Promise<Blob | null>((resolve) => {
         canvas.toBlob((b) => resolve(b), 'image/png');
       });
 
-      if (!blob) {
-        throw new Error('تعذر تجهيز صورة السند');
-      }
+      if (!blob) throw new Error('تعذر إنشاء صورة السند');
 
       const fileName = `سند_ستار_موبايل_${refId}.png`;
       const file = new File([blob], fileName, { type: 'image/png' });
 
-      // مشاركة أصلية للموبايل (تفتح الواتساب مع إرفاق الصورة مباشرة)
+      // مشاركة أصلية للموبايل (تفتح الواتساب مباشرة لإرسال الصورة)
       if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
           await navigator.share({
             files: [file],
-            title: 'سند عملية - ستار موبايل',
+            title: 'سند عملية - تطبيق ستار موبايل',
             text: `سند عملية: ${cleanTxType} بمبلغ ${transaction.amount.toLocaleString('en-US')} ريال`
           });
           return;
@@ -403,7 +578,7 @@ export function TransactionDetailsModal({
         }
       }
 
-      // بديل للمتصفحات الأخرى: حفظ الصورة وفتح الواتساب
+      // تحميل الصورة فوراً وفتح واتساب مباشرة
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -413,12 +588,14 @@ export function TransactionDetailsModal({
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
+      const targetPhone = phone ? phone.replace(/\D/g, '').slice(-9) : '';
+      const waUrl = targetPhone ? `https://wa.me/967${targetPhone}` : 'https://wa.me/';
+      window.open(waUrl, '_blank');
+
       toast({
         title: "تم حفظ صورة السند",
-        description: "تم تنزيل صورة السند بنجاح لإرسالها عبر الواتساب."
+        description: "تم تجهيز صورة السند وفتح واتساب لإرسالها."
       });
-
-      window.open('https://wa.me/', '_blank');
     } catch (err: any) {
       console.error('Receipt generation error:', err);
       toast({
@@ -436,15 +613,15 @@ export function TransactionDetailsModal({
       <DialogContent className="rounded-[28px] max-w-[92vw] sm:max-w-md bg-white dark:bg-slate-900 border-none shadow-2xl p-0 overflow-hidden outline-none" dir="rtl">
         {/* شريط الرأس المدمج والتدرج */}
         <div className={cn(
-          "px-5 pt-4 pb-3 text-center relative overflow-hidden transition-all",
+          "px-5 pt-5 pb-3 text-center relative overflow-hidden transition-all",
           isSuccess && "bg-gradient-to-b from-green-500/15 via-green-500/5 to-transparent",
           isPending && "bg-gradient-to-b from-amber-500/15 via-amber-500/5 to-transparent",
           isFailed && "bg-gradient-to-b from-red-500/15 via-red-500/5 to-transparent"
         )}>
           {/* أيقونة الحالة */}
-          <div className="flex justify-center mb-1.5">
+          <div className="flex justify-center mb-2">
             <div className={cn(
-              "w-11 h-11 rounded-xl flex items-center justify-center shadow-md transition-transform",
+              "w-12 h-12 rounded-2xl flex items-center justify-center shadow-md transition-transform",
               isSuccess && "bg-green-600 text-white shadow-green-600/30",
               isPending && "bg-amber-500 text-white shadow-amber-500/30",
               isFailed && "bg-red-600 text-white shadow-red-600/30"
@@ -463,7 +640,7 @@ export function TransactionDetailsModal({
           </DialogDescription>
 
           {/* شارة الجاهزية */}
-          <div className="flex items-center justify-center gap-2 mt-1.5">
+          <div className="flex items-center justify-center gap-2 mt-2">
             <span className={cn(
               "font-black text-xs px-3 py-0.5 rounded-full border shadow-sm flex items-center gap-1.5",
               readiness.bgClass
@@ -490,11 +667,11 @@ export function TransactionDetailsModal({
           </div>
         </div>
 
-        {/* تفاصيل المعاملة المدمجة */}
-        <div className="px-5 py-1 space-y-2 text-xs sm:text-sm max-h-[52vh] overflow-y-auto no-scrollbar">
+        {/* تفاصيل المعاملة */}
+        <div className="px-5 py-2 space-y-2.5 text-xs sm:text-sm max-h-[55vh] overflow-y-auto no-scrollbar">
           
           {/* المبلغ المستقطع */}
-          <div className="bg-muted/40 dark:bg-muted/20 p-2.5 rounded-xl border border-border/50 text-center space-y-0.5">
+          <div className="bg-muted/40 dark:bg-muted/20 p-3 rounded-2xl border border-border/50 text-center space-y-0.5">
             <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
               المبلغ المدفوع
             </span>
@@ -506,10 +683,10 @@ export function TransactionDetailsModal({
             </div>
           </div>
 
-          {/* نوع الخدمة (نظيفة تماماً من كلمة API) */}
-          <div className="flex justify-between items-center py-1.5 border-b border-dashed border-border/60">
+          {/* نوع الخدمة */}
+          <div className="flex justify-between items-center py-2 border-b border-dashed border-border/60">
             <span className="text-muted-foreground text-xs font-bold flex items-center gap-2">
-              <Tag className="h-4 w-4 text-primary" />
+              <Tag className="h-4 w-4 text-[#1b52a4]" />
               الخدمة:
             </span>
             <span className="font-black text-foreground text-xs sm:text-sm text-left max-w-[65%] truncate">
@@ -517,11 +694,48 @@ export function TransactionDetailsModal({
             </span>
           </div>
 
-          {/* الرقم المسدد له إن وجد */}
-          {phone ? (
-            <div className="flex justify-between items-center py-1.5 border-b border-dashed border-border/60">
+          {/* اسم المشترك ورقم الكرت لمنظومة الوادي */}
+          {isAlwadi && (
+            <>
+              <div className="flex justify-between items-center py-2 border-b border-dashed border-border/60">
+                <span className="text-muted-foreground text-xs font-bold flex items-center gap-2">
+                  <User className="h-4 w-4 text-[#1b52a4]" />
+                  اسم المشترك:
+                </span>
+                <span className="font-bold text-xs sm:text-sm text-[#1b52a4] text-left">
+                  {resolvedSubscriberName || 'مشترك الوادي'}
+                </span>
+              </div>
+
+              {(resolvedCardNumber || transaction.cardNumber) && (
+                <div className="flex justify-between items-center py-2 border-b border-dashed border-border/60">
+                  <span className="text-muted-foreground text-xs font-bold flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-[#1b52a4]" />
+                    رقم الكرت:
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-black text-xs sm:text-sm tracking-widest text-foreground">
+                      {resolvedCardNumber || transaction.cardNumber}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(resolvedCardNumber || transaction.cardNumber || '', 'رقم الكرت')}
+                      className="p-1 hover:bg-muted rounded text-[#1b52a4]"
+                      title="نسخ رقم الكرت"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* الرقم المسدد له للاتصالات */}
+          {!isAlwadi && phone ? (
+            <div className="flex justify-between items-center py-2 border-b border-dashed border-border/60">
               <span className="text-muted-foreground text-xs font-bold flex items-center gap-2">
-                <Smartphone className="h-4 w-4 text-primary" />
+                <Smartphone className="h-4 w-4 text-[#1b52a4]" />
                 الرقم المسدد له:
               </span>
               <div className="flex items-center gap-2">
@@ -541,9 +755,9 @@ export function TransactionDetailsModal({
           ) : null}
 
           {/* التاريخ والوقت */}
-          <div className="flex justify-between items-center py-1.5 border-b border-dashed border-border/60">
+          <div className="flex justify-between items-center py-2 border-b border-dashed border-border/60">
             <span className="text-muted-foreground text-xs font-bold flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-primary" />
+              <Calendar className="h-4 w-4 text-[#1b52a4]" />
               التاريخ:
             </span>
             <span className="font-bold text-xs text-foreground">
@@ -551,9 +765,9 @@ export function TransactionDetailsModal({
             </span>
           </div>
 
-          <div className="flex justify-between items-center py-1.5 border-b border-dashed border-border/60">
+          <div className="flex justify-between items-center py-2 border-b border-dashed border-border/60">
             <span className="text-muted-foreground text-xs font-bold flex items-center gap-2">
-              <Clock className="h-4 w-4 text-primary" />
+              <Clock className="h-4 w-4 text-[#1b52a4]" />
               الوقت:
             </span>
             <span className="font-bold text-xs text-foreground">
@@ -561,10 +775,10 @@ export function TransactionDetailsModal({
             </span>
           </div>
 
-          {/* تفاصيل الكرت إن وجد */}
-          {transaction.cardNumber && (
+          {/* تفاصيل كرت الشبكات إن وجد لغير الوادي */}
+          {!isAlwadi && transaction.cardNumber && (
             <div className="bg-muted/40 p-3 rounded-xl border border-dashed border-primary/20 space-y-1.5 my-1">
-              <div className="flex items-center gap-2 text-primary text-xs font-bold">
+              <div className="flex items-center gap-2 text-[#1b52a4] text-xs font-bold">
                 <CreditCard className="w-4 h-4" />
                 <span>بيانات الكرت المستخرج:</span>
               </div>
@@ -586,7 +800,7 @@ export function TransactionDetailsModal({
             </div>
           )}
 
-          {/* ملاحظات العملية بنصوص ثابتة ودقيقة */}
+          {/* ملاحظات العملية */}
           <div className="pt-1">
             <p className="text-[10px] font-black text-muted-foreground uppercase mb-1">
               ملاحظات العملية
@@ -602,19 +816,19 @@ export function TransactionDetailsModal({
           </div>
         </div>
 
-        {/* أزرار الإجراءات السفلية: مشاركة وإغلاق */}
+        {/* أزرار الإجراءات السفلية: مشاركة مباشرة لواتساب وإغلاق */}
         <DialogFooter className="p-4 pt-2 grid grid-cols-2 gap-2">
           <Button
             type="button"
-            onClick={handleShareReceiptImage}
+            onClick={handleShareToWhatsApp}
             disabled={isSharing}
             variant="outline"
-            className="w-full h-10 rounded-xl font-black text-xs sm:text-sm border-primary/20 hover:bg-primary/5 text-primary flex items-center justify-center gap-1.5"
+            className="w-full h-11 rounded-xl font-black text-xs sm:text-sm border-[#1b52a4]/20 hover:bg-[#1b52a4]/5 text-[#1b52a4] flex items-center justify-center gap-1.5"
           >
             {isSharing ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>جاري التجهيز...</span>
+                <span>جاري فتح واتساب...</span>
               </>
             ) : (
               <>
@@ -627,7 +841,7 @@ export function TransactionDetailsModal({
           <DialogClose asChild>
             <Button
               type="button"
-              className="w-full h-10 rounded-xl font-black text-xs sm:text-sm"
+              className="w-full h-11 rounded-xl font-black text-xs sm:text-sm bg-[#1b52a4] hover:bg-[#16468e] text-white"
             >
               إغلاق
             </Button>
