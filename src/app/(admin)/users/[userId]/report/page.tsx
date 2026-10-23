@@ -34,7 +34,77 @@ import {
   generateNumericId 
 } from '@/components/layout/transaction-details-modal';
 import { useToast } from '@/hooks/use-toast';
-import jsPDF from 'jspdf';
+/**
+ * توليد ملف PDF متوافق 100% مع معايير PDF-1.4 انطلاقاً من صورة الـ Canvas
+ * خفيف الوزن ومستقل تماماً وبدون أي مكتبات خارجية لتجنب أخطاء Turbopack و SSR
+ */
+function createPdfFromJpeg(jpegDataUrl: string, imgWidth = 1200, imgHeight = 1700): Blob {
+  const base64 = jpegDataUrl.replace(/^data:image\/jpeg;base64,/, '');
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  // أبعاد A4 القياسية
+  const a4Width = 595.28;
+  const a4Height = 841.89;
+
+  const encoder = new TextEncoder();
+  const parts: (Uint8Array | string)[] = [];
+  const offsets: number[] = [];
+  let currentOffset = 0;
+
+  const pushPart = (content: string | Uint8Array) => {
+    if (typeof content === 'string') {
+      const b = encoder.encode(content);
+      parts.push(b);
+      currentOffset += b.length;
+    } else {
+      parts.push(content);
+      currentOffset += content.length;
+    }
+  };
+
+  // ترويسة ملف الـ PDF
+  pushPart('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+
+  // الكائنات الأساسية
+  offsets[1] = currentOffset;
+  pushPart('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+
+  offsets[2] = currentOffset;
+  pushPart('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n');
+
+  offsets[3] = currentOffset;
+  pushPart(
+    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${a4Width} ${a4Height}] /Resources << /XObject << /Im1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`
+  );
+
+  offsets[4] = currentOffset;
+  pushPart(
+    `4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${imgWidth} /Height ${imgHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${bytes.length} >>\nstream\n`
+  );
+  pushPart(bytes);
+  pushPart('\nendstream\nendobj\n');
+
+  offsets[5] = currentOffset;
+  const contentStream = `q ${a4Width} 0 0 ${a4Height} 0 0 cm /Im1 Do Q\n`;
+  pushPart(`5 0 obj\n<< /Length ${contentStream.length} >>\nstream\n${contentStream}endstream\nendobj\n`);
+
+  // جدول المراجع
+  const xrefOffset = currentOffset;
+  pushPart('xref\n0 6\n0000000000 65535 f \n');
+  for (let i = 1; i <= 5; i++) {
+    const offStr = String(offsets[i]).padStart(10, '0');
+    pushPart(`${offStr} 00000 n \n`);
+  }
+
+  // تذييل الملف
+  pushPart(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`);
+
+  return new Blob(parts as BlobPart[], { type: 'application/pdf' });
+}
 
 type UserProfile = {
   displayName: string;
@@ -505,16 +575,9 @@ function UserReportPage() {
       ctx.font = 'bold 13px "Almarai", Tahoma, Arial, sans-serif';
       ctx.fillText('تم إصدار هذا الكشف آلياً عبر نظام إدارة تطبيق ستار موبايل لخدمات الاتصالات والمدفوعات الإلكترونية', canvas.width / 2, canvas.height - 40);
 
-      // توليد ملف الـ PDF بواسطة jsPDF
+      // توليد ملف الـ PDF النقي المعتمد
       const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
-      const pdfBlob = pdf.output('blob');
+      const pdfBlob = createPdfFromJpeg(imgData, canvas.width, canvas.height);
 
       const fileName = `كشف_حساب_${(userProfile.displayName || 'العميل').replace(/\s+/g, '_')}.pdf`;
       const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
