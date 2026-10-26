@@ -325,6 +325,44 @@ export const KNOWN_PACKAGE_PRICES: Record<string, number> = {
   '98': 482,
   '102': 4820,
 
+  // سبأفون - باقة أمان الأسبوعية
+  'SABA114': 2880,
+  'saba_SABA114': 2880,
+  'saba_aman': 2880,
+  'aman': 2880,
+  'aman_weekly': 2880,
+  'saba_aman_weekly': 2880,
+  '20448': 2880,
+  'saba_20448': 2880,
+
+  // سبأفون - فئات شحن فوري شمال
+  'sabaphone_22.5': 813,
+  'sabaphone_40': 1446,
+  'sabaphone_45': 1626,
+  'sabaphone_60': 2169,
+  'sabaphone_85': 3072,
+  'sabaphone_100': 3615,
+  'sabaphone_125': 4518,
+  'sabaphone_150': 5424,
+  'sabaphone_209': 7554,
+  'sabaphone_300': 10845,
+  'sabaphone_505': 18255,
+  'sabaphone_1270': 45912,
+
+  // سبأفون - فئات شحن فوري جنوب
+  'sbay_600': 960,
+  'sbay_1000': 1600,
+  'sbay_1650': 2640,
+  'sbay_2500': 4000,
+  'sbay_5000': 8000,
+  'sbay_10000': 16000,
+  '600': 960,
+  '1000': 1600,
+  '1650': 2640,
+  '2500': 4000,
+  '5000': 8000,
+  '10000': 16000,
+
   // يو YOU - باقات السعر الموحد والفورجي
   'Sawa_300_PRE': 2904,
   'unified_300': 2904,
@@ -414,6 +452,30 @@ export const KNOWN_PACKAGE_PRICES: Record<string, number> = {
   '46000': 46000
 };
 
+export const SABAFON_NORTH_INSTANT_PRICES: Record<string, number> = {
+  '22.5': 813,
+  '40': 1446,
+  '45': 1626,
+  '60': 2169,
+  '85': 3072,
+  '100': 3615,
+  '125': 4518,
+  '150': 5424,
+  '209': 7554,
+  '300': 10845,
+  '505': 18255,
+  '1270': 45912,
+};
+
+export const SABAFON_SOUTH_INSTANT_PRICES: Record<string, number> = {
+  '600': 960,
+  '1000': 1600,
+  '1650': 2640,
+  '2500': 4000,
+  '5000': 8000,
+  '10000': 16000,
+};
+
 /**
  * احتساب تكلفة العملية عبر الـ API بالاعتماد حصراً على أسعار وإعدادات الربط البرمجي (النسب المعتمدة)
  */
@@ -427,6 +489,10 @@ export function calculateApiTransactionCost(
     packageid?: string | number;
     israsid?: string | number;
     count?: string | number;
+    units?: string | number;
+    unit?: string | number;
+    quantity?: string | number;
+    category?: string | number;
   },
   config: SystemServicesConfig = DEFAULT_SERVICES_CONFIG,
   _userDiscounts?: any // تم إلغاء الاعتماد على الخصومات الفردية بناء على طلب الإدارة
@@ -492,29 +558,85 @@ export function calculateApiTransactionCost(
   }
 
   // 3. سبأفون شمال (صنعاء وما حولها)
-  if (service === 'sabaphone') {
+  if (service === 'sabaphone' || service === 'sabafon' || service === 'saba') {
+    if (action === 'billoffer') {
+      const sabaPkgPrice = 
+        KNOWN_PACKAGE_PRICES[packageKey] || 
+        KNOWN_PACKAGE_PRICES[`saba_${packageKey}`] || 
+        KNOWN_PACKAGE_PRICES[rawNum] || 
+        KNOWN_PACKAGE_PRICES[`saba_${rawNum}`] || 
+        rawAmount;
+      const finalBasePrice = sabaPkgPrice > 0 ? sabaPkgPrice : (
+        packageKey.toLowerCase().includes('aman') || rawNum.toLowerCase().includes('aman') || packageKey === 'SABA114' ? 2880 : rawAmount
+      );
+      const pkgRate = config.sabafon?.packagesRate ?? config.sabafon?.rate ?? 1;
+      return roundCurrency(finalBasePrice * pkgRate);
+    }
+
+    const checkCat = rawNum || String((payload as any).category || payload.amount || '');
+    const instantPrice = SABAFON_NORTH_INSTANT_PRICES[checkCat] || SABAFON_NORTH_INSTANT_PRICES[rawNum];
+    if (instantPrice) {
+      const rate = config.sabafon?.instantNorthRate ?? 1;
+      return roundCurrency(instantPrice * rate);
+    }
+    const baseAmt = rawAmount > 0 ? rawAmount : (parseFloat(rawNum) || 0);
     const rate = config.sabafon?.instantNorthRate ?? 1;
-    return calculateFinalServicePrice(rawAmount * rate, config.sabafon);
+    return calculateFinalServicePrice(baseAmt * rate, config.sabafon);
   }
 
   // 4. سبأفون جنوب (عدن - عملة مرتفعة)
-  if (service === 'sbay') {
+  if (service === 'sbay' || service === 'saba_south' || service === 'sabasouth') {
+    const checkCat = rawNum || String((payload as any).category || payload.amount || '');
+    const instantPrice = SABAFON_SOUTH_INSTANT_PRICES[checkCat] || SABAFON_SOUTH_INSTANT_PRICES[rawNum];
+    if (instantPrice) {
+      const southRate = config.sabafon?.instantSouthRate ?? 1;
+      return roundCurrency(instantPrice * southRate);
+    }
+    const baseAmt = rawAmount > 0 ? rawAmount : (parseFloat(rawNum) || 0);
     const southRate = config.sabafon?.instantSouthRate ?? config.sabafon?.balanceRate ?? 3.0;
-    return roundCurrency(rawAmount * southRate);
+    return roundCurrency(baseAmt * southRate);
   }
 
   // 5. سبأفون وحدات
-  if (service === 'sabaunits') {
-    const unitCount = parseFloat(rawNum || String(payload.amount || '0')) || 1;
-    const unitPrice = config.sabafon?.unitsRate ?? 45;
+  if (
+    service === 'sabaunits' || 
+    service === 'saba_units' || 
+    ((service === 'sabaphone' || service === 'sabafon' || service === 'saba') && (
+      action === 'units' || 
+      action === 'sabaunits' || 
+      (payload as any).type === 'units' || 
+      Boolean(payload.units) || 
+      Boolean(payload.count)
+    ))
+  ) {
+    const rawUnitsStr = String(
+      payload.units || 
+      payload.unit || 
+      payload.count || 
+      payload.quantity || 
+      rawNum || 
+      (payload as any).unum || 
+      (payload.amount && parseFloat(String(payload.amount)) < 500 ? payload.amount : '') || 
+      '50'
+    ).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+    const unitCount = parseFloat(rawUnitsStr) || 50;
+    const unitPrice = config.sabafon?.unitsRate ?? 42.35;
     return roundCurrency(unitCount * unitPrice);
   }
 
   // 6. سبأفون باقات
   if (service === 'sabaoffer') {
-    const sabaPkgPrice = KNOWN_PACKAGE_PRICES[`saba_${rawNum}`] || KNOWN_PACKAGE_PRICES[packageKey] || rawAmount;
+    const sabaPkgPrice = 
+      KNOWN_PACKAGE_PRICES[packageKey] || 
+      KNOWN_PACKAGE_PRICES[`saba_${packageKey}`] || 
+      KNOWN_PACKAGE_PRICES[rawNum] || 
+      KNOWN_PACKAGE_PRICES[`saba_${rawNum}`] || 
+      rawAmount;
+    const finalBasePrice = sabaPkgPrice > 0 ? sabaPkgPrice : (
+      packageKey.toLowerCase().includes('aman') || rawNum.toLowerCase().includes('aman') || packageKey === 'SABA114' ? 2880 : rawAmount
+    );
     const pkgRate = config.sabafon?.packagesRate ?? config.sabafon?.rate ?? 1;
-    return roundCurrency(sabaPkgPrice * pkgRate);
+    return roundCurrency(finalBasePrice * pkgRate);
   }
 
   // 7. شركة واي (Why)

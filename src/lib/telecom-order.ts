@@ -577,11 +577,53 @@ export const KNOWN_PACKAGE_NAMES: Record<string, string> = {
   'you_9': 'شحن فوري يو 5000 ريال',
   'you_10': 'شحن فوري يو 7500 ريال',
 
-  // سبأفون
+  // سبأفون - باقات وشحن فوري
   '68': 'باقة يابلاش اليومية',
   'saba_68': 'باقة يابلاش اليومية',
   'SABA114': 'باقة امان الاسبوعية',
   'saba_SABA114': 'باقة امان الاسبوعية',
+  'aman': 'باقة امان الاسبوعية',
+  'saba_aman': 'باقة امان الاسبوعية',
+  'aman_weekly': 'باقة امان الاسبوعية',
+  'saba_aman_weekly': 'باقة امان الاسبوعية',
+  '20448': 'باقة امان الاسبوعية',
+  'saba_20448': 'باقة امان الاسبوعية',
+  '600': 'شحن فوري سبأفون جنوب (فئة 600)',
+  'sbay_600': 'شحن فوري سبأفون جنوب (فئة 600)',
+  '1000': 'شحن فوري سبأفون جنوب (فئة 1000)',
+  'sbay_1000': 'شحن فوري سبأفون جنوب (فئة 1000)',
+  '1650': 'شحن فوري سبأفون جنوب (فئة 1650)',
+  'sbay_1650': 'شحن فوري سبأفون جنوب (فئة 1650)',
+  '2500': 'شحن فوري سبأفون جنوب (فئة 2500)',
+  'sbay_2500': 'شحن فوري سبأفون جنوب (فئة 2500)',
+  '5000': 'شحن فوري سبأفون جنوب (فئة 5000)',
+  'sbay_5000': 'شحن فوري سبأفون جنوب (فئة 5000)',
+  '10000': 'شحن فوري سبأفون جنوب (فئة 10000)',
+  'sbay_10000': 'شحن فوري سبأفون جنوب (فئة 10000)',
+  '22.5': 'شحن فوري سبأفون شمال (فئة 22.5)',
+  'sabaphone_22.5': 'شحن فوري سبأفون شمال (فئة 22.5)',
+  '40': 'شحن فوري سبأفون شمال (فئة 40)',
+  'sabaphone_40': 'شحن فوري سبأفون شمال (فئة 40)',
+  '45': 'شحن فوري سبأفون شمال (فئة 45)',
+  'sabaphone_45': 'شحن فوري سبأفون شمال (فئة 45)',
+  '60': 'شحن فوري سبأفون شمال (فئة 60)',
+  'sabaphone_60': 'شحن فوري سبأفون شمال (فئة 60)',
+  '85': 'شحن فوري سبأفون شمال (فئة 85)',
+  'sabaphone_85': 'شحن فوري سبأفون شمال (فئة 85)',
+  '100': 'شحن فوري سبأفون شمال (فئة 100)',
+  'sabaphone_100': 'شحن فوري سبأفون شمال (فئة 100)',
+  '125': 'شحن فوري سبأفون شمال (فئة 125)',
+  'sabaphone_125': 'شحن فوري سبأفون شمال (فئة 125)',
+  '150': 'شحن فوري سبأفون شمال (فئة 150)',
+  'sabaphone_150': 'شحن فوري سبأفون شمال (فئة 150)',
+  '209': 'شحن فوري سبأفون شمال (فئة 209)',
+  'sabaphone_209': 'شحن فوري سبأفون شمال (فئة 209)',
+  '300': 'شحن فوري سبأفون شمال (فئة 300)',
+  'sabaphone_300': 'شحن فوري سبأفون شمال (فئة 300)',
+  '505': 'شحن فوري سبأفون شمال (فئة 505)',
+  'sabaphone_505': 'شحن فوري سبأفون شمال (فئة 505)',
+  '1270': 'شحن فوري سبأفون شمال (فئة 1270)',
+  'sabaphone_1270': 'شحن فوري سبأفون شمال (فئة 1270)',
 
   // واي Why
   '91': 'باقة كرم 250',
@@ -754,9 +796,28 @@ export function resolveTelecomDetails(input: TelecomDetailsInput): {
   }
 
   // 3. سبأفون
-  if (s === 'sabaphone' || s === 'sbay' || s === 'sabaunits' || s === 'sabaoffer') {
-    if (s === 'sabaunits') {
-      const unitsCount = input.num || input.amount || 0;
+  if (s === 'sabaphone' || s === 'sbay' || s === 'sabaunits' || s === 'sabaoffer' || s === 'sabafon' || s === 'saba' || s === 'saba_units' || s === 'saba_south' || s === 'sabasouth') {
+    const isUnits = 
+      s === 'sabaunits' || 
+      s === 'saba_units' || 
+      act === 'units' || 
+      act === 'sabaunits' || 
+      (input as any).type === 'units' || 
+      Boolean((input as any).units) || 
+      Boolean((input as any).count);
+
+    if (isUnits) {
+      const rawUnitsStr = String(
+        (input as any).units || 
+        (input as any).unit || 
+        (input as any).count || 
+        (input as any).quantity || 
+        input.num || 
+        (input as any).unum || 
+        (input.amount && parseFloat(String(input.amount)) < 500 ? input.amount : '') || 
+        '50'
+      ).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+      const unitsCount = parseFloat(rawUnitsStr) || 50;
       return {
         serviceName: 'سبأفون',
         transactionType: `سبأفون - شحن وحدات (${unitsCount} وحدة)`,
@@ -764,8 +825,9 @@ export function resolveTelecomDetails(input: TelecomDetailsInput): {
         recipientPhoneNumber: cleanPhone
       };
     }
-    if (s === 'sabaoffer' || Boolean(knownPkg)) {
-      const pkgName = knownPkg || `باقة (${pkgKey})`;
+
+    if (s === 'sabaoffer' || Boolean(knownPkg) || pkgKey.toLowerCase().includes('aman')) {
+      const pkgName = knownPkg || (pkgKey.toLowerCase().includes('aman') || pkgKey === 'SABA114' ? 'باقة امان الاسبوعية' : `باقة (${pkgKey})`);
       return {
         serviceName: 'سبأفون',
         packageName: pkgName,
@@ -774,18 +836,25 @@ export function resolveTelecomDetails(input: TelecomDetailsInput): {
         recipientPhoneNumber: cleanPhone
       };
     }
-    if (s === 'sbay') {
+
+    if (s === 'sbay' || s === 'saba_south' || s === 'sabasouth') {
+      const category = input.num || (input as any).category || (input.amount ? String(input.amount) : '');
+      const itemTitle = category ? ` (فئة ${category})` : '';
       return {
         serviceName: 'سبأفون',
-        transactionType: 'سبأفون - شحن فوري جنوب',
-        notes: `شحن فوري سبأفون جنوب للرقم: ${cleanPhone}`,
+        transactionType: `سبأفون - شحن فوري جنوب${itemTitle}`,
+        notes: `شحن فوري سبأفون جنوب${itemTitle} للرقم: ${cleanPhone}`,
         recipientPhoneNumber: cleanPhone
       };
     }
+
+    const northCat = input.num || (input as any).category || '';
+    const isNorthInstant = Boolean(northCat);
+    const northTitle = isNorthInstant ? ` (فئة ${northCat})` : '';
     return {
       serviceName: 'سبأفون',
-      transactionType: 'سبأفون - سداد رصيد',
-      notes: `سداد رصيد سبأفون للرقم: ${cleanPhone}`,
+      transactionType: isNorthInstant ? `سبأفون - شحن فوري شمال${northTitle}` : 'سبأفون - سداد رصيد',
+      notes: isNorthInstant ? `شحن فوري سبأفون شمال${northTitle} للرقم: ${cleanPhone}` : `سداد رصيد سبأفون للرقم: ${cleanPhone} بمبلغ: ${input.amount || '0'} ريال`,
       recipientPhoneNumber: cleanPhone
     };
   }
@@ -978,9 +1047,31 @@ export function validateTelecomRequest(input: {
   }
 
   // 3. سبأفون: أقل وحدات 50 وحدة
-  if (s === 'sabaunits') {
-    const units = numVal > 0 ? numVal : amt;
-    if (units < 50) {
+  // 3. سبأفون: أقل وحدات 50 وحدة
+  const isSabaUnits = 
+    s === 'sabaunits' || 
+    s === 'saba_units' || 
+    ((s === 'sabaphone' || s === 'sabafon' || s === 'saba') && (
+      act === 'units' || 
+      act === 'sabaunits' || 
+      (input as any).type === 'units' || 
+      Boolean((input as any).units) || 
+      Boolean((input as any).count)
+    ));
+
+  if (isSabaUnits) {
+    const rawUnitsStr = String(
+      (input as any).units || 
+      (input as any).unit || 
+      (input as any).count || 
+      (input as any).quantity || 
+      input.num || 
+      (input as any).unum || 
+      (amt > 0 && amt <= 1000 ? amt : '') || 
+      '0'
+    ).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+    const units = parseFloat(rawUnitsStr) || 0;
+    if (units > 0 && units < 50) {
       return { valid: false, error: 'أقل كمية شحن مسموح بها لوحدات سبأفون هي 50 وحدة.' };
     }
   }

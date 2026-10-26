@@ -6,7 +6,9 @@ import {
   DEFAULT_SERVICES_CONFIG, 
   SystemServicesConfig, 
   calculateApiTransactionCost,
-  KNOWN_PACKAGE_PRICES 
+  KNOWN_PACKAGE_PRICES,
+  SABAFON_NORTH_INSTANT_PRICES,
+  SABAFON_SOUTH_INSTANT_PRICES
 } from '@/lib/services-config';
 import { 
   generateTransId, 
@@ -475,21 +477,48 @@ export async function POST(request: Request) {
         '30000': '30000'
       };
       apiRequestParams.num = codeMap[pkgCode] || pkgCode;
-    } else if (service === 'sabaphone') {
+    } else if (service === 'sabaphone' || service === 'sabafon' || service === 'saba') {
       endpoint = 'sabaphone';
       apiRequestParams.action = action || 'bill';
+      // ضمان تمرير num رقمي للمزود دائماً لمنع خطأ num parametr is required
+      let resolvedNum = String(payload.num || '').trim();
+      if (!resolvedNum) {
+        const amtVal = parseFloat(String(payload.amount || '0')) || 0;
+        const matchedCategory = Object.keys(SABAFON_NORTH_INSTANT_PRICES).find(
+          k => SABAFON_NORTH_INSTANT_PRICES[k] === amtVal
+        );
+        resolvedNum = matchedCategory || (amtVal > 0 ? String(amtVal) : String(payload.packageid || payload.offerid || '100'));
+      }
+      apiRequestParams.num = resolvedNum;
     } else if (service === 'sabaoffer') {
       endpoint = 'sabaoffer';
       delete apiRequestParams.action;
-      if (apiRequestParams.num) {
-        apiRequestParams.unum = apiRequestParams.num;
+      const pkgCode = String(payload.num || payload.packageid || payload.packageId || payload.offerid || payload.offerId || '').trim();
+      if (pkgCode) {
+        apiRequestParams.num = pkgCode;
+        apiRequestParams.unum = pkgCode;
       }
-    } else if (service === 'sbay') {
+    } else if (service === 'sbay' || service === 'saba_south' || service === 'sabasouth') {
       endpoint = 'sbay';
       apiRequestParams.action = action || 'bill';
-    } else if (service === 'sabaunits') {
+      // ضمان تمرير num رقمي للمزود دائماً لمنع خطأ num parametr is required
+      let resolvedNum = String(payload.num || '').trim();
+      if (!resolvedNum) {
+        const amtVal = parseFloat(String(payload.amount || '0')) || 0;
+        const matchedCategory = Object.keys(SABAFON_SOUTH_INSTANT_PRICES).find(
+          k => SABAFON_SOUTH_INSTANT_PRICES[k] === amtVal
+        );
+        resolvedNum = matchedCategory || (amtVal > 0 ? String(amtVal) : String(payload.packageid || payload.offerid || '600'));
+      }
+      apiRequestParams.num = resolvedNum;
+    } else if (service === 'sabaunits' || service === 'saba_units') {
       endpoint = 'sabaunits';
       delete apiRequestParams.action;
+      const rawUnits = String(payload.units || payload.unit || payload.count || payload.quantity || payload.num || payload.amount || '50')
+        .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
+        .trim();
+      apiRequestParams.num = rawUnits;
+      apiRequestParams.unum = rawUnits;
     } else if (service === 'why') {
       endpoint = 'why';
       apiRequestParams.action = 'bill';
@@ -1042,7 +1071,7 @@ async function refundUser(firestore: any, userId: string, transid: string, amoun
     const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
     const updatedNotes = cleanNotes ? `${cleanNotes}\nسبب الرفض: ${reason}` : `سبب الرفض: ${reason}`;
 
-    const updateData = {
+    const updateData: any = {
       status: 'failed',
       readiness: 'فاشلة',
       refunded: true,
@@ -1050,6 +1079,9 @@ async function refundUser(firestore: any, userId: string, transid: string, amoun
       notes: updatedNotes,
       failedAt: new Date().toISOString()
     };
+    if (amount > 0 && (!snap.data()?.amount || snap.data()?.amount === 0)) {
+      updateData.amount = amount;
+    }
 
     const batch = writeBatch(firestore);
     batch.update(userRef, { balance: increment(amount) });

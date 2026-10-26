@@ -280,6 +280,7 @@ export async function POST(req: Request) {
         body: JSON.stringify({
           ...body,
           action: effectiveAction,
+          amount: body.amount || payAmount,
           transid: transactionId,
           backpass: backpass
         })
@@ -402,6 +403,7 @@ export async function POST(req: Request) {
         status: 'failed',
         readiness: 'فاشلة',
         refunded: true,
+        amount: payAmount,
         providerMessage: cleanError,
         notes: `${telecomDetails.notes}\nالسبب: ${cleanError}`,
         failedAt: new Date().toISOString()
