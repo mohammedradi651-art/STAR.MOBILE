@@ -545,14 +545,30 @@ export const KNOWN_PACKAGE_NAMES: Record<string, string> = {
 
   // يو YOU
   'Sawa_300_PRE': 'باقة السعر الموحد 300',
+  'unified_300': 'باقة السعر الموحد 300',
   'Mix_4GB_4G_PRE': 'باقة السعر الموحد 4 جيجا فورجي',
+  'unified_4gb': 'باقة السعر الموحد 4 جيجا فورجي',
   'Mix_5Giga_4G_PRE': 'باقة فورجي 5 جيجا',
+  '4g_5gb': 'باقة فورجي 5 جيجا',
   'Smart4Giga_4G_PRE': 'باقة سمارت فورجي الأسبوعية',
+  'smart_4g_weekly': 'باقة سمارت فورجي الأسبوعية',
   'WafferPlus10_4G_PRE': 'باقة وفر بلس 10 جيجا',
+  'waffer_plus_10gb': 'باقة وفر بلس 10 جيجا',
   'Mix_5000_PRE': 'باقة سوا مكس 1200',
+  'sawa_mix': 'باقة سوا مكس 1200',
   'Mix_12Giga_4G_PRE': 'فورجي مكس 12 جيجا',
+  '4g_mix_12gb': 'فورجي مكس 12 جيجا',
   'Smart15Giga_4G_PRE': 'باقة سمارت فورجي 15 جيجا',
+  'smart_4g_15gb': 'باقة سمارت فورجي 15 جيجا',
   'Smart3Giga_3G_PRE': 'باقة سمارت اليومية 3 جيجا',
+  'smart_daily': 'باقة سمارت اليومية 3 جيجا',
+  '4': 'شحن فوري يو 410 ريال',
+  '6': 'شحن فوري يو 830 ريال',
+  '11': 'شحن فوري يو 1000 ريال',
+  '7': 'شحن فوري يو 1250 ريال',
+  '8': 'شحن فوري يو 2500 ريال',
+  '9': 'شحن فوري يو 5000 ريال',
+  '10': 'شحن فوري يو 7500 ريال',
   'you_4': 'شحن فوري يو 410 ريال',
   'you_6': 'شحن فوري يو 830 ريال',
   'you_11': 'شحن فوري يو 1000 ريال',
@@ -684,14 +700,48 @@ export function resolveTelecomDetails(input: TelecomDetailsInput): {
 
   // 2. يو YOU
   if (s === 'you' || s === 'mtn' || s === 'mtnoffer') {
-    const isOffer = act === 'billoffer' || Boolean(knownPkg) || Boolean(input.offerid);
+    const rawPkgKey = String(
+      input.offerid || 
+      (input as any).offerId || 
+      input.packageid || 
+      (input as any).packageId || 
+      (input as any).offertype || 
+      (input as any).package_code ||
+      input.num || 
+      ''
+    ).trim();
+
+    const knownPkg = 
+      KNOWN_PACKAGE_NAMES[rawPkgKey] || 
+      KNOWN_PACKAGE_NAMES[String(input.offerid || '')] || 
+      KNOWN_PACKAGE_NAMES[String((input as any).offerId || '')] ||
+      KNOWN_PACKAGE_NAMES[String(input.packageid || '')] || 
+      KNOWN_PACKAGE_NAMES[String((input as any).packageId || '')] ||
+      KNOWN_PACKAGE_NAMES[String((input as any).offertype || '')] ||
+      KNOWN_PACKAGE_NAMES[String(input.num || '')];
+
+    const isOffer = 
+      s === 'mtnoffer' ||
+      act === 'billoffer' || 
+      act === 'offer' || 
+      act === 'package' || 
+      act === 'packages' ||
+      Boolean(knownPkg) || 
+      Boolean(input.offerid) || 
+      Boolean((input as any).offerId) ||
+      Boolean(input.packageid) || 
+      Boolean((input as any).packageId) || 
+      Boolean((input as any).offertype) || 
+      Boolean((input as any).package_code) ||
+      ((input as any).israsid === '0' || (input as any).israsid === 0);
+
     if (isOffer) {
-      const pkgName = knownPkg || `باقة (${pkgKey})`;
+      const finalPkgName = knownPkg || (rawPkgKey ? `باقة يو (${rawPkgKey})` : 'باقة يو');
       return {
         serviceName: 'يو',
-        packageName: pkgName,
-        transactionType: `يو - ${pkgName}`,
-        notes: `تفعيل ${pkgName} للرقم: ${cleanPhone}`,
+        packageName: finalPkgName,
+        transactionType: `يو - ${finalPkgName}`,
+        notes: `تفعيل ${finalPkgName} للرقم: ${cleanPhone}`,
         recipientPhoneNumber: cleanPhone
       };
     }
@@ -881,11 +931,49 @@ export function validateTelecomRequest(input: {
     }
   }
 
-  // 2. يو: أقل سداد للرصيد هو 100 ريال
-  if ((s === 'you' || s === 'mtn') && act !== 'billoffer' && !input.offerid) {
-    const checkAmt = amt > 0 ? amt : numVal;
-    if (checkAmt < 100) {
-      return { valid: false, error: 'أقل مبلغ سداد للرصيد في شركة يو هو 100 ريال.' };
+  // 2. يو: التحقق من الرقم وضوابط الباقات وسداد الرصيد
+  if (s === 'you' || s === 'mtn' || s === 'mtnoffer') {
+    const phoneNum = String(input.mobile || (input as any).phone || '').replace(/\D/g, '').slice(-9);
+    if (phoneNum && phoneNum.length > 0) {
+      if (phoneNum.length !== 9 || !phoneNum.startsWith('73')) {
+        return { valid: false, error: 'رقم هاتف شركة يو (YOU) يجب أن يتكون من 9 أرقام ويبدأ بـ 73.' };
+      }
+    }
+
+    const pkgCheckKey = String(
+      input.offerid || 
+      (input as any).offerId || 
+      input.packageid || 
+      (input as any).packageId || 
+      (input as any).offertype || 
+      (input as any).package_code ||
+      input.num || 
+      ''
+    ).trim();
+
+    const isOffer = 
+      s === 'mtnoffer' ||
+      act === 'billoffer' || 
+      act === 'offer' || 
+      act === 'package' || 
+      Boolean(input.offerid) || 
+      Boolean((input as any).offerId) ||
+      Boolean(input.packageid) || 
+      Boolean((input as any).packageId) || 
+      Boolean((input as any).offertype) || 
+      Boolean((input as any).package_code) ||
+      Boolean(KNOWN_PACKAGE_NAMES[pkgCheckKey]) ||
+      (input.israsid === '0' || input.israsid === 0);
+
+    if (isOffer) {
+      if (!pkgCheckKey) {
+        return { valid: false, error: 'يرجى تحديد كود أو رقم الباقة المطلوبة لشركة يو (مثلاً: Mix_4GB_4G_PRE أو Sawa_300_PRE).' };
+      }
+    } else {
+      const checkAmt = amt > 0 ? amt : numVal;
+      if (checkAmt < 100) {
+        return { valid: false, error: 'أقل مبلغ سداد للرصيد في شركة يو هو 100 ريال.' };
+      }
     }
   }
 

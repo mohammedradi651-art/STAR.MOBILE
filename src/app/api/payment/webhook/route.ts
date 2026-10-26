@@ -365,6 +365,25 @@ async function handleWebhookExecution(
     if (userTxRef) batch.set(userTxRef, updatePayload, { merge: true });
     await batch.commit();
 
+    // إشعار نظام العميل عبر Webhook إذا قام بتمرير backurl
+    if (txData.clientBackUrl) {
+      try {
+        fetch(txData.clientBackUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'User-Agent': 'StarMobile-Webhook/1.0' },
+          body: JSON.stringify({
+            transid: cleanTransId,
+            status: 'success',
+            readiness: 'جاهزة',
+            amount: amount,
+            mobile: txData.recipientPhoneNumber || txData.phoneNumber,
+            service: txData.transactionType,
+            message: message || 'تم تنفيذ العملية بنجاح'
+          })
+        }).catch(() => {});
+      } catch (e) {}
+    }
+
     await addDoc(logsRef, {
       ...logBase,
       transactionFound: true,
@@ -430,6 +449,26 @@ async function handleWebhookExecution(
     if (txDocRef) batch.set(txDocRef, updatePayload, { merge: true });
     if (userTxRef) batch.set(userTxRef, updatePayload, { merge: true });
     await batch.commit();
+
+    // إشعار نظام العميل عبر Webhook إذا قام بتمرير backurl
+    if (txData.clientBackUrl) {
+      try {
+        fetch(txData.clientBackUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'User-Agent': 'StarMobile-Webhook/1.0' },
+          body: JSON.stringify({
+            transid: cleanTransId,
+            status: 'failed',
+            readiness: 'فاشلة',
+            amount: amount,
+            mobile: txData.recipientPhoneNumber || txData.phoneNumber,
+            service: txData.transactionType,
+            refunded: true,
+            message: cancellationReason
+          })
+        }).catch(() => {});
+      } catch (e) {}
+    }
 
     await addDoc(logsRef, {
       ...logBase,

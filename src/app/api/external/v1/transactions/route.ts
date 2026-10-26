@@ -133,7 +133,31 @@ export async function GET(req: Request) {
         return NextResponse.json({ success: false, code: 'NOT_FOUND', message: `العملية برقم ${transid} غير موجودة.`, timestamp }, { status: 404, headers: corsHeaders });
       }
 
-      const txData = txSnap.data();
+      let txData = txSnap.data();
+
+      // مزامنة حية وفورية مع المزود إذا كانت العملية ما زالت معلقة (قيد الانتظار)
+      if (txData.status === 'pending' || txData.readiness === 'قيد الانتظار') {
+        try {
+          const origin = new URL(req.url).origin;
+          const syncRes = await fetch(`${origin}/api/payment/sync-status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transid: txData.transid || transid })
+          });
+          if (syncRes.ok) {
+            const syncJson = await syncRes.json();
+            if (syncJson.status && syncJson.status !== 'pending') {
+              const updatedSnap = await getDoc(txSnap.ref);
+              if (updatedSnap.exists()) {
+                txData = updatedSnap.data();
+              }
+            }
+          }
+        } catch (syncErr) {
+          console.warn("Live sync during transaction GET query failed:", syncErr);
+        }
+      }
+
       return NextResponse.json({
         success: true,
         code: 'OK',
@@ -211,7 +235,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, code: 'NOT_FOUND', message: `العملية برقم ${transid} غير موجودة.`, timestamp }, { status: 404, headers: corsHeaders });
     }
 
-    const txData = txSnap.data();
+    let txData = txSnap.data();
+
+    // مزامنة حية وفورية مع المزود إذا كانت العملية ما زالت معلقة (قيد الانتظار)
+    if (txData.status === 'pending' || txData.readiness === 'قيد الانتظار') {
+      try {
+        const origin = new URL(req.url).origin;
+        const syncRes = await fetch(`${origin}/api/payment/sync-status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transid: txData.transid || transid })
+        });
+        if (syncRes.ok) {
+          const syncJson = await syncRes.json();
+          if (syncJson.status && syncJson.status !== 'pending') {
+            const updatedSnap = await getDoc(txSnap.ref);
+            if (updatedSnap.exists()) {
+              txData = updatedSnap.data();
+            }
+          }
+        }
+      } catch (syncErr) {
+        console.warn("Live sync during transaction POST query failed:", syncErr);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       code: 'OK',

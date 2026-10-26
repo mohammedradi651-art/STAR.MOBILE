@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     const { action, service, ...payload } = body;
 
     // التحقق الصارم من صحة الطلب والحدود الدنيا قبل أي عملية
-    const isBillingAction = !action || action === 'bill' || action === 'billoffer' || action === 'renew' || action === 'order' || service === 'sabaunits' || service === 'sabaoffer';
+    const isBillingAction = !action || action === 'bill' || action === 'billoffer' || action === 'offer' || action === 'package' || action === 'renew' || action === 'order' || service === 'sabaunits' || service === 'sabaoffer';
     const sLower = (service || '').toLowerCase().trim();
     if (
       isBillingAction || 
@@ -45,7 +45,10 @@ export async function POST(request: Request) {
       sLower === 'yem4g' || 
       sLower === 'yemen_4g' || 
       sLower === 'yemen4g' || 
-      sLower === '4g'
+      sLower === '4g' ||
+      sLower === 'you' ||
+      sLower === 'mtn' ||
+      sLower === 'mtnoffer'
     ) {
       const validation = validateTelecomRequest(body);
       if (!validation.valid) {
@@ -499,10 +502,57 @@ export async function POST(request: Request) {
           apiRequestParams.packageid = String(payload.packageid).trim();
         }
       }
-    } else if (service === 'you') {
-      if (action === 'billoffer' || action === 'queryoffer') {
+    } else if (service === 'you' || service === 'mtn' || service === 'mtnoffer') {
+      const isOffer = 
+        action === 'billoffer' || 
+        action === 'queryoffer' || 
+        action === 'offer' || 
+        action === 'package' || 
+        service === 'mtnoffer' ||
+        Boolean(payload.packageid) || 
+        Boolean(payload.packageId) || 
+        Boolean(payload.offerid) || 
+        Boolean(payload.offerId) || 
+        Boolean(payload.offertype) ||
+        Boolean(payload.package_code) ||
+        (payload.israsid === '0' || payload.israsid === 0);
+
+      if (isOffer) {
         endpoint = 'mtnoffer';
         delete apiRequestParams.action;
+
+        // استخراج كود الباقة بدقة
+        let rawPkgCode = String(
+          payload.num || 
+          payload.packageid || 
+          payload.packageId || 
+          payload.offerid || 
+          payload.offerId || 
+          payload.offertype || 
+          payload.package_code ||
+          ''
+        ).trim();
+
+        // تحويل المعرفات المختصرة إلى أكواد المزود الرسمية
+        const youSlugToCodeMap: Record<string, string> = {
+          'unified_300': 'Sawa_300_PRE',
+          'unified_4gb': 'Mix_4GB_4G_PRE',
+          '4g_5gb': 'Mix_5Giga_4G_PRE',
+          'smart_4g_weekly': 'Smart4Giga_4G_PRE',
+          'waffer_plus_10gb': 'WafferPlus10_4G_PRE',
+          'sawa_mix': 'Mix_5000_PRE',
+          '4g_mix_12gb': 'Mix_12Giga_4G_PRE',
+          'smart_4g_15gb': 'Smart15Giga_4G_PRE',
+          'smart_daily': 'Smart3Giga_3G_PRE',
+        };
+
+        const finalCode = youSlugToCodeMap[rawPkgCode] || rawPkgCode;
+        apiRequestParams.num = finalCode;
+
+        // تعبئة المبلغ الرسمي إذا لم يتم تمريره
+        if (!apiRequestParams.amount && KNOWN_PACKAGE_PRICES[finalCode]) {
+          apiRequestParams.amount = KNOWN_PACKAGE_PRICES[finalCode];
+        }
       } else {
         endpoint = 'mtn';
         apiRequestParams.action = action || 'bill';

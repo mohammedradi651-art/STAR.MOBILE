@@ -325,7 +325,34 @@ export const KNOWN_PACKAGE_PRICES: Record<string, number> = {
   '98': 482,
   '102': 4820,
 
+  // يو YOU - باقات السعر الموحد والفورجي
+  'Sawa_300_PRE': 2904,
+  'unified_300': 2904,
+  'Mix_4GB_4G_PRE': 2904,
+  'unified_4gb': 2904,
+  'Mix_5Giga_4G_PRE': 5445,
+  '4g_5gb': 5445,
+  'Smart4Giga_4G_PRE': 2251,
+  'smart_4g_weekly': 2251,
+  'WafferPlus10_4G_PRE': 2500,
+  'waffer_plus_10gb': 2500,
+  'Mix_5000_PRE': 4901,
+  'sawa_mix': 4901,
+  'Mix_12Giga_4G_PRE': 9874,
+  '4g_mix_12gb': 9874,
+  'Smart15Giga_4G_PRE': 12705,
+  'smart_4g_15gb': 12705,
+  'Smart3Giga_3G_PRE': 1815,
+  'smart_daily': 1815,
+
   // يو YOU - أرقام الشحن الفوري
+  '4': 1700,
+  '6': 3500,
+  '11': 4000,
+  '7': 5000,
+  '8': 10000,
+  '9': 19000,
+  '10': 29000,
   'you_4': 1700,
   'you_6': 3500,
   'you_11': 4000,
@@ -408,7 +435,17 @@ export function calculateApiTransactionCost(
   const action = (payload.action || 'bill').toLowerCase().trim();
   const rawAmount = parseFloat(String(payload.amount || '0')) || 0;
   const rawNum = String(payload.num || '').trim();
-  const packageKey = String(payload.offerid || payload.packageid || payload.num || payload.amount || '').trim();
+  const packageKey = String(
+    payload.offerid || 
+    (payload as any).offerId || 
+    payload.packageid || 
+    (payload as any).packageId || 
+    (payload as any).offertype || 
+    (payload as any).package_code ||
+    payload.num || 
+    payload.amount || 
+    ''
+  ).trim();
 
   // 1. يمن موبايل
   if (service === 'yemen' || service === 'yem') {
@@ -420,10 +457,33 @@ export function calculateApiTransactionCost(
   }
 
   // 2. يو YOU
-  if (service === 'you') {
-    if (action === 'billoffer' || action === 'queryoffer') {
-      const youFastPrice = KNOWN_PACKAGE_PRICES[`you_${rawNum}`] || KNOWN_PACKAGE_PRICES[packageKey];
-      const basePrice = youFastPrice || rawAmount;
+  if (service === 'you' || service === 'mtn' || service === 'mtnoffer') {
+    const isOffer = 
+      service === 'mtnoffer' ||
+      action === 'billoffer' || 
+      action === 'queryoffer' ||
+      action === 'offer' || 
+      action === 'package' || 
+      action === 'packages' ||
+      Boolean(payload.offerid) ||
+      Boolean((payload as any).offerId) ||
+      Boolean(payload.packageid) ||
+      Boolean((payload as any).packageId) ||
+      Boolean((payload as any).offertype) ||
+      Boolean((payload as any).package_code) ||
+      Boolean(KNOWN_PACKAGE_PRICES[packageKey]) ||
+      Boolean(KNOWN_PACKAGE_PRICES[`you_${rawNum}`]) ||
+      Boolean(KNOWN_PACKAGE_PRICES[rawNum]) ||
+      (payload.israsid === '0' || payload.israsid === 0);
+
+    if (isOffer) {
+      const youPrice = 
+        KNOWN_PACKAGE_PRICES[packageKey] || 
+        KNOWN_PACKAGE_PRICES[`you_${rawNum}`] || 
+        KNOWN_PACKAGE_PRICES[rawNum] ||
+        KNOWN_PACKAGE_PRICES[String(payload.packageid || (payload as any).packageId || payload.offerid || (payload as any).offerId || (payload as any).offertype || '')];
+      
+      const basePrice = youPrice || rawAmount;
       return calculateFinalServicePrice(basePrice, config.you);
     }
     // شحن فوري أو رصيد يو (معامل العملة المرتفعة للـ API)

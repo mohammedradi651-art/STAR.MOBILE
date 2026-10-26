@@ -71,6 +71,73 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { mobile, action, service } = body;
 
+    // دعم الاستعلام المباشر عن حالة العملية عبر transid
+    if ((action === 'status' || action === 'check') && (body.transid || body.id)) {
+      const checkTransId = String(body.transid || body.id).trim();
+      const origin = new URL(req.url).origin;
+      
+      // مزامنة حالة العملية الحية مع المزود
+      try {
+        await fetch(`${origin}/api/payment/sync-status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transid: checkTransId })
+        });
+      } catch (e) {}
+
+      // قراءة بيانات العملية من قاعدة البيانات
+      const txDocRef = doc(firestore, 'paymentTransactions', checkTransId);
+      const txSnap = await getDoc(txDocRef);
+
+      if (!txSnap.exists()) {
+        return NextResponse.json({
+          success: false,
+          code: 'SM_NOT_FOUND',
+          message: `العملية برقم ${checkTransId} غير موجودة.`,
+          transactionId: checkTransId,
+          data: null,
+          timestamp
+        }, { status: 404, headers: corsHeaders });
+      }
+
+      const tx = txSnap.data();
+      if (!isAdmin && tx.userId !== requesterDoc.id) {
+        return NextResponse.json({
+          success: false,
+          code: 'SM_FORBIDDEN',
+          message: 'ليس لديك صلاحية للاطلاع على هذه العملية.',
+          transactionId: checkTransId,
+          data: null,
+          timestamp
+        }, { status: 403, headers: corsHeaders });
+      }
+
+      return NextResponse.json({
+        success: true,
+        code: 'SM_SUCCESS',
+        status: tx.status,
+        readiness: tx.readiness,
+        transactionId: checkTransId,
+        message: tx.readiness === 'جاهزة' 
+          ? 'تم تنفيذ العملية بنجاح' 
+          : (tx.readiness === 'فاشلة' ? (tx.providerMessage || 'فشلت العملية') : 'العملية قيد المعالجة (قيد الانتظار)'),
+        data: {
+          transid: checkTransId,
+          status: tx.status,
+          readiness: tx.readiness,
+          amount: tx.amount,
+          mobile: tx.recipientPhoneNumber,
+          service: tx.transactionType,
+          refunded: Boolean(tx.refunded),
+          providerMessage: tx.providerMessage || null,
+          createdAt: tx.createdAt,
+          completedAt: tx.completedAt || null,
+          failedAt: tx.failedAt || null
+        },
+        timestamp
+      }, { headers: corsHeaders });
+    }
+
     if (!mobile || !service) {
       return NextResponse.json({
         success: false,
@@ -141,15 +208,23 @@ export async function POST(req: Request) {
       }, { status: 400, headers: corsHeaders });
     }
 
+    // تحديد ما إذا كان الطلب خاصاً بباقة
+    const isExplicitPackage = 
+      action === 'billoffer' || 
+      action === 'offer' || 
+      action === 'package' || 
+      service === 'mtnoffer' || 
+      Boolean(body.packageid || body.packageId || body.offerid || body.offerId || body.offertype || body.package_code) ||
+      (body.israsid === '0' || body.israsid === 0);
+
+    const effectiveAction = action || (isExplicitPackage ? 'billoffer' : 'bill');
+
     // 4. استخراج مسمى الخدمة واسم الباقة بالعربي بدقة وبدون أي ذكر لـ API
     const telecomDetails = resolveTelecomDetails({
+      ...body,
       service,
-      action: action || 'bill',
+      action: effectiveAction,
       amount: payAmount,
-      num: body.num,
-      offerid: body.offerid,
-      packageid: body.packageid,
-      israsid: body.israsid,
       mobile: mobile,
       recipientPhoneNumber: mobile
     });
@@ -165,6 +240,8 @@ export async function POST(req: Request) {
     const initBatch = writeBatch(firestore);
     initBatch.update(userRef, { balance: increment(-payAmount) });
 
+    const clientBackUrl = body.backurl || body.backUrl || body.callbackUrl || body.callback_url || null;
+
     const txRecord = {
       id: transactionId,
       userId: effectiveUserId,
@@ -179,7 +256,8 @@ export async function POST(req: Request) {
       status: 'pending',
       readiness: 'قيد الانتظار',
       refunded: false,
-      serviceCategory: telecomDetails.serviceName
+      serviceCategory: telecomDetails.serviceName,
+      clientBackUrl: clientBackUrl
     };
 
     initBatch.set(txRef, txRecord);
@@ -201,6 +279,7 @@ export async function POST(req: Request) {
         },
         body: JSON.stringify({
           ...body,
+          action: effectiveAction,
           transid: transactionId,
           backpass: backpass
         })

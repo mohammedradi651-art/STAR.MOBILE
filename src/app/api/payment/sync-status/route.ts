@@ -122,6 +122,25 @@ export async function POST(request: Request) {
       }
       await batch.commit();
 
+      if (txData.clientBackUrl) {
+        try {
+          fetch(txData.clientBackUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'User-Agent': 'StarMobile-Webhook/1.0' },
+            body: JSON.stringify({
+              transid: cleanTransId,
+              status: 'failed',
+              readiness: 'فاشلة',
+              amount: txData.amount,
+              mobile: txData.recipientPhoneNumber || txData.phoneNumber,
+              service: txData.transactionType,
+              refunded: true,
+              message: cancellationReason
+            })
+          }).catch(() => {});
+        } catch (e) {}
+      }
+
       return NextResponse.json({
         success: true,
         status: 'failed',
@@ -153,6 +172,24 @@ export async function POST(request: Request) {
         batch.set(userTxRef, updatePayload, { merge: true });
       }
       await batch.commit();
+
+      if (txData.clientBackUrl) {
+        try {
+          fetch(txData.clientBackUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'User-Agent': 'StarMobile-Webhook/1.0' },
+            body: JSON.stringify({
+              transid: cleanTransId,
+              status: 'success',
+              readiness: 'جاهزة',
+              amount: txData.amount,
+              mobile: txData.recipientPhoneNumber || txData.phoneNumber,
+              service: txData.transactionType,
+              message: data.resultDesc || data.message || 'تم تنفيذ العملية بنجاح'
+            })
+          }).catch(() => {});
+        } catch (e) {}
+      }
 
       return NextResponse.json({
         success: true,
