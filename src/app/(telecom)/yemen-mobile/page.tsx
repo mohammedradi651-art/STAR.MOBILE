@@ -105,8 +105,8 @@ const PREPAID_CATEGORIES = [
     badge: '3G',
     icon: ShieldCheck,
     offers: [
-      { offerId: 'm_monthly', offerName: 'مزايا الشهرية', price: 1300, data: '250 MB', sms: '350', minutes: '350', validity: '30 يوم', offertype: 'A38394' },
       { offerId: 'm_weekly', offerName: 'مزايا الاسبوعة', price: 485, data: '90 MB', sms: '30', minutes: '100', validity: '7 أيام', offertype: 'A64329' },
+      { offerId: 'm_monthly', offerName: 'مزايا الشهرية', price: 1300, data: '250 MB', sms: '350', minutes: '350', validity: '30 يوم', offertype: 'A38394' },
       { offerId: 'm_max', offerName: 'مزايا ماكس الشهرية', price: 2000, data: '600 MB', sms: '200', minutes: '500', validity: '30 يوم', offertype: 'A75328' },
       { offerId: 'm_connect', offerName: 'مزايا تواصل', price: 1500, data: '-', sms: '600', minutes: '600', validity: '30 يوم', offertype: 'A33881' },
       { offerId: 'm_connect_max', offerName: 'مزايا تواصل ماكس', price: 2000, data: '-', sms: '500', minutes: '1000', validity: '30 يوم', offertype: 'A33882' },
@@ -141,9 +141,11 @@ const PREPAID_CATEGORIES = [
         { offerId: 'net_tawfeer_weekly', offerName: 'نت توفير الاسبوعية', price: 1125, data: '3GB', validity: '7 أيام', offertype: 'A3435' },
         { offerId: 'net_tawfeer_monthly', offerName: 'نت توفير الشهرية', price: 2250, data: '6GB', validity: '30 يوم', offertype: 'A3436' },
         { offerId: 'net_tawfeer_5gb', offerName: 'نت توفير 5 قيقا', price: 2300, data: '5GB', validity: '30 يوم', offertype: 'A3825' },
-        { offerId: 'net_tawfeer_7gb', offerName: 'نت توفير 7 قيقا', price: 3000, data: '7GB', validity: 'شهر', offertype: 'A4821' },
+        { offerId: 'net_tawfeer_7gb', offerName: 'نت توفير 7 قيقا', price: 3000, data: '7GB', validity: 'شهر', offertype: 'A3822' },
         { offerId: 'net_tawfeer_11gb', offerName: 'نت توفير 11 قيقا', price: 4125, data: '11GB', validity: 'شهر', offertype: 'A34346' },
         { offerId: 'net_tawfeer_25gb', offerName: 'نت توفير 25 قيقا', price: 8830, data: '25GB', validity: '40 يوم', offertype: 'A3347' },
+        { offerId: 'net_tawfeer_20gb_post', offerName: 'باقة نت 20 قيقا', price: 9700, data: '20GB', validity: 'شهر', offertype: 'A4830' },
+
     ]
   },
   {
@@ -154,8 +156,15 @@ const PREPAID_CATEGORIES = [
     offers: [
       { offerId: 'net_150mb', offerName: 'نت ثري جي 150 ميقا', price: 500, data: '150 ميجا', validity: 'شهر', offertype: 'A69329' },
       { offerId: 'net_300mb', offerName: 'نت ثري جي 300 ميقا', price: 900, data: '300 ميجا', validity: 'شهر', offertype: 'A69330' },
+      { offerId: 'net_450mb', offerName: 'نت ثري جي 450 ميقا', price: 1300, data: '450 ميجا', validity: 'شهر', offertype: 'A69331' },
       { offerId: 'net_700mb', offerName: 'نت ثري جي 700 ميقا', price: 1800, data: '700 ميجا', validity: 'شهر', offertype: 'A69338' },
       { offerId: 'net_1500mb', offerName: 'نت ثري جي 1500 ميقا', price: 3300, data: '1500 ميجا', validity: 'شهر', offertype: 'A69345' },
+      { offerId: 'net_3gb', offerName: 'نت ثري جي 3 قيقا', price: 4500, data: '3 قيقا', validity: 'شهر', offertype: 'A6934O' },
+      { offerId: 'net_5gb', offerName: 'نت ثري جي 5 قيقا', price: 7000, data: '5 قيقا', validity: 'شهر', offertype: 'A69341' },
+      { offerId: 'net_7gb', offerName: 'نت ثري جي 7 قيقا', price: 9000, data: '7 قيقا', validity: 'شهر', offertype: 'A69342' },
+      { offerId: 'net_15gb', offerName: 'نت ثري جي 15 قيقا', price: 15000, data: '15 قيقا', validity: 'شهر', offertype: 'A69343' },
+
+
     ]
   },
   {
@@ -196,7 +205,7 @@ const POSTPAID_CATEGORIES = [
     offers: [
       { offerId: 'h_monthly', offerName: 'هدايا الشهرية', price: 1500, data: '400MB', sms: '100', minutes: '400', validity: 'شهر', offertype: 'A68329' },
       { offerId: 'h_weekly', offerName: 'هدايا الاسبوعية', price: 600, data: '250MB', sms: '250', minutes: '50', validity: 'اسبوع', offertype: 'A44330' },
-      { offerId: 'h_tawfeer', offerName: 'هدايا توفير', price: 250, data: '120MB', sms: '10', minutes: '70', validity: '4 ايام', offertype: 'A66328' },
+      { offerId: 'h_tawfeer', offerName: 'هدايا توفير 250', price: 250, data: '120MB', sms: '10', minutes: '70', validity: '4 ايام', offertype: 'A66328' },
       { offerId: 'h_max', offerName: 'هدايا ماكس الشهرية', price: 3000, data: '1GB', sms: '300', minutes: '1000', validity: 'شهر', offertype: 'A76328' },
     ]
   },
@@ -231,11 +240,11 @@ const POSTPAID_CATEGORIES = [
         { offerId: 'net_tawfeer_weekly', offerName: 'نت توفير الاسبوعية', price: 1125, data: '3GB', validity: 'شهر', offertype: 'A44355' },
         { offerId: 'net_tawfeer_monthly', offerName: 'نت توفير الشهرية', price: 2250, data: '6GB', validity: 'شهر', offertype: 'A44356' },
         { offerId: 'net_tawfeer_5gb', offerName: 'نت توفير 5 قيقا', price: 2300, data: '5GB', validity: 'شهر', offertype: 'A4819' },
-        { offerId: 'net_tawfeer_7gb', offerName: 'نت توفير 7 قيقا', price: 3000, data: '7GB', validity: 'شهر', offertype: 'A4818' },
+        { offerId: 'net_tawfeer_7gb', offerName: 'نت توفير 7 قيقا', price: 3000, data: '7GB', validity: 'شهر', offertype: 'A4821' },
         { offerId: 'net_tawfeer_8gb_post', offerName: 'نت توفير 8 قيقا', price: 3900, data: '8GB', validity: 'شهر', offertype: 'A4822' },
         { offerId: 'net_tawfeer_11gb', offerName: 'نت توفير 11 قيقا', price: 4125, data: '11GB', validity: 'شهر', offertype: 'A44345' },
         { offerId: 'net_tawfeer_25gb', offerName: 'نت توفير 25 قيقا', price: 8830, data: '25GB', validity: '40 يوم', offertype: 'A44347' },
-        { offerId: 'net_tawfeer_20gb_post', offerName: 'نت توفير 20 قيقا', price: 9700, data: '20GB', validity: 'شهر', offertype: 'A4829' },
+        { offerId: 'net_tawfeer_20gb_post', offerName: 'باقة نت 20 قيقا', price: 9700, data: '20GB', validity: 'شهر', offertype: 'A4829' },
     ]
   },
   {
@@ -246,8 +255,14 @@ const POSTPAID_CATEGORIES = [
     offers: [
       { offerId: 'net_150mb', offerName: 'نت ثري جي 150 ميقا', price: 500, data: '150 ميجا', validity: 'شهر', offertype: 'A69351' },
       { offerId: 'net_300mb', offerName: 'نت ثري جي 300 ميقا', price: 900, data: '300 ميجا', validity: 'شهر', offertype: 'A69352' },
+      { offerId: 'net_450mb', offerName: 'نت ثري جي 450 ميقا', price: 1300, data: '450 ميجا', validity: 'شهر', offertype: 'A69354' },
       { offerId: 'net_700mb', offerName: 'نت ثري جي 700 ميقا', price: 1800, data: '700 ميجا', validity: 'شهر', offertype: 'A69355' },
       { offerId: 'net_1500mb', offerName: 'نت ثري جي 1500 ميقا', price: 3300, data: '1500 ميجا', validity: 'شهر', offertype: 'A69356' },
+      { offerId: 'net_3gb', offerName: 'نت ثري جي 3 قيقا', price: 4500, data: '3 قيقا', validity: 'شهر', offertype: 'A69357' },
+      { offerId: 'net_5gb', offerName: 'نت ثري جي 5 قيقا', price: 7000, data: '5 قيقا', validity: 'شهر', offertype: 'A69367' },
+      { offerId: 'net_7gb', offerName: 'نت ثري جي 7 قيقا', price: 9000, data: '7 قيقا', validity: 'شهر', offertype: 'A69359' },
+      { offerId: 'net_15gb', offerName: 'نت ثري جي 15 قيقا', price: 15000, data: '15 قيقا', validity: 'شهر', offertype: 'A6936O' },
+
     ]
   },
   {
