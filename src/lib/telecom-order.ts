@@ -382,18 +382,31 @@ export async function executeTelecomRequestWithTimeout({
 
   const { ok, data } = raceResult;
 
+  const rawDesc = String(data?.resultDesc || data?.message || '');
+  const isPending =
+    data?.status === 'pending' ||
+    data?.readiness === 'قيد الانتظار' ||
+    data?.resultCode === '-2' ||
+    data?.resultCode === -2 ||
+    rawDesc.includes('قيد الانتظار') ||
+    rawDesc.includes('قيد المعالجة') ||
+    rawDesc.includes('قيد التنفيذ') ||
+    rawDesc.includes('جاري المعالجة') ||
+    rawDesc.includes('جاري التنفيذ') ||
+    rawDesc.includes('تحت المعالجة') ||
+    rawDesc.includes('تم قبول الطلب');
+
   // إذا كان الرد الصادر من الـ API يفيد بأن العملية قيد الانتظار والمعالجة لدى المزود
-  if (data?.status === 'pending' || data?.readiness === 'قيد الانتظار') {
+  if (isPending) {
     console.warn(`[Telecom] Trans ${transid} returned pending status from provider. Showing success popup as pending.`);
     return { isDelayed: true, providerResult: data };
   }
 
   const isSuccess =
     ok &&
+    !isPending &&
     (data?.resultCode === '0' ||
       data?.resultCode === 0 ||
-      data?.resultCode === '-2' ||
-      data?.resultCode === -2 ||
       data?.status === 'success' ||
       data?.action === 'done' ||
       data?.isDone === 1 ||

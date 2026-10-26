@@ -127,58 +127,19 @@ const PREPAID_PACKAGE_SECTIONS = [
 const POSTPAID_PACKAGE_SECTIONS = [
     {
         id: 'yabalash',
-        title: 'باقات يابلاش + واحد',
-        badge: 'الأكثر طلباً',
+        title: 'قريبا تتوفر باقات سبافون',
+        badge: '',
         offers: [
 
         ]
-    },
-    {
-        id: 'four_g',
-        title: 'باقات فورجي',
-        badge: '4G',
-        offers: [
 
-        ]
-    },
-    {
-        id: 'social',
-        title: 'باقات التواصل الاجتماعي',
-        badge: 'سوشيال',
-        offers: [
-
-        ]
-    },
-    {
-        id: 'supernet',
-        title: 'باقات سوبر نت',
-        badge: 'إنترنت',
-        offers: [
-
-        ]
-    },
-    {
-        id: 'sms',
-        title: 'باقات الرسائل',
-        badge: 'SMS',
-        offers: [
-
-        ]
-    },
-    {
-        id: 'gsm',
-        title: 'باقات جي اس ام',
-        badge: 'دقائق GSM',
-        offers: [
-
-        ]
     },
     {
         id: 'south_packages',
-        title: 'باقات الجنوب',
-        badge: 'عدن',
+        title: 'قريبا تتوفر باقات سبافون',
+        badge: '',
         offers: [
-            { num: 'SABA114', name: 'باقة امان الاسبوعية', price: 960, data: '-', minutes: '800 دقيقة', sms: '1000', validity: '7 أيام' },
+            { num: '', name: '', price: 960, data: '-', minutes: '800 دقيقة', sms: '1000', validity: '7 أيام' },
         ]
     }
 ];

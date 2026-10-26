@@ -225,10 +225,29 @@ export async function POST(req: Request) {
       }, { headers: corsHeaders });
     }
 
-    const isSuccess = result.resultCode === "0" || result.resultCode === 0 || result.resultCode === "-2" || result.resultCode === -2;
-    const isPending = result.status === 'pending';
+    const rawResultMsg = String(result.resultDesc || result.message || '').trim();
+    const isPending =
+      result.status === 'pending' ||
+      result.readiness === 'قيد الانتظار' ||
+      result.resultCode === "-2" ||
+      result.resultCode === -2 ||
+      rawResultMsg.includes('قيد الانتظار') ||
+      rawResultMsg.includes('قيد المعالجة') ||
+      rawResultMsg.includes('قيد التنفيذ') ||
+      rawResultMsg.includes('جاري المعالجة') ||
+      rawResultMsg.includes('جاري التنفيذ') ||
+      rawResultMsg.includes('تحت المعالجة') ||
+      rawResultMsg.includes('تم قبول الطلب');
 
-    if (isSuccess && !isPending) {
+    const isSuccess =
+      !isPending &&
+      (result.status === 'success' ||
+       result.action === 'done' ||
+       result.readiness === 'جاهزة' ||
+       result.resultCode === "0" ||
+       result.resultCode === 0);
+
+    if (isSuccess) {
       // نجاح العملية -> تحديث الحالة إلى جاهزة
       const successPayload = {
         status: 'success',
@@ -245,6 +264,8 @@ export async function POST(req: Request) {
       return NextResponse.json({
         success: true,
         code: 'SM_SUCCESS',
+        status: 'success',
+        readiness: 'جاهزة',
         message: 'تم تنفيذ العملية بنجاح',
         transactionId: transactionId,
         data: {
@@ -262,13 +283,16 @@ export async function POST(req: Request) {
       return NextResponse.json({
         success: true,
         code: 'SM_PENDING',
-        message: 'تم إرسال الطلب وهو قيد المعالجة لدى المزود (قيد الانتظار)',
+        status: 'pending',
+        readiness: 'قيد الانتظار',
+        message: result.resultDesc || result.message || 'تم إرسال الطلب وهو قيد المعالجة لدى المزود (قيد الانتظار)',
         transactionId: transactionId,
         data: {
           mobile: telecomDetails.recipientPhoneNumber || mobile,
           amount: payAmount,
           service: telecomDetails.transactionType,
-          status: 'pending'
+          status: 'pending',
+          readiness: 'قيد الانتظار'
         },
         timestamp
       }, { headers: corsHeaders });

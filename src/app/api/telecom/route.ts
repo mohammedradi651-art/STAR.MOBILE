@@ -650,21 +650,47 @@ export async function POST(request: Request) {
 
       // معالجة خاصة لاستعلام حالة عملية سابقة (action === 'status' || action === 'check')
       if (action === 'status' || action === 'check') {
+        const rawStatusDesc = String(data?.resultDesc || data?.message || data?.reason || '').trim();
+        const normStatusDesc = rawStatusDesc.toLowerCase();
+
+        const isStatusPending =
+          data?.resultCode === "-2" ||
+          data?.resultCode === -2 ||
+          data?.status === 'pending' ||
+          data?.status === 'wait' ||
+          data?.status === 'waiting' ||
+          data?.status === 'process' ||
+          data?.status === 'processing' ||
+          data?.readiness === 'قيد الانتظار' ||
+          rawStatusDesc.includes('قيد الانتظار') ||
+          rawStatusDesc.includes('قيد المعالجة') ||
+          rawStatusDesc.includes('قيد التنفيذ') ||
+          rawStatusDesc.includes('جاري المعالجة') ||
+          rawStatusDesc.includes('جاري التنفيذ') ||
+          rawStatusDesc.includes('تحت المعالجة') ||
+          rawStatusDesc.includes('تحت التنفيذ') ||
+          rawStatusDesc.includes('تم قبول الطلب') ||
+          normStatusDesc.includes('pending') ||
+          normStatusDesc.includes('under process') ||
+          ((data?.isDone === 0 || data?.isDone === '0') && (data?.isBan === 0 || data?.isBan === '0'));
+
         const isProviderDone =
-          data?.isDone === 1 ||
-          data?.isDone === '1' ||
-          data?.action === 'done' ||
-          data?.status === 'done' ||
-          data?.status === 'success' ||
-          data?.readiness === 'جاهزة';
+          !isStatusPending &&
+          (data?.isDone === 1 ||
+           data?.isDone === '1' ||
+           data?.action === 'done' ||
+           data?.status === 'done' ||
+           data?.status === 'success' ||
+           data?.readiness === 'جاهزة');
 
         const isProviderBan =
-          data?.isBan === 1 ||
-          data?.isBan === '1' ||
-          data?.action === 'ban' ||
-          data?.status === 'ban' ||
-          data?.status === 'failed' ||
-          data?.readiness === 'فاشلة';
+          !isStatusPending &&
+          (data?.isBan === 1 ||
+           data?.isBan === '1' ||
+           data?.action === 'ban' ||
+           data?.status === 'ban' ||
+           data?.status === 'failed' ||
+           data?.readiness === 'فاشلة');
 
         let targetUserId = checkTxUserId || clientUserId;
         let targetAmount = checkTxAmount;
@@ -722,9 +748,86 @@ export async function POST(request: Request) {
         }
       }
 
-      const isSuccess = data?.resultCode === "0" || data?.resultCode === 0 || data?.resultCode === "-2" || data?.resultCode === -2 || data?.status === 'success' || data?.action === 'done';
+      // 8. تقييم رد المزود على عمليات السداد المالي (لجميع الشركات: يمن موبايل، يو، سبأفون، واي، يمن فورجي، عدن نت، الهاتف والإنترنت الأرضي)
+      const rawDesc = String(data?.resultDesc || data?.message || data?.reason || '').trim();
+      const normDesc = rawDesc.toLowerCase();
 
-      if (isSuccess) {
+      // حالة قيد الانتظار والمعالجة لدى المزود:
+      // (سواء كان الرد resultCode: -2 أو status: pending أو كان النص يفيد بأن العملية قيد الانتظار أو المعالجة)
+      const isPending =
+        data?.resultCode === "-2" ||
+        data?.resultCode === -2 ||
+        data?.status === 'pending' ||
+        data?.status === 'wait' ||
+        data?.status === 'waiting' ||
+        data?.status === 'process' ||
+        data?.status === 'processing' ||
+        data?.readiness === 'قيد الانتظار' ||
+        rawDesc.includes('قيد الانتظار') ||
+        rawDesc.includes('قيد المعالجة') ||
+        rawDesc.includes('قيد التنفيذ') ||
+        rawDesc.includes('جاري المعالجة') ||
+        rawDesc.includes('جاري التنفيذ') ||
+        rawDesc.includes('تحت المعالجة') ||
+        rawDesc.includes('تحت التنفيذ') ||
+        rawDesc.includes('تم قبول الطلب') ||
+        rawDesc.includes('في الانتظار') ||
+        rawDesc.includes('بالانتظار') ||
+        normDesc.includes('pending') ||
+        normDesc.includes('under process') ||
+        normDesc.includes('in progress') ||
+        ((data?.isDone === 0 || data?.isDone === '0') && (data?.isBan === 0 || data?.isBan === '0'));
+
+      // حالة النجاح المؤكد والتنفيذ الفعلي (فقط إذا لم تكن العملية قيد الانتظار):
+      const isSuccess =
+        !isPending &&
+        (data?.isDone === 1 ||
+         data?.isDone === '1' ||
+         data?.action === 'done' ||
+         data?.status === 'done' ||
+         data?.status === 'success' ||
+         data?.readiness === 'جاهزة' ||
+         ((data?.resultCode === "0" || data?.resultCode === 0) &&
+          !data?.isBan &&
+          data?.isBan !== '1' &&
+          data?.action !== 'ban' &&
+          data?.status !== 'failed'));
+
+      if (isPending) {
+        // قيد الانتظار لدى المزود -> المعاملة تبقى معلقة قيد الانتظار ولا يتم اعتمادها كـ "جاهزة"
+        // نحدث ملاحظات المعاملة برسالة المزود إن وُجدت
+        if (clientUserId && rawDesc) {
+          try {
+            const batch = writeBatch(firestore);
+            const userTxRef = doc(firestore, `users/${clientUserId}/transactions`, transid);
+            const globalTxRef = doc(firestore, 'paymentTransactions', transid);
+            const updatePayload = {
+              providerMessage: rawDesc,
+              updatedAt: new Date().toISOString()
+            };
+            batch.set(userTxRef, updatePayload, { merge: true });
+            batch.set(globalTxRef, updatePayload, { merge: true });
+            await batch.commit();
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        const pendingResultCode = data?.resultCode !== undefined ? String(data.resultCode) : "0";
+
+        return NextResponse.json({
+          ...data,
+          resultCode: pendingResultCode === "0" || pendingResultCode === "-2" ? pendingResultCode : "0",
+          status: "pending",
+          readiness: "قيد الانتظار",
+          transid: transid,
+          chargedCost: requiredCost,
+          remainingBalance: initialBalance,
+          message: data.resultDesc || data.message || "العملية قيد الانتظار والمعالجة لدى المزود",
+          resultDesc: data.resultDesc || data.message || "العملية قيد الانتظار والمعالجة لدى المزود"
+        });
+
+      } else if (isSuccess) {
         // نجاح مؤكد من المزود -> تحديث المعاملة إلى جاهزة
         if (shouldPerformImmediateDeduction && clientUserId) {
           await markSuccessInDb(firestore, clientUserId, transid, data.resultDesc || data.message || 'تم السداد بنجاح');
@@ -733,7 +836,8 @@ export async function POST(request: Request) {
         return NextResponse.json({
           ...data,
           resultCode: "0",
-          status: data?.status !== undefined && data?.status !== "failed" ? data.status : "success",
+          status: "success",
+          readiness: "جاهزة",
           transid: transid,
           chargedCost: requiredCost,
           remainingBalance: initialBalance,
@@ -743,7 +847,7 @@ export async function POST(request: Request) {
 
       } else {
         // رفض مؤكد من المزود -> إرجاع الفلوس فوراً وإظهار سبب الرفض فقط (دون أي عبارات استرجاع أو بادئات تقنية)
-        const failReason = formatProviderErrorMessage(data.resultDesc || data.message || 'تم رفض العملية من قبل مزود الخدمة.');
+        const failReason = formatProviderErrorMessage(data.resultDesc || data.message || data.reason || 'تم رفض العملية من قبل مزود الخدمة.');
         if (shouldPerformImmediateDeduction && clientUserId) {
           await refundUser(firestore, clientUserId, transid, requiredCost, failReason);
           initialBalance += requiredCost;
@@ -753,6 +857,7 @@ export async function POST(request: Request) {
           ...data,
           resultCode: data.resultCode || "-1",
           status: "failed",
+          readiness: "فاشلة",
           refunded: Boolean(shouldPerformImmediateDeduction && requiredCost > 0),
           transid: transid,
           currentBalance: initialBalance,
