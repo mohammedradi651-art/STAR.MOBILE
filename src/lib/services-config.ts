@@ -369,16 +369,22 @@ export const KNOWN_PACKAGE_PRICES: Record<string, number> = {
   // يمن فورجي 4G
   '4g_15gb': 2400,
   '4G_15GB': 2400,
+  '2400': 2400,
   '4g_25gb': 4000,
   '4G_25GB': 4000,
+  '4000': 4000,
   '4g_60gb': 8000,
   '4G_60GB': 8000,
+  '8000': 8000,
   '4g_130gb': 16000,
   '4G_130GB': 16000,
+  '16000': 16000,
   '4g_250gb': 26000,
   '4G_250GB': 26000,
+  '26000': 26000,
   '4g_500gb': 46000,
-  '4G_500GB': 46000
+  '4G_500GB': 46000,
+  '46000': 46000
 };
 
 /**
@@ -402,7 +408,7 @@ export function calculateApiTransactionCost(
   const action = (payload.action || 'bill').toLowerCase().trim();
   const rawAmount = parseFloat(String(payload.amount || '0')) || 0;
   const rawNum = String(payload.num || '').trim();
-  const packageKey = String(payload.offerid || payload.packageid || payload.num || '').trim();
+  const packageKey = String(payload.offerid || payload.packageid || payload.num || payload.amount || '').trim();
 
   // 1. يمن موبايل
   if (service === 'yemen' || service === 'yem') {
@@ -459,19 +465,29 @@ export function calculateApiTransactionCost(
   }
 
   // 8. يمن فورجي 4G
-  if (service === 'yem4g') {
+  if (service === 'yem4g' || service === 'yemen_4g' || service === 'yemen4g' || service === '4g') {
     const base4gPrice = KNOWN_PACKAGE_PRICES[packageKey] || rawAmount;
     return calculateFinalServicePrice(base4gPrice, config.yemen_4g);
   }
 
   // 9. عدن نت (باقات فقط)
-  if (service === 'adenet' || service === 'aden_net') {
+  if (service === 'adenet' || service === 'aden_net' || service === 'aden') {
     const adenBasePrice = KNOWN_PACKAGE_PRICES[`adenet_${packageKey}`] || KNOWN_PACKAGE_PRICES[packageKey] || rawAmount;
     return calculateFinalServicePrice(adenBasePrice, config.aden_net);
   }
 
   // 10. الهاتف الثابت والإنترنت المنزلي ADSL
-  if (service === 'post') {
+  if (
+    service === 'post' || 
+    service === 'landline_adsl' || 
+    service === 'adsl' || 
+    service === 'internet' || 
+    service === 'net' || 
+    service === 'landline' || 
+    service === 'phone' || 
+    service === 'telephone' || 
+    service === 'hatif'
+  ) {
     return calculateFinalServicePrice(rawAmount, config.landline_adsl);
   }
 

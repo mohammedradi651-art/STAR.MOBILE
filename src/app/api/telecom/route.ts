@@ -5,7 +5,8 @@ import { doc, getDoc, collection, query, where, getDocs, writeBatch, increment }
 import { 
   DEFAULT_SERVICES_CONFIG, 
   SystemServicesConfig, 
-  calculateApiTransactionCost 
+  calculateApiTransactionCost,
+  KNOWN_PACKAGE_PRICES 
 } from '@/lib/services-config';
 import { 
   generateTransId, 
@@ -35,7 +36,16 @@ export async function POST(request: Request) {
     // التحقق الصارم من صحة الطلب والحدود الدنيا قبل أي عملية
     const isBillingAction = !action || action === 'bill' || action === 'billoffer' || action === 'renew' || action === 'order' || service === 'sabaunits' || service === 'sabaoffer';
     const sLower = (service || '').toLowerCase().trim();
-    if (isBillingAction || sLower === 'adenet' || sLower === 'aden_net') {
+    if (
+      isBillingAction || 
+      sLower === 'adenet' || 
+      sLower === 'aden_net' || 
+      sLower === 'aden' ||
+      sLower === 'yem4g' || 
+      sLower === 'yemen_4g' || 
+      sLower === 'yemen4g' || 
+      sLower === '4g'
+    ) {
       const validation = validateTelecomRequest(body);
       if (!validation.valid) {
         return NextResponse.json({
@@ -364,13 +374,57 @@ export async function POST(request: Request) {
     if (action === 'balance' || action === 'status') {
       endpoint = 'info';
       apiRequestParams.action = action;
-    } else if (service === 'yem4g') {
+    } else if (service === 'yem4g' || service === 'yemen_4g' || service === 'yemen4g' || service === '4g') {
       endpoint = 'yem4g';
       apiRequestParams.action = action || 'bill';
-    } else if (service === 'post') {
+      const valid4gAmounts = [2400, 4000, 8000, 16000, 26000, 46000];
+      const parsedAmt = parseFloat(String(payload.amount || payload.num || '0')) || 0;
+      const isPkg = action === 'billoffer' || action === 'offer' || 
+                    payload.type === '1' || payload.type === 1 || 
+                    payload.type === 'package' || payload.type === 'packages' ||
+                    Boolean(payload.packageid) || Boolean(payload.offerid) || 
+                    Boolean(payload.offertype) || payload.israsid === '0' ||
+                    (valid4gAmounts.includes(parsedAmt) && payload.type !== '2' && payload.israsid !== '1');
+
+      if (isPkg) {
+        apiRequestParams.type = '1';
+        if (payload.packageid && !payload.amount) {
+          apiRequestParams.amount = KNOWN_PACKAGE_PRICES[String(payload.packageid)] || payload.packageid;
+        }
+      } else {
+        apiRequestParams.type = '2';
+      }
+    } else if (
+      service === 'post' || 
+      service === 'landline_adsl' || 
+      service === 'adsl' || 
+      service === 'internet' || 
+      service === 'net' || 
+      service === 'landline' || 
+      service === 'phone' || 
+      service === 'telephone' || 
+      service === 'hatif'
+    ) {
       endpoint = 'post';
       apiRequestParams.action = action || 'bill';
-    } else if (service === 'adenet' || service === 'aden_net') {
+
+      // تحديد نوع الخدمة بدقة للمزود (line للهاتف الثابت أو adsl للإنترنت)
+      const isLine = payload.type === 'line' || payload.type === 'phone' || 
+                     service === 'phone' || service === 'landline' || 
+                     service === 'telephone' || service === 'hatif' || 
+                     action === 'queryphone';
+
+      apiRequestParams.type = isLine ? 'line' : 'adsl';
+
+      // معالجة وتثبيت رقم الهاتف الأرضي أو الإنترنت ليكون 8 أرقام
+      let postMobile = String(payload.mobile || payload.phone || '').replace(/\D/g, '');
+      if (postMobile.length === 7 && !postMobile.startsWith('0')) {
+        postMobile = '0' + postMobile;
+      }
+      if (postMobile) {
+        apiRequestParams.mobile = postMobile;
+      }
+    } else if (service === 'adenet' || service === 'aden_net' || service === 'aden') {
       endpoint = 'adenet';
       apiRequestParams.action = 'bill';
       let pkgCode = String(payload.num || payload.packageid || payload.offerid || payload.amount || '3000').toLowerCase().trim();
@@ -384,7 +438,12 @@ export async function POST(request: Request) {
         '40': '6000',
         '60': '9000',
         '80': '12000',
-        '120': '30000'
+        '120': '30000',
+        '3000': '3000',
+        '6000': '6000',
+        '9000': '9000',
+        '12000': '12000',
+        '30000': '30000'
       };
       apiRequestParams.num = codeMap[pkgCode] || pkgCode;
     } else if (service === 'sabaphone') {
@@ -393,6 +452,9 @@ export async function POST(request: Request) {
     } else if (service === 'sabaoffer') {
       endpoint = 'sabaoffer';
       delete apiRequestParams.action;
+      if (apiRequestParams.num) {
+        apiRequestParams.unum = apiRequestParams.num;
+      }
     } else if (service === 'sbay') {
       endpoint = 'sbay';
       apiRequestParams.action = action || 'bill';

@@ -293,6 +293,11 @@ export default function Yemen4GPage() {
         const baseAmount = parseFloat(amount);
         if (isNaN(baseAmount) || baseAmount <= 0) return;
 
+        if (baseAmount < 100) {
+            toast({ variant: 'destructive', title: 'مبلغ غير مسموح', description: 'أقل مبلغ سداد للرصيد في يمن فورجي هو 100 ريال.' });
+            return;
+        }
+
         // عملاء الـ API يعتمد لهم السعر الدقيق من الإعدادات بدون عمولة عادية
         const totalToDeduct = isApiUser 
             ? calculateFinalServicePrice(baseAmount, config.yemen_4g)

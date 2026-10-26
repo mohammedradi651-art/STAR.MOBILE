@@ -72,10 +72,10 @@ const WHY_GRADIENT = {
 const LOGO_URL = "https://i.postimg.cc/kgWR7jwV/images-(8).jpg";
 
 const WHY_OFFERS: Offer[] = [
-    { offerName: 'باقة كرم 250', price: 250, data: '100MB', validity: '7 أيام', packageid: '91', num: '250', sms: '10', minutes: '20' },
-    { offerName: 'باقة كرم 500', price: 500, data: '250MB', validity: '30 يوم', packageid: '92', num: '500', sms: '50', minutes: '50' },
-    { offerName: 'باقة كرم 900', price: 900, data: '500MB', validity: '45 يوم', packageid: '93', num: '900', sms: '100', minutes: '100' },
-    { offerName: 'باقة كرم 2000', price: 2000, data: '1GB', validity: '60 يوم', packageid: '94', num: '2000', sms: '500', minutes: '200' },
+    { offerName: 'باقة كرم 7 ايام', price: 250, data: '100MB', validity: 'ايام 7', packageid: '91', num: '250', sms: '10', minutes: '20' },
+    { offerName: 'باقة كرم 30 يوم', price: 500, data: '250MB', validity: '30 يوم', packageid: '92', num: '500', sms: '50', minutes: '50' },
+    { offerName: 'باقة كرم 45 يوم', price: 900, data: '500MB', validity: '45 يوم', packageid: '93', num: '900', sms: '100', minutes: '100' },
+    { offerName: 'باقة كرم 60 يوم', price: 2000, data: '1GB', validity: '60 يوم', packageid: '94', num: '2000', sms: '500', minutes: '200' },
 ];
 
 const PackageItemCard = ({ 
@@ -108,7 +108,6 @@ const PackageItemCard = ({
             <span className="text-2xl font-black text-foreground">
                 {finalPrice.toLocaleString('en-US')}
             </span>
-            <span className="text-[10px] font-bold text-muted-foreground mr-1">ر.ي</span>
           </div>
           
           <div className="grid grid-cols-4 gap-2 pt-3 mt-2 border-t border-[#7c3aed]/10 text-center">
@@ -408,4 +407,4 @@ export default function WhyPage() {
             )}
         </div>
     );
-}
+}

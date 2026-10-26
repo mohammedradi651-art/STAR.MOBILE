@@ -491,6 +491,8 @@ export const KNOWN_PACKAGE_NAMES: Record<string, string> = {
   // سبأفون
   '68': 'باقة يابلاش اليومية',
   'saba_68': 'باقة يابلاش اليومية',
+  'SABA114': 'باقة امان الاسبوعية',
+  'saba_SABA114': 'باقة امان الاسبوعية',
 
   // واي Why
   '91': 'باقة كرم 250',
@@ -517,16 +519,43 @@ export const KNOWN_PACKAGE_NAMES: Record<string, string> = {
   // يمن فورجي
   '4g_15gb': 'باقة يمن فورجي 15 جيجا',
   '4G_15GB': 'باقة يمن فورجي 15 جيجا',
+  '2400': 'باقة يمن فورجي 15 جيجا',
   '4g_25gb': 'باقة يمن فورجي 25 جيجا',
   '4G_25GB': 'باقة يمن فورجي 25 جيجا',
+  '4000': 'باقة يمن فورجي 25 جيجا',
   '4g_60gb': 'باقة يمن فورجي 60 جيجا',
   '4G_60GB': 'باقة يمن فورجي 60 جيجا',
+  '8000': 'باقة يمن فورجي 60 جيجا',
   '4g_130gb': 'باقة يمن فورجي 130 جيجا',
   '4G_130GB': 'باقة يمن فورجي 130 جيجا',
+  '16000': 'باقة يمن فورجي 130 جيجا',
   '4g_250gb': 'باقة يمن فورجي 250 جيجا',
   '4G_250GB': 'باقة يمن فورجي 250 جيجا',
+  '26000': 'باقة يمن فورجي 250 جيجا',
   '4g_500gb': 'باقة يمن فورجي 500 جيجا',
   '4G_500GB': 'باقة يمن فورجي 500 جيجا',
+  '46000': 'باقة يمن فورجي 500 جيجا',
+};
+
+export const YEMEN_4G_PACKAGE_PRICES_MAP: Record<string, number> = {
+  '4g_15gb': 2400,
+  '4G_15GB': 2400,
+  '2400': 2400,
+  '4g_25gb': 4000,
+  '4G_25GB': 4000,
+  '4000': 4000,
+  '4g_60gb': 8000,
+  '4G_60GB': 8000,
+  '8000': 8000,
+  '4g_130gb': 16000,
+  '4G_130GB': 16000,
+  '16000': 16000,
+  '4g_250gb': 26000,
+  '4G_250GB': 26000,
+  '26000': 26000,
+  '4g_500gb': 46000,
+  '4G_500GB': 46000,
+  '46000': 46000
 };
 
 export interface TelecomDetailsInput {
@@ -556,8 +585,8 @@ export function resolveTelecomDetails(input: TelecomDetailsInput): {
   const cleanPhone = rawPhone.replace(/\D/g, '').slice(-9) || rawPhone;
   const s = (input.service || 'yemen').toLowerCase().trim();
   const act = (input.action || 'bill').toLowerCase().trim();
-  const pkgKey = String(input.offerid || input.packageid || input.num || '').trim();
-  const knownPkg = KNOWN_PACKAGE_NAMES[pkgKey] || KNOWN_PACKAGE_NAMES[String(input.offerid || '')] || KNOWN_PACKAGE_NAMES[String(input.packageid || '')] || KNOWN_PACKAGE_NAMES[String(input.num || '')];
+  const pkgKey = String(input.offerid || input.packageid || input.num || input.amount || '').trim();
+  const knownPkg = KNOWN_PACKAGE_NAMES[pkgKey] || KNOWN_PACKAGE_NAMES[String(input.offerid || '')] || KNOWN_PACKAGE_NAMES[String(input.packageid || '')] || KNOWN_PACKAGE_NAMES[String(input.num || '')] || KNOWN_PACKAGE_NAMES[String(input.amount || '')];
 
   // 1. يمن موبايل
   if (s === 'yemen' || s === 'yem' || s === 'offeryem') {
@@ -659,9 +688,10 @@ export function resolveTelecomDetails(input: TelecomDetailsInput): {
     };
   }
 
-  // 5. عدن نت (باقات فقط)
-  if (s === 'adenet' || s === 'aden_net') {
-    const pkgName = knownPkg || `باقة عدن نت (${pkgKey || input.amount || 'إنترنت'})`;
+  // 5. عدن نت (باقات فقط - لا تسجل سداد رصيد نهائياً)
+  if (s === 'adenet' || s === 'aden_net' || s === 'aden') {
+    const rawAmt = String(input.amount || '').trim();
+    const pkgName = knownPkg || KNOWN_PACKAGE_NAMES[rawAmt] || `باقة عدن نت (${pkgKey || rawAmt || 'إنترنت'})`;
     return {
       serviceName: 'عدن نت',
       packageName: pkgName,
@@ -671,30 +701,62 @@ export function resolveTelecomDetails(input: TelecomDetailsInput): {
     };
   }
 
-  // 6. يمن فورجي
-  if (s === 'yem4g') {
-    const isOffer = Boolean(knownPkg) || Boolean((input as any).offertype);
+  // 6. يمن فورجي (إذا كان سداد باقة يكتب اسم الباقة، ولا يكتب سداد رصيد إلا عند سداد رصيد حر)
+  if (s === 'yem4g' || s === 'yemen_4g' || s === 'yemen4g' || s === '4g') {
+    const rawAmt = String(input.amount || '').trim();
+    const parsedAmt = parseFloat(rawAmt) || 0;
+    const valid4gAmounts = [2400, 4000, 8000, 16000, 26000, 46000];
+    const pkgName = knownPkg || KNOWN_PACKAGE_NAMES[rawAmt];
+
+    const isOffer = Boolean(pkgName) || 
+                    act === 'billoffer' || 
+                    act === 'offer' || 
+                    (input as any).type === '1' || 
+                    (input as any).type === 1 || 
+                    (input as any).type === 'package' || 
+                    (input as any).type === 'packages' || 
+                    Boolean((input as any).offertype) || 
+                    (valid4gAmounts.includes(parsedAmt) && (input as any).type !== '2' && (input as any).israsid !== '1');
+
     if (isOffer) {
-      const pkgName = knownPkg || `باقة فورجي (${pkgKey})`;
+      const finalPkgName = pkgName || (valid4gAmounts.includes(parsedAmt) ? KNOWN_PACKAGE_NAMES[String(parsedAmt)] : `باقة فورجي (${pkgKey || rawAmt})`);
       return {
         serviceName: 'يمن فورجي',
-        packageName: pkgName,
-        transactionType: `يمن فورجي - ${pkgName}`,
-        notes: `تفعيل ${pkgName} للرقم: ${cleanPhone}`,
+        packageName: finalPkgName,
+        transactionType: `يمن فورجي - ${finalPkgName}`,
+        notes: `تفعيل ${finalPkgName} للرقم: ${cleanPhone}`,
         recipientPhoneNumber: cleanPhone
       };
     }
     return {
       serviceName: 'يمن فورجي',
       transactionType: 'يمن فورجي - سداد رصيد',
-      notes: `سداد رصيد يمن فورجي للرقم: ${cleanPhone}`,
+      notes: `سداد رصيد يمن فورجي للرقم: ${cleanPhone} بمبلغ: ${input.amount || '0'} ريال`,
       recipientPhoneNumber: cleanPhone
     };
   }
 
   // 7. الهاتف الثابت والإنترنت الأرضي
-  if (s === 'post' || s === 'landline_adsl') {
-    const isPhone = act === 'queryphone' || (input as any).type === 'phone' || String(rawPhone).startsWith('0');
+  if (
+    s === 'post' || 
+    s === 'landline_adsl' || 
+    s === 'adsl' || 
+    s === 'internet' || 
+    s === 'net' || 
+    s === 'landline' || 
+    s === 'phone' || 
+    s === 'telephone' || 
+    s === 'hatif'
+  ) {
+    const isPhone = 
+      act === 'queryphone' || 
+      (input as any).type === 'line' || 
+      (input as any).type === 'phone' || 
+      s === 'phone' || 
+      s === 'landline' || 
+      s === 'telephone' || 
+      s === 'hatif';
+
     if (isPhone) {
       return {
         serviceName: 'الهاتف الثابت',
@@ -761,12 +823,6 @@ export function validateTelecomRequest(input: {
       return { valid: false, error: 'أقل كمية شحن مسموح بها لوحدات سبأفون هي 50 وحدة.' };
     }
   }
-  if ((s === 'sabaphone' || s === 'sbay') && (act === 'bill' || !input.action) && !input.offerid) {
-    const checkAmt = amt > 0 ? amt : numVal;
-    if (checkAmt > 0 && checkAmt < 100) {
-      return { valid: false, error: 'أقل مبلغ سداد في سبأفون هو 100 ريال.' };
-    }
-  }
 
   // 4. واي: أقل سداد للرصيد 100 ريال
   if (s === 'why' && (input.israsid === '1' || (!input.packageid && act === 'bill'))) {
@@ -776,26 +832,89 @@ export function validateTelecomRequest(input: {
     }
   }
 
-  // 5. عدن نت: الغي ماشي رصيد نهائياً ولا استعلام فقط باقات
-  if (s === 'adenet' || s === 'aden_net') {
+  // 5. عدن نت: باقات فقط ولا تقبل سداد رصيد
+  if (s === 'adenet' || s === 'aden_net' || s === 'aden') {
     if (act === 'query' || act === 'balance' || act === 'lookup') {
       return { valid: false, error: 'خدمة عدن نت مخصصة للباقات فقط، لا يوجد استعلام رصيد أو فواتير.' };
     }
-    const pkgKey = String(input.num || input.packageid || input.offerid || '').trim();
-    if (!pkgKey && amt < 3000) {
-      return { valid: false, error: 'خدمة عدن نت مخصصة للباقات فقط. لا يوجد سداد رصيد حر.' };
+    // منع سداد الرصيد نهائياً
+    if (input.israsid === '1' || (input as any).type === '2' || (input as any).type === 'balance' || (input as any).type === 'rasid') {
+      return { valid: false, error: 'خدمة عدن نت مخصصة للباقات فقط، لا يوجد سداد رصيد.' };
+    }
+    const checkAmt = amt > 0 ? amt : numVal;
+    const pkgKey = String(input.num || input.packageid || input.offerid || '').toLowerCase().trim();
+    const validAdenAmounts = [3000, 6000, 9000, 12000, 30000];
+    const validAdenCodes = ['20gb', '40gb', '60gb', '80gb', '120gb', '20', '40', '60', '80', '120', '3000', '6000', '9000', '12000', '30000'];
+
+    const hasValidCode = validAdenCodes.includes(pkgKey);
+    const hasValidAmount = validAdenAmounts.includes(checkAmt);
+
+    if (!hasValidCode && !hasValidAmount) {
+      return { valid: false, error: 'خدمة عدن نت مخصصة للباقات فقط. المبلغ لا يطابق أي باقة معتمدة في عدن نت (3000، 6000، 9000، 12000، 30000).' };
     }
   }
 
-  // 6. الهاتف الثابت والإنترنت الأرضي
-  if (s === 'post' || s === 'landline_adsl') {
+  // 6. يمن فورجي: باقات وسداد رصيد
+  if (s === 'yem4g' || s === 'yemen_4g' || s === 'yemen4g' || s === '4g') {
+    const pkgKey = String(input.packageid || input.offerid || (input as any).offertype || input.num || '').toLowerCase().trim();
+    const isExplicitPackage = act === 'billoffer' || act === 'offer' || 
+      (input as any).type === '1' || (input as any).type === 1 || 
+      (input as any).type === 'package' || (input as any).type === 'packages' ||
+      Boolean(input.packageid) || Boolean(input.offerid) || Boolean((input as any).offertype) ||
+      (input as any).israsid === '0' || (input as any).israsid === 0;
+
+    const checkAmt = amt > 0 ? amt : (numVal > 0 ? numVal : 0);
+    const valid4gAmounts = [2400, 4000, 8000, 16000, 26000, 46000];
+
+    if (isExplicitPackage) {
+      // في باقات يمن فورجي: إذا كان المبلغ غير مطابق للباقات لا تسويه عملية نهائياً ورجع له رد: المبلغ لايساوي اي قيمة باقة في يمن فورجي
+      const effectiveAmt = checkAmt > 0 ? checkAmt : (YEMEN_4G_PACKAGE_PRICES_MAP[pkgKey] || 0);
+      if (!valid4gAmounts.includes(effectiveAmt)) {
+        return { valid: false, error: 'المبلغ لايساوي اي قيمة باقة في يمن فورجي' };
+      }
+    } else {
+      // سداد الرصيد في يمن فورجي يبدأ من 100 ريال
+      if (checkAmt > 0 && checkAmt < 100) {
+        return { valid: false, error: 'أقل مبلغ سداد للرصيد في يمن فورجي هو 100 ريال.' };
+      }
+    }
+  }
+
+  // 7. الهاتف الثابت والإنترنت الأرضي (الهاتف الثابت يبدأ من 200 ريال - الإنترنت الأرضي يبدأ من 250 ريال)
+  if (
+    s === 'post' || 
+    s === 'landline_adsl' || 
+    s === 'adsl' || 
+    s === 'internet' || 
+    s === 'net' || 
+    s === 'landline' || 
+    s === 'phone' || 
+    s === 'telephone' || 
+    s === 'hatif'
+  ) {
     const checkAmt = amt > 0 ? amt : numVal;
-    const isPhone = act === 'queryphone' || (input as any).type === 'phone';
+    const isPhone = 
+      act === 'queryphone' || 
+      (input as any).type === 'line' || 
+      (input as any).type === 'phone' || 
+      s === 'phone' || 
+      s === 'landline' || 
+      s === 'telephone' || 
+      s === 'hatif';
+
     if (isPhone && checkAmt > 0 && checkAmt < 200) {
       return { valid: false, error: 'أقل مبلغ سداد للهاتف الثابت هو 200 ريال.' };
     }
     if (!isPhone && checkAmt > 0 && checkAmt < 250) {
       return { valid: false, error: 'أقل مبلغ سداد للإنترنت الأرضي هو 250 ريال.' };
+    }
+
+    // رقم هاتف الإنترنت والهاتف الثابت يتكون من 8 أرقام فقط
+    const phoneNum = String(input.mobile || (input as any).phone || '').replace(/\D/g, '');
+    if (phoneNum && phoneNum.length > 0) {
+      if (phoneNum.length !== 8 && phoneNum.length !== 7) {
+        return { valid: false, error: 'رقم الهاتف الأرضي أو الإنترنت يجب أن يتكون من 8 أرقام فقط.' };
+      }
     }
   }
 
