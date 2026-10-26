@@ -383,18 +383,29 @@ export async function executeTelecomRequestWithTimeout({
   const { ok, data } = raceResult;
 
   const rawDesc = String(data?.resultDesc || data?.message || '');
+  const normDesc = rawDesc.toLowerCase();
   const isPending =
     data?.status === 'pending' ||
+    data?.status === 'wait' ||
+    data?.status === 'waiting' ||
+    data?.status === 'process' ||
+    data?.status === 'proccess' ||
+    data?.status === 'processing' ||
+    data?.status === 'proccessing' ||
     data?.readiness === 'قيد الانتظار' ||
     data?.resultCode === '-2' ||
     data?.resultCode === -2 ||
-    rawDesc.includes('قيد الانتظار') ||
-    rawDesc.includes('قيد المعالجة') ||
-    rawDesc.includes('قيد التنفيذ') ||
-    rawDesc.includes('جاري المعالجة') ||
-    rawDesc.includes('جاري التنفيذ') ||
-    rawDesc.includes('تحت المعالجة') ||
-    rawDesc.includes('تم قبول الطلب');
+    rawDesc.includes('انتظار') ||
+    rawDesc.includes('معالج') ||
+    rawDesc.includes('تنفيذ') ||
+    rawDesc.includes('قبول') ||
+    rawDesc.includes('معلق') ||
+    rawDesc.includes('جاري') ||
+    normDesc.includes('proc') ||
+    normDesc.includes('pend') ||
+    normDesc.includes('wait') ||
+    normDesc.includes('queu') ||
+    normDesc.includes('prog');
 
   // إذا كان الرد الصادر من الـ API يفيد بأن العملية قيد الانتظار والمعالجة لدى المزود
   if (isPending) {

@@ -226,18 +226,29 @@ export async function POST(req: Request) {
     }
 
     const rawResultMsg = String(result.resultDesc || result.message || '').trim();
+    const normResultMsg = rawResultMsg.toLowerCase();
     const isPending =
       result.status === 'pending' ||
+      result.status === 'wait' ||
+      result.status === 'waiting' ||
+      result.status === 'process' ||
+      result.status === 'proccess' ||
+      result.status === 'processing' ||
+      result.status === 'proccessing' ||
       result.readiness === 'قيد الانتظار' ||
       result.resultCode === "-2" ||
       result.resultCode === -2 ||
-      rawResultMsg.includes('قيد الانتظار') ||
-      rawResultMsg.includes('قيد المعالجة') ||
-      rawResultMsg.includes('قيد التنفيذ') ||
-      rawResultMsg.includes('جاري المعالجة') ||
-      rawResultMsg.includes('جاري التنفيذ') ||
-      rawResultMsg.includes('تحت المعالجة') ||
-      rawResultMsg.includes('تم قبول الطلب');
+      rawResultMsg.includes('انتظار') ||
+      rawResultMsg.includes('معالج') ||
+      rawResultMsg.includes('تنفيذ') ||
+      rawResultMsg.includes('قبول') ||
+      rawResultMsg.includes('معلق') ||
+      rawResultMsg.includes('جاري') ||
+      normResultMsg.includes('proc') ||
+      normResultMsg.includes('pend') ||
+      normResultMsg.includes('wait') ||
+      normResultMsg.includes('queu') ||
+      normResultMsg.includes('prog');
 
     const isSuccess =
       !isPending &&

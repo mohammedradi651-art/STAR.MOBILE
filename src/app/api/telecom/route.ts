@@ -198,7 +198,16 @@ export async function POST(request: Request) {
           if (!payload.mobile && (tx.recipientPhoneNumber || tx.phoneNumber)) {
             payload.mobile = tx.recipientPhoneNumber || tx.phoneNumber;
           }
-          const isDone = tx.status === 'success' || tx.readiness === 'جاهزة';
+          const rawLocalMsg = String(tx.providerMessage || tx.notes || '').toLowerCase();
+          const isLocalPending =
+            rawLocalMsg.includes('proc') ||
+            rawLocalMsg.includes('pend') ||
+            rawLocalMsg.includes('wait') ||
+            rawLocalMsg.includes('انتظار') ||
+            rawLocalMsg.includes('معالج') ||
+            rawLocalMsg.includes('تنفيذ');
+
+          const isDone = (tx.status === 'success' || tx.readiness === 'جاهزة') && !isLocalPending;
           const isFailed = tx.status === 'failed' || tx.readiness === 'فاشلة';
           // إذا كانت العملية محسومة مسبقاً (ناجحة أو فاشلة)، نعيد حالتها فوراً
           if (isDone || isFailed) {
@@ -660,18 +669,21 @@ export async function POST(request: Request) {
           data?.status === 'wait' ||
           data?.status === 'waiting' ||
           data?.status === 'process' ||
+          data?.status === 'proccess' ||
           data?.status === 'processing' ||
+          data?.status === 'proccessing' ||
           data?.readiness === 'قيد الانتظار' ||
-          rawStatusDesc.includes('قيد الانتظار') ||
-          rawStatusDesc.includes('قيد المعالجة') ||
-          rawStatusDesc.includes('قيد التنفيذ') ||
-          rawStatusDesc.includes('جاري المعالجة') ||
-          rawStatusDesc.includes('جاري التنفيذ') ||
-          rawStatusDesc.includes('تحت المعالجة') ||
-          rawStatusDesc.includes('تحت التنفيذ') ||
-          rawStatusDesc.includes('تم قبول الطلب') ||
-          normStatusDesc.includes('pending') ||
-          normStatusDesc.includes('under process') ||
+          rawStatusDesc.includes('انتظار') ||
+          rawStatusDesc.includes('معالج') ||
+          rawStatusDesc.includes('تنفيذ') ||
+          rawStatusDesc.includes('قبول') ||
+          rawStatusDesc.includes('معلق') ||
+          rawStatusDesc.includes('جاري') ||
+          normStatusDesc.includes('proc') ||
+          normStatusDesc.includes('pend') ||
+          normStatusDesc.includes('wait') ||
+          normStatusDesc.includes('queu') ||
+          normStatusDesc.includes('prog') ||
           ((data?.isDone === 0 || data?.isDone === '0') && (data?.isBan === 0 || data?.isBan === '0'));
 
         const isProviderDone =
@@ -761,21 +773,21 @@ export async function POST(request: Request) {
         data?.status === 'wait' ||
         data?.status === 'waiting' ||
         data?.status === 'process' ||
+        data?.status === 'proccess' ||
         data?.status === 'processing' ||
+        data?.status === 'proccessing' ||
         data?.readiness === 'قيد الانتظار' ||
-        rawDesc.includes('قيد الانتظار') ||
-        rawDesc.includes('قيد المعالجة') ||
-        rawDesc.includes('قيد التنفيذ') ||
-        rawDesc.includes('جاري المعالجة') ||
-        rawDesc.includes('جاري التنفيذ') ||
-        rawDesc.includes('تحت المعالجة') ||
-        rawDesc.includes('تحت التنفيذ') ||
-        rawDesc.includes('تم قبول الطلب') ||
-        rawDesc.includes('في الانتظار') ||
-        rawDesc.includes('بالانتظار') ||
-        normDesc.includes('pending') ||
-        normDesc.includes('under process') ||
-        normDesc.includes('in progress') ||
+        rawDesc.includes('انتظار') ||
+        rawDesc.includes('معالج') ||
+        rawDesc.includes('تنفيذ') ||
+        rawDesc.includes('قبول') ||
+        rawDesc.includes('معلق') ||
+        rawDesc.includes('جاري') ||
+        normDesc.includes('proc') ||
+        normDesc.includes('pend') ||
+        normDesc.includes('wait') ||
+        normDesc.includes('queu') ||
+        normDesc.includes('prog') ||
         ((data?.isDone === 0 || data?.isDone === '0') && (data?.isBan === 0 || data?.isBan === '0'));
 
       // حالة النجاح المؤكد والتنفيذ الفعلي (فقط إذا لم تكن العملية قيد الانتظار):
