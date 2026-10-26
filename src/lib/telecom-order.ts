@@ -340,6 +340,12 @@ export async function executeTelecomRequestWithTimeout({
 
   const { ok, data } = raceResult;
 
+  // إذا كان الرد الصادر من الـ API يفيد بأن العملية قيد الانتظار والمعالجة لدى المزود
+  if (data?.status === 'pending' || data?.readiness === 'قيد الانتظار') {
+    console.warn(`[Telecom] Trans ${transid} returned pending status from provider. Showing success popup as pending.`);
+    return { isDelayed: true, providerResult: data };
+  }
+
   const isSuccess =
     ok &&
     (data?.resultCode === '0' ||
@@ -347,7 +353,9 @@ export async function executeTelecomRequestWithTimeout({
       data?.resultCode === '-2' ||
       data?.resultCode === -2 ||
       data?.status === 'success' ||
-      data?.action === 'done');
+      data?.action === 'done' ||
+      data?.isDone === 1 ||
+      data?.isDone === '1');
 
   if (isSuccess) {
     await markPaymentSuccess(firestore, userId, transid, data?.resultDesc || data?.message);

@@ -1,18 +1,8 @@
 import { NextResponse } from 'next/server';
-import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, doc, getDoc, writeBatch, increment } from 'firebase/firestore';
+import { initializeServerFirebase } from '@/firebase/server-init';
+import { doc, getDoc, writeBatch, increment } from 'firebase/firestore';
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyCFwJc9qTFMthFEvaOlV_WSTTkuG-L2ARg",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "studio-239662212-1b7b6.firebaseapp.com",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "studio-239662212-1b7b6",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "studio-239662212-1b7b6.firebasestorage.app",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "330089855562",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:330089855562:web:6565f4922129a0083163eb"
-};
-
-const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
-const firestore = getFirestore(app);
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
@@ -21,7 +11,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, message: 'رقم العملية transid مطلوب' }, { status: 400 });
     }
 
-    const txDocRef = doc(firestore, 'paymentTransactions', transid);
+    const { firestore } = initializeServerFirebase();
+
+    const cleanTransId = String(transid).trim();
+    const txDocRef = doc(firestore, 'paymentTransactions', cleanTransId);
     const txSnap = await getDoc(txDocRef);
 
     if (!txSnap.exists()) {
@@ -35,7 +28,10 @@ export async function POST(request: Request) {
         alreadyProcessed: true, 
         status: txData.status, 
         readiness: txData.readiness,
-        message: 'تم تحديث هذه العملية مسبقاً' 
+        refunded: Boolean(txData.refunded),
+        message: txData.readiness === 'جاهزة' || txData.status === 'success' 
+          ? 'تم تأكيد نجاح العملية مسبقاً' 
+          : 'تم إلغاء هذه العملية مسبقاً' 
       });
     }
 
@@ -44,28 +40,42 @@ export async function POST(request: Request) {
     const protocol = host.includes('localhost') ? 'http' : 'https';
     const telecomRes = await fetch(`${protocol}://${host}/api/telecom`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-app-source': 'internal'
+      },
       body: JSON.stringify({
         action: 'status',
-        transid: transid,
-        mobile: txData.recipientPhoneNumber
+        transid: cleanTransId,
+        mobile: txData.recipientPhoneNumber || txData.phoneNumber
       })
     });
 
     const data = await telecomRes.json();
-    const isBan = data.isBan === 1 || data.isBan === '1';
-    const isDone = data.isDone === 1 || data.isDone === '1';
+
+    const isBan =
+      data.isBan === 1 ||
+      data.isBan === '1' ||
+      data.action === 'ban' ||
+      data.status === 'ban' ||
+      data.status === 'failed' ||
+      data.readiness === 'فاشلة';
+
+    const isDone =
+      data.isDone === 1 ||
+      data.isDone === '1' ||
+      data.action === 'done' ||
+      data.status === 'done' ||
+      data.status === 'success' ||
+      data.readiness === 'جاهزة';
 
     if (isBan) {
-      // المزود ألغى العملية -> تحويل إلى فاشلة وإرجاع الرصيد
-      if (txData.refunded) {
-        return NextResponse.json({ success: true, status: 'failed', readiness: 'فاشلة', message: 'العملية ملغية ومستردة مسبقاً' });
-      }
-
-      const cancellationReason = data.reason || data.resultDesc || 'تم إلغاء العملية من المزود';
+      // المزود ألغى العملية -> تحويل إلى فاشلة وإرجاع الرصيد إن لم يُسترجع
+      const cancellationReason = data.reason || data.resultDesc || data.message || 'تم إلغاء العملية من المزود';
       const currentNotes = txData.notes || '';
-      const updatedNotes = currentNotes
-        ? `${currentNotes}\nالسبب من المزود: ${cancellationReason}`
+      const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
+      const updatedNotes = cleanNotes
+        ? `${cleanNotes}\nالسبب من المزود: ${cancellationReason}`
         : `السبب من المزود: ${cancellationReason}`;
 
       const updatePayload = {
@@ -77,15 +87,17 @@ export async function POST(request: Request) {
         failedAt: new Date().toISOString()
       };
 
+      const shouldRefund = !txData.refunded && !data.refunded && Number(txData.amount || 0) > 0;
+
       const batch = writeBatch(firestore);
-      if (txData.userId && txData.amount > 0) {
+      if (shouldRefund && txData.userId) {
         const userRef = doc(firestore, 'users', txData.userId);
-        batch.update(userRef, { balance: increment(txData.amount) });
+        batch.update(userRef, { balance: increment(Number(txData.amount)) });
       }
-      batch.update(txDocRef, updatePayload);
+      batch.set(txDocRef, updatePayload, { merge: true });
       if (txData.userId) {
-        const userTxRef = doc(firestore, `users/${txData.userId}/transactions`, transid);
-        batch.update(userTxRef, updatePayload);
+        const userTxRef = doc(firestore, `users/${txData.userId}/transactions`, cleanTransId);
+        batch.set(userTxRef, updatePayload, { merge: true });
       }
       await batch.commit();
 
@@ -96,24 +108,28 @@ export async function POST(request: Request) {
         refunded: true,
         amount: txData.amount,
         reason: cancellationReason,
-        message: 'تم رفض العملية من المزود'
+        message: 'تم رفض العملية من المزود وإرجاع الرصيد'
       });
     }
 
     if (isDone) {
       // المزود نفذ العملية بنجاح -> تحويل إلى جاهزة
+      const currentNotes = txData.notes || '';
+      const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
+
       const updatePayload = {
         status: 'success',
         readiness: 'جاهزة',
-        providerMessage: data.resultDesc || 'تم تنفيذ العملية بنجاح من المزود',
+        notes: cleanNotes,
+        providerMessage: data.resultDesc || data.message || 'تم تنفيذ العملية بنجاح من المزود',
         completedAt: new Date().toISOString()
       };
 
       const batch = writeBatch(firestore);
-      batch.update(txDocRef, updatePayload);
+      batch.set(txDocRef, updatePayload, { merge: true });
       if (txData.userId) {
-        const userTxRef = doc(firestore, `users/${txData.userId}/transactions`, transid);
-        batch.update(userTxRef, updatePayload);
+        const userTxRef = doc(firestore, `users/${txData.userId}/transactions`, cleanTransId);
+        batch.set(userTxRef, updatePayload, { merge: true });
       }
       await batch.commit();
 
@@ -128,7 +144,9 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       pending: true,
-      message: data.resultDesc || 'العملية ما زالت قيد المعالجة لدى المزود'
+      status: 'pending',
+      readiness: 'قيد الانتظار',
+      message: data.message || data.resultDesc || 'العملية ما زالت قيد المعالجة لدى المزود'
     });
 
   } catch (error: any) {

@@ -124,7 +124,7 @@ const PREPAID_PACKAGE_SECTIONS = [
  * - name: اسم الباقة الظاهر للعميل
  * - price: السعر النهائي المخصوم بالريال
  */
-export const POSTPAID_PACKAGE_SECTIONS = [
+const POSTPAID_PACKAGE_SECTIONS = [
     {
         id: 'yabalash',
         title: 'باقات يابلاش + واحد',

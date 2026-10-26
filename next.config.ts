@@ -2,6 +2,7 @@ import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
   /* خيارات الإعداد هنا */
+  skipTrailingSlashRedirect: true,
   serverExternalPackages: ['@genkit-ai/google-genai', 'firebase-admin'],
   devIndicators: false,
   typescript: {

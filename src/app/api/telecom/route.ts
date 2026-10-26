@@ -183,6 +183,8 @@ export async function POST(request: Request) {
     }
 
     // 4. معالجة طلب فحص الرصيد أو فحص حالة عملية محددة للعميل
+    let checkTxUserId: string | null = null;
+    let checkTxAmount = 0;
     if ((action === 'status' || action === 'check') && payload.transid) {
       try {
         const checkTransId = String(payload.transid).trim();
@@ -190,20 +192,29 @@ export async function POST(request: Request) {
         const txSnap = await getDoc(txDocRef);
         if (txSnap.exists()) {
           const tx = txSnap.data();
+          checkTxUserId = tx.userId || null;
+          checkTxAmount = Number(tx.amount || 0);
+          if (!payload.mobile && (tx.recipientPhoneNumber || tx.phoneNumber)) {
+            payload.mobile = tx.recipientPhoneNumber || tx.phoneNumber;
+          }
           const isDone = tx.status === 'success' || tx.readiness === 'جاهزة';
           const isFailed = tx.status === 'failed' || tx.readiness === 'فاشلة';
-          return NextResponse.json({
-            resultCode: isDone ? "0" : isFailed ? "-1" : "0",
-            status: isDone ? "success" : isFailed ? "failed" : "pending",
-            readiness: tx.readiness || (isDone ? 'جاهزة' : isFailed ? 'فاشلة' : 'قيد الانتظار'),
-            transid: checkTransId,
-            amount: tx.amount,
-            service: tx.transactionType,
-            recipientPhoneNumber: tx.recipientPhoneNumber || tx.phoneNumber || '',
-            message: tx.providerMessage || tx.notes || (isDone ? 'تم تنفيذ العملية بنجاح' : isFailed ? 'تم رفض العملية' : 'العملية قيد الانتظار والمعالجة لدى المزود'),
-            resultDesc: tx.providerMessage || tx.notes || (isDone ? 'تم تنفيذ العملية بنجاح' : isFailed ? 'تم رفض العملية' : 'العملية قيد الانتظار والمعالجة لدى المزود'),
-            date: tx.transactionDate || tx.createdAt
-          });
+          // إذا كانت العملية محسومة مسبقاً (ناجحة أو فاشلة)، نعيد حالتها فوراً
+          if (isDone || isFailed) {
+            return NextResponse.json({
+              resultCode: isDone ? "0" : "-1",
+              status: isDone ? "success" : "failed",
+              readiness: tx.readiness || (isDone ? 'جاهزة' : 'فاشلة'),
+              transid: checkTransId,
+              amount: tx.amount,
+              service: tx.transactionType,
+              recipientPhoneNumber: tx.recipientPhoneNumber || tx.phoneNumber || '',
+              message: tx.providerMessage || tx.notes || (isDone ? 'تم تنفيذ العملية بنجاح' : 'تم رفض العملية'),
+              resultDesc: tx.providerMessage || tx.notes || (isDone ? 'تم تنفيذ العملية بنجاح' : 'تم رفض العملية'),
+              date: tx.transactionDate || tx.createdAt
+            });
+          }
+          // إذا كانت العملية ما زالت قيد الانتظار (pending)، نسمح بالمرور للاستعلام الحي من المزود!
         }
       } catch (checkErr) {
         console.warn("Could not check local tx, forwarding to provider:", checkErr);
@@ -360,14 +371,19 @@ export async function POST(request: Request) {
     const identifier = targetMobile || username;
     const token = generateToken(password, username, transid, identifier);
 
+    const sanitizedBackUrl = (customBackUrl || 'https://star26.vercel.app/api/payment/webhook')
+      .trim()
+      .replace(/\/+$/, '')
+      .replace(/\?+$/, '');
+
     let endpoint = '';
     let apiRequestParams: any = {
+      ...payload,
       userid: userId,
       transid: transid,
       token: token,
-      backurl: customBackUrl,
+      backurl: payload.backurl ? String(payload.backurl).trim().replace(/\/+$/, '').replace(/\?+$/, '') : sanitizedBackUrl,
       backpass: backpass,
-      ...payload
     };
 
     // توجيه الطلبات حسب نوع الخدمة والأكشن
@@ -599,6 +615,80 @@ export async function POST(request: Request) {
             : 'المشترك غير متسلف',
           resultDesc: data.resultDesc || data.message || (isLoan ? 'المشترك متسلف' : 'المشترك غير متسلف')
         });
+      }
+
+      // معالجة خاصة لاستعلام حالة عملية سابقة (action === 'status' || action === 'check')
+      if (action === 'status' || action === 'check') {
+        const isProviderDone =
+          data?.isDone === 1 ||
+          data?.isDone === '1' ||
+          data?.action === 'done' ||
+          data?.status === 'done' ||
+          data?.status === 'success' ||
+          data?.readiness === 'جاهزة';
+
+        const isProviderBan =
+          data?.isBan === 1 ||
+          data?.isBan === '1' ||
+          data?.action === 'ban' ||
+          data?.status === 'ban' ||
+          data?.status === 'failed' ||
+          data?.readiness === 'فاشلة';
+
+        let targetUserId = checkTxUserId || clientUserId;
+        let targetAmount = checkTxAmount;
+        if (!targetUserId || !targetAmount) {
+          try {
+            const snap = await getDoc(doc(firestore, 'paymentTransactions', transid));
+            if (snap.exists()) {
+              const d = snap.data();
+              targetUserId = targetUserId || d.userId;
+              targetAmount = targetAmount || Number(d.amount || 0);
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        if (isProviderDone) {
+          if (targetUserId) {
+            await markSuccessInDb(firestore, targetUserId, transid, data.resultDesc || data.message || 'تم تأكيد نجاح العملية من المزود');
+          }
+          return NextResponse.json({
+            ...data,
+            resultCode: "0",
+            status: "success",
+            readiness: "جاهزة",
+            transid: transid,
+            message: data.resultDesc || data.message || "تم تنفيذ العملية بنجاح من المزود",
+            resultDesc: data.resultDesc || data.message || "تم تنفيذ العملية بنجاح من المزود"
+          });
+        } else if (isProviderBan) {
+          const banReason = data.reason || data.resultDesc || data.message || 'تم إلغاء العملية من المزود';
+          if (targetUserId && targetAmount > 0) {
+            await refundUser(firestore, targetUserId, transid, targetAmount, banReason);
+          }
+          return NextResponse.json({
+            ...data,
+            resultCode: "-1",
+            status: "failed",
+            readiness: "فاشلة",
+            refunded: true,
+            transid: transid,
+            message: banReason,
+            resultDesc: banReason
+          });
+        } else {
+          return NextResponse.json({
+            ...data,
+            resultCode: "0",
+            status: "pending",
+            readiness: "قيد الانتظار",
+            transid: transid,
+            message: data.resultDesc || data.message || "العملية قيد الانتظار والمعالجة لدى المزود",
+            resultDesc: data.resultDesc || data.message || "العملية قيد الانتظار والمعالجة لدى المزود"
+          });
+        }
       }
 
       const isSuccess = data?.resultCode === "0" || data?.resultCode === 0 || data?.resultCode === "-2" || data?.resultCode === -2 || data?.status === 'success' || data?.action === 'done';
