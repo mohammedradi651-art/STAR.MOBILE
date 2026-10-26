@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
 import { doc, getDoc, writeBatch, increment } from 'firebase/firestore';
+import { formatProviderErrorMessage } from '@/lib/telecom-order';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,13 +54,33 @@ export async function POST(request: Request) {
 
     const data = await telecomRes.json();
 
+    // إذا فشل الاتصال التقني بـ telecom أو كانت نتيجة استعلام شبكة وليست رداً حقيقياً من المزود
+    const rawMsg = data.message || data.resultDesc || '';
+    const isNetworkErr =
+      telecomRes.status >= 500 ||
+      rawMsg.includes('fetch failed') ||
+      rawMsg.includes('تعذر الاتصال') ||
+      rawMsg.includes('اتصال') ||
+      rawMsg.includes('timeout') ||
+      rawMsg.includes('انتهت المهلة');
+
+    if (isNetworkErr) {
+      // الاتصال بمزود الخدمة غير متاح حالياً لفحص الحالة -> تظل العملية قيد الانتظار دون مساس بحالتها أو الرصيد
+      return NextResponse.json({
+        success: true,
+        pending: true,
+        status: 'pending',
+        readiness: 'قيد الانتظار',
+        message: 'العملية ما زالت قيد المعالجة لدى المزود'
+      });
+    }
+
     const isBan =
       data.isBan === 1 ||
       data.isBan === '1' ||
       data.action === 'ban' ||
       data.status === 'ban' ||
-      data.status === 'failed' ||
-      data.readiness === 'فاشلة';
+      (data.status === 'failed' && data.refunded);
 
     const isDone =
       data.isDone === 1 ||
@@ -71,7 +92,7 @@ export async function POST(request: Request) {
 
     if (isBan) {
       // المزود ألغى العملية -> تحويل إلى فاشلة وإرجاع الرصيد إن لم يُسترجع
-      const cancellationReason = data.reason || data.resultDesc || data.message || 'تم إلغاء العملية من المزود';
+      const cancellationReason = formatProviderErrorMessage(data.reason || data.resultDesc || data.message || 'تم إلغاء العملية من المزود');
       const currentNotes = txData.notes || '';
       const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
       const updatedNotes = cleanNotes

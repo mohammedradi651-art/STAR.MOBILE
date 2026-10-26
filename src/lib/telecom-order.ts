@@ -236,6 +236,46 @@ export async function markPaymentSuccess(
 }
 
 /**
+ * تنظيف رسالة الرفض من المزود وإزالة البادئات والزوائد التقنية لتبدو واضحة ومهنية للعميل
+ */
+export function formatProviderErrorMessage(rawMsg: string): string {
+  if (!rawMsg) return 'تم رفض العملية من قبل مزود الخدمة.';
+  let clean = String(rawMsg).trim();
+
+  // تنظيف التكرارات والبادئات والزوائد
+  clean = clean.replace(/^(خطأ من نظام المزود:?\s*)+/gi, '').trim();
+  clean = clean.replace(/^Error:?\s*/gi, '').trim();
+  clean = clean.replace(/^TypeError:?\s*/gi, '').trim();
+  clean = clean.replace(/تمت?\s*إعادة\s*المبلغ[^\n.]*/gi, '').trim();
+  clean = clean.replace(/تم\s*استرجاع\s*المبلغ[^\n.]*/gi, '').trim();
+
+  // تحسين رسائل الخطأ الشائعة من المزود إلى نصوص عربية واضحة للعميل
+  if (clean.includes('Subscribtion Not Registred In PTC') || clean.includes('not registred') || clean.includes('Not Registered')) {
+    return 'الرقم غير مسجل في الخدمة أو غير صحيح لدى مزود الاتصالات.';
+  }
+  if (clean.includes('User with provided account/MSISDN does not exist') || clean.includes('MSISDN does not exist') || clean.includes('100206')) {
+    return 'رقم الحساب أو الهاتف غير مسجل لدى مزود الخدمة.';
+  }
+  if (clean.includes('GSM_NOT_FOUND') || clean.includes('not found') || clean.includes('Not Found')) {
+    return 'الرقم المطلوب غير موجود أو غير مفعل في شبكة الاتصالات.';
+  }
+  if (clean.includes('balance') && (clean.includes('low') || clean.includes('insufficient') || clean.includes('not enough'))) {
+    return 'رصيد المشترك غير كافٍ أو لا يسمح بتنفيذ العملية.';
+  }
+  if (clean.includes('fetch failed') || clean.includes('Connect Timeout') || clean.includes('ETIMEDOUT') || clean.includes('ConnectTimeoutError')) {
+    return 'تعذر الاتصال بمزود الخدمة في الوقت الحالي، يرجى المحاولة لاحقاً.';
+  }
+  if (clean.includes('Mobile number is required, and must be numeric')) {
+    return 'رقم الهاتف مطلوب ويجب أن يحتوي على أرقام فقط.';
+  }
+  if (clean.includes('Mobile number length must be')) {
+    return 'طول رقم الهاتف غير صحيح لهذه الخدمة.';
+  }
+
+  return clean || 'تم رفض العملية من قبل مزود الخدمة.';
+}
+
+/**
  * وضع علامة فشل وإرجاع المبلغ للعميل فوراً وتحديث الملاحظات بسبب الرفض
  */
 export async function markPaymentFailedAndRefund(
@@ -256,14 +296,16 @@ export async function markPaymentFailedAndRefund(
       return;
     }
 
+    const cleanReason = formatProviderErrorMessage(reason);
     const currentNotes = snap.exists() ? (snap.data().notes || '') : '';
-    const updatedNotes = currentNotes ? `${currentNotes}\nالسبب من المزود: ${reason}` : `السبب من المزود: ${reason}`;
+    const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
+    const updatedNotes = cleanNotes ? `${cleanNotes}\nالسبب من المزود: ${cleanReason}` : `السبب من المزود: ${cleanReason}`;
 
     const updateData = {
       status: 'failed',
       readiness: 'فاشلة',
       refunded: true,
-      providerMessage: reason,
+      providerMessage: cleanReason,
       notes: updatedNotes,
       failedAt: new Date().toISOString()
     };
@@ -362,10 +404,9 @@ export async function executeTelecomRequestWithTimeout({
     return { isDelayed: false, providerResult: data };
   } else {
     // فشل من المزود خلال الـ 10 ثوانٍ -> إرجاع الفلوس وتحديث الملاحظات
-    const providerError = data?.resultDesc || data?.message || 'تم رفض العملية من قبل مزود الخدمة.';
-    const cleanError = providerError.replace(/تمت?\s*إعادة\s*المبلغ[^\n.]*/gi, '').replace(/تم\s*استرجاع\s*المبلغ[^\n.]*/gi, '').trim();
-    await markPaymentFailedAndRefund(firestore, userId, transid, amount, cleanError);
-    throw new Error(cleanError || 'فشلت العملية من المزود');
+    const providerError = formatProviderErrorMessage(data?.resultDesc || data?.message || 'تم رفض العملية من قبل مزود الخدمة.');
+    await markPaymentFailedAndRefund(firestore, userId, transid, amount, providerError);
+    throw new Error(providerError || 'فشلت العملية من المزود');
   }
 }
 

@@ -12,7 +12,8 @@ import {
   generateTransId, 
   generateBackpass, 
   validateTelecomRequest, 
-  resolveTelecomDetails 
+  resolveTelecomDetails,
+  formatProviderErrorMessage
 } from '@/lib/telecom-order';
 
 export const runtime = 'nodejs';
@@ -536,18 +537,48 @@ export async function POST(request: Request) {
     const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
     try {
-      const fetchPromise = fetch(fullUrl, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: { 
-          'Accept': 'application/json, text/plain, */*',
-          'Cache-Control': 'no-cache',
-          'User-Agent': 'Mozilla/5.0 (StarMobile)',
-        },
-        cache: 'no-store'
-      });
+      let response: Response;
+      try {
+        const fetchPromise = fetch(fullUrl, {
+          method: 'GET',
+          signal: controller.signal,
+          headers: { 
+            'Accept': 'application/json, text/plain, */*',
+            'Cache-Control': 'no-cache',
+            'User-Agent': 'Mozilla/5.0 (StarMobile)',
+          },
+          cache: 'no-store'
+        });
+        response = await fetchPromise;
+      } catch (directErr: any) {
+        const isLocalHost = host.includes('localhost') || host.includes('127.0.0.1');
+        const isConnErr = directErr.name !== 'AbortError' && (
+          directErr.message?.includes('fetch failed') || 
+          directErr.code === 'UND_ERR_CONNECT_TIMEOUT' || 
+          directErr.cause?.name === 'ConnectTimeoutError'
+        );
 
-      const response = await fetchPromise;
+        if (isLocalHost && isConnErr && !request.headers.get('x-from-proxy')) {
+          console.warn('[Telecom API] Local direct connection to provider blocked. Routing through production Vercel proxy...');
+          const proxyRes = await fetch('https://star26.vercel.app/api/telecom', {
+            method: 'POST',
+            signal: controller.signal,
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': 'star_live_key_9f8e7d6c5b4a3210',
+              'x-internal-handled': 'true',
+              'x-from-proxy': 'true'
+            },
+            body: JSON.stringify(body)
+          });
+          const proxyData = await proxyRes.json();
+          if (proxyData.resultDesc) proxyData.resultDesc = formatProviderErrorMessage(proxyData.resultDesc);
+          if (proxyData.message) proxyData.message = formatProviderErrorMessage(proxyData.message);
+          clearTimeout(timeoutId);
+          return NextResponse.json(proxyData, { status: proxyRes.status });
+        }
+        throw directErr;
+      }
       clearTimeout(timeoutId);
 
       const responseText = (await response.text()).trim();
@@ -711,8 +742,8 @@ export async function POST(request: Request) {
         });
 
       } else {
-        // رفض مؤكد من المزود -> إرجاع الفلوس فوراً وإظهار سبب الرفض فقط (دون أي عبارات استرجاع)
-        const failReason = data.resultDesc || data.message || 'تم رفض العملية من قبل مزود الخدمة.';
+        // رفض مؤكد من المزود -> إرجاع الفلوس فوراً وإظهار سبب الرفض فقط (دون أي عبارات استرجاع أو بادئات تقنية)
+        const failReason = formatProviderErrorMessage(data.resultDesc || data.message || 'تم رفض العملية من قبل مزود الخدمة.');
         if (shouldPerformImmediateDeduction && clientUserId) {
           await refundUser(firestore, clientUserId, transid, requiredCost, failReason);
           initialBalance += requiredCost;
@@ -733,8 +764,28 @@ export async function POST(request: Request) {
     } catch (fetchErr: any) {
       clearTimeout(timeoutId);
 
-      // إذا تأخر المزود عن المهلة المحددة (AbortError) -> تظل قيد الانتظار دون استرجاع
-      if (fetchErr.name === 'AbortError') {
+      // إذا كان الطلب استعلام حالة، يجب أن تظل العملية معلقة قيد الانتظار ولا تفشل أبداً بسبب خطأ شبكة
+      if (action === 'status' || action === 'check') {
+        return NextResponse.json({
+          resultCode: "0",
+          status: "pending",
+          readiness: "قيد الانتظار",
+          transid: transid,
+          message: "العملية قيد الانتظار والمعالجة لدى المزود",
+          resultDesc: "العملية قيد الانتظار والمعالجة لدى المزود"
+        });
+      }
+
+      // إذا تأخر المزود عن المهلة المحددة (Timeout) -> تظل قيد الانتظار دون استرجاع
+      const isTimeout =
+        fetchErr.name === 'AbortError' ||
+        fetchErr.code === 'ETIMEDOUT' ||
+        fetchErr.code === 'UND_ERR_CONNECT_TIMEOUT' ||
+        fetchErr.cause?.name === 'ConnectTimeoutError' ||
+        fetchErr.cause?.code === 'UND_ERR_CONNECT_TIMEOUT' ||
+        String(fetchErr.message || '').toLowerCase().includes('timeout');
+
+      if (isTimeout) {
         if (isQueryAction) {
           return NextResponse.json({
             resultCode: "-1",
@@ -756,10 +807,10 @@ export async function POST(request: Request) {
         });
       }
 
-      // خطأ شبكة غير التايم آوت
-      const errReason = 'فشل الاتصال بسيرفر المزود: ' + fetchErr.message;
+      // خطأ شبكة غير التايم آوت - صياغة رسالة واضحة دون نصوص تقنية إنجليزية
+      const cleanErrReason = formatProviderErrorMessage(fetchErr.message || '');
       if (shouldPerformImmediateDeduction && clientUserId) {
-        await refundUser(firestore, clientUserId, transid, requiredCost, errReason);
+        await refundUser(firestore, clientUserId, transid, requiredCost, cleanErrReason);
         initialBalance += requiredCost;
       }
 
@@ -769,8 +820,8 @@ export async function POST(request: Request) {
         refunded: shouldPerformImmediateDeduction,
         transid: transid,
         currentBalance: initialBalance,
-        message: errReason, 
-        resultDesc: errReason 
+        message: cleanErrReason, 
+        resultDesc: cleanErrReason 
       }, { status: 504 });
     }
 
