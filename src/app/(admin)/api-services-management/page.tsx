@@ -884,7 +884,9 @@ function SabafonConfigCard({
   onUnitsRateChange,
 }: SabafonConfigCardProps) {
   const currentPkgRate = setting.packagesRate ?? setting.rate ?? 1;
-  const currentSouthRate = setting.instantSouthRate ?? setting.balanceRate ?? 3.0;
+  const currentSouthRate = (typeof setting.instantSouthRate === 'number' && setting.instantSouthRate > 0 && setting.instantSouthRate <= 2) 
+    ? setting.instantSouthRate 
+    : (typeof setting.rate === 'number' && setting.rate > 0 && setting.rate <= 2 ? setting.rate : 0.98);
   const currentNorthRate = setting.instantNorthRate ?? 1;
   const currentUnitsRate = setting.unitsRate ?? 45;
 
@@ -1019,9 +1021,9 @@ function SabafonConfigCard({
             </div>
           </div>
           <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-            <span>الـ 1,000 فوري جنوب تصبح: <strong className="text-blue-700 dark:text-blue-400">{Math.ceil(1000 * currentSouthRate).toLocaleString()} ر.ي</strong></span>
+            <span>فئة 960 تصبح: <strong className="text-blue-700 dark:text-blue-400">{Math.round(960 * currentSouthRate).toLocaleString()} ر.ي</strong></span>
             <div className="flex items-center gap-1">
-              {[3.0, 3.5, 3.8].map((p) => (
+              {[0.98, 1, 0.971].map((p) => (
                 <button
                   key={p}
                   type="button"

@@ -79,12 +79,12 @@ export const DEFAULT_SERVICES_CONFIG: SystemServicesConfig = {
   },
   sabafon: {
     enabled: true,
-    rate: 1, // الباقات
-    packagesRate: 1,
+    rate: 0.98, // الباقات
+    packagesRate: 0.98,
     unitsRate: 45, // قيمة الوحدة بالريال (افتراضي 45)
     instantNorthRate: 1, // فوري شمال (افتراضي 1)
-    instantSouthRate: 3.0, // فوري جنوب عملة مرتفعة (الـ 1000 = 3000)
-    balanceRate: 3.0,
+    instantSouthRate: 0.98, // فوري جنوب بنسبة 0.98 (فئة 960 = 940 ريال)
+    balanceRate: 0.98,
     percentage: 0,
     fixedFee: 0,
     notice: ''
@@ -348,6 +348,29 @@ export const KNOWN_PACKAGE_PRICES: Record<string, number> = {
   'sabaphone_300': 10845,
   'sabaphone_505': 18255,
   'sabaphone_1270': 45912,
+  '22.5': 813,
+  '813': 813,
+  '40': 1446,
+  '1446': 1446,
+  '45': 1626,
+  '1626': 1626,
+  '60': 2169,
+  '2169': 2169,
+  '3072': 3072,
+  '100': 3615,
+  '3615': 3615,
+  '125': 4518,
+  '4518': 4518,
+  '150': 5424,
+  '5424': 5424,
+  '209': 7554,
+  '7554': 7554,
+  '300': 10845,
+  '10845': 10845,
+  '505': 18255,
+  '18255': 18255,
+  '1270': 45912,
+  '45912': 45912,
 
   // سبأفون - فئات شحن فوري جنوب
   'sbay_600': 960,
@@ -356,12 +379,33 @@ export const KNOWN_PACKAGE_PRICES: Record<string, number> = {
   'sbay_2500': 4000,
   'sbay_5000': 8000,
   'sbay_10000': 16000,
+  'sbay_960': 960,
+  'sbay_940': 940,
+  'sbay_1600': 1600,
+  'sbay_1568': 1568,
+  'sbay_2640': 2640,
+  'sbay_2587': 2587,
+  'sbay_4000': 4000,
+  'sbay_3920': 3920,
+  'sbay_8000': 8000,
+  'sbay_7840': 7840,
+  'sbay_16000': 16000,
+  'sbay_15680': 15680,
   '600': 960,
+  '960': 960,
+  '940': 940,
   '1000': 1600,
+  '1600': 1600,
+  '1568': 1568,
   '1650': 2640,
+  '2640': 2640,
+  '2587': 2587,
   '2500': 4000,
+  '3920': 3920,
   '5000': 8000,
+  '7840': 7840,
   '10000': 16000,
+  '15680': 16000,
 
   // يو YOU - باقات السعر الموحد والفورجي
   'Sawa_300_PRE': 2904,
@@ -454,26 +498,52 @@ export const KNOWN_PACKAGE_PRICES: Record<string, number> = {
 
 export const SABAFON_NORTH_INSTANT_PRICES: Record<string, number> = {
   '22.5': 813,
+  '813': 813,
   '40': 1446,
+  '1446': 1446,
   '45': 1626,
+  '1626': 1626,
   '60': 2169,
+  '2169': 2169,
   '85': 3072,
+  '3072': 3072,
   '100': 3615,
+  '3615': 3615,
   '125': 4518,
+  '4518': 4518,
   '150': 5424,
+  '5424': 5424,
   '209': 7554,
+  '7554': 7554,
   '300': 10845,
+  '10845': 10845,
   '505': 18255,
+  '18255': 18255,
   '1270': 45912,
+  '45912': 45912,
 };
 
 export const SABAFON_SOUTH_INSTANT_PRICES: Record<string, number> = {
+  // فئات سبأفون جنوب الرسمية والمبالغ الاسمية
   '600': 960,
+  '960': 960,
+  '940': 960,
+  '941': 960,
   '1000': 1600,
+  '1600': 1600,
+  '1568': 1600,
   '1650': 2640,
+  '2640': 2640,
+  '2587': 2640,
   '2500': 4000,
+  '4000': 4000,
+  '3920': 4000,
   '5000': 8000,
+  '8000': 8000,
+  '7840': 8000,
   '10000': 16000,
+  '16000': 16000,
+  '15680': 16000,
 };
 
 /**
@@ -573,28 +643,59 @@ export function calculateApiTransactionCost(
       return roundCurrency(finalBasePrice * pkgRate);
     }
 
-    const checkCat = rawNum || String((payload as any).category || payload.amount || '');
+    const checkCat = String(rawNum || (payload as any).category || (payload as any).packageid || (payload as any).packageId || (rawAmount > 0 ? String(rawAmount) : '')).trim();
     const instantPrice = SABAFON_NORTH_INSTANT_PRICES[checkCat] || SABAFON_NORTH_INSTANT_PRICES[rawNum];
     if (instantPrice) {
-      const rate = config.sabafon?.instantNorthRate ?? 1;
+      const rate = (typeof config.sabafon?.instantNorthRate === 'number' && config.sabafon.instantNorthRate > 0)
+        ? config.sabafon.instantNorthRate
+        : 1;
       return roundCurrency(instantPrice * rate);
     }
     const baseAmt = rawAmount > 0 ? rawAmount : (parseFloat(rawNum) || 0);
-    const rate = config.sabafon?.instantNorthRate ?? 1;
+    const rate = (typeof config.sabafon?.instantNorthRate === 'number' && config.sabafon.instantNorthRate > 0)
+      ? config.sabafon.instantNorthRate
+      : (typeof config.sabafon?.rate === 'number' && config.sabafon.rate > 0 ? config.sabafon.rate : 1);
     return calculateFinalServicePrice(baseAmt * rate, config.sabafon);
   }
 
-  // 4. سبأفون جنوب (عدن - عملة مرتفعة)
+  // 4. سبأفون جنوب (عدن - فئة 960 بسعر 940 بمعامل نسبة الربط 0.98)
   if (service === 'sbay' || service === 'saba_south' || service === 'sabasouth') {
-    const checkCat = rawNum || String((payload as any).category || payload.amount || '');
-    const instantPrice = SABAFON_SOUTH_INSTANT_PRICES[checkCat] || SABAFON_SOUTH_INSTANT_PRICES[rawNum];
-    if (instantPrice) {
-      const southRate = config.sabafon?.instantSouthRate ?? 1;
-      return roundCurrency(instantPrice * southRate);
+    const rawCat = String(rawNum || (payload as any).category || (payload as any).packageid || (payload as any).packageId || '').trim();
+    const checkCat = rawCat || (rawAmount > 0 ? String(rawAmount) : '');
+    const instantBasePrice = SABAFON_SOUTH_INSTANT_PRICES[checkCat] || 
+                             (rawNum ? SABAFON_SOUTH_INSTANT_PRICES[rawNum] : 0) || 
+                             0;
+
+    // معامل نسبة الربط لجنوب سبأفون (افتراضي 0.98 ليصبح الـ 960 = 940 ريال بالظبط)
+    let southRate = 0.98;
+    if (typeof config.sabafon?.instantSouthRate === 'number' && config.sabafon.instantSouthRate > 0 && config.sabafon.instantSouthRate <= 2) {
+      southRate = config.sabafon.instantSouthRate;
+    } else if (typeof config.sabafon?.rate === 'number' && config.sabafon.rate > 0 && config.sabafon.rate <= 2) {
+      southRate = config.sabafon.rate;
     }
-    const baseAmt = rawAmount > 0 ? rawAmount : (parseFloat(rawNum) || 0);
-    const southRate = config.sabafon?.instantSouthRate ?? config.sabafon?.balanceRate ?? 3.0;
-    return roundCurrency(baseAmt * southRate);
+
+    // إذا أرسل العميل مبلغاً محدداً بالضبط (مثل 940 أو أي مبلغ صافي معتمد)
+    if (rawAmount > 0) {
+      if (rawAmount === 940 || rawAmount === 1568 || rawAmount === 2587 || rawAmount === 3920 || rawAmount === 7840 || rawAmount === 15680) {
+        return rawAmount;
+      }
+      if (instantBasePrice > 0) {
+        return Math.floor(instantBasePrice * southRate);
+      }
+      return Math.floor(rawAmount * southRate);
+    }
+
+    if (instantBasePrice > 0) {
+      return Math.floor(instantBasePrice * southRate);
+    }
+
+    const fallbackAmt = parseFloat(rawNum) || 0;
+    if (fallbackAmt > 0) {
+      const matched = SABAFON_SOUTH_INSTANT_PRICES[String(fallbackAmt)] || fallbackAmt;
+      return Math.floor(matched * southRate);
+    }
+
+    return 940; // فئة 960 الافتراضية بسعر 940 بالظبط
   }
 
   // 5. سبأفون وحدات

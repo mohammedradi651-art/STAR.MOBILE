@@ -115,7 +115,7 @@ export async function POST(request: Request) {
     const bearerKey = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : '';
     const { searchParams } = new URL(request.url);
     const queryApiKey = searchParams.get('apiKey') || searchParams.get('api_key') || '';
-    const incomingApiKey = (xApiKey || bearerKey || queryApiKey || payload.apiKey || '').trim();
+    const incomingApiKey = (xApiKey || bearerKey || queryApiKey || payload.apiKey || (payload as any).apikey || (payload as any).api_key || (payload as any).key || '').trim();
     const isInternalHandled = request.headers.get('x-internal-handled') === 'true';
 
     // فحص مصدر الطلب (من داخل التطبيق أم ربط خارجي)
@@ -301,12 +301,14 @@ export async function POST(request: Request) {
 
     if (shouldPerformImmediateDeduction && clientUserId) {
       requiredCost = calculateApiTransactionCost({
+        ...payload,
         service,
         action,
         amount: payload.amount,
         num: payload.num,
-        offerid: payload.offerid,
-        packageid: payload.packageid,
+        category: payload.category,
+        packageid: payload.packageid || payload.packageId,
+        offerid: payload.offerid || payload.offerId,
         israsid: payload.israsid
       }, systemConfig, clientUserData);
 
@@ -481,15 +483,34 @@ export async function POST(request: Request) {
       endpoint = 'sabaphone';
       apiRequestParams.action = action || 'bill';
       // ضمان تمرير num رقمي للمزود دائماً لمنع خطأ num parametr is required
-      let resolvedNum = String(payload.num || '').trim();
-      if (!resolvedNum) {
-        const amtVal = parseFloat(String(payload.amount || '0')) || 0;
-        const matchedCategory = Object.keys(SABAFON_NORTH_INSTANT_PRICES).find(
-          k => SABAFON_NORTH_INSTANT_PRICES[k] === amtVal
-        );
-        resolvedNum = matchedCategory || (amtVal > 0 ? String(amtVal) : String(payload.packageid || payload.offerid || '100'));
-      }
-      apiRequestParams.num = resolvedNum;
+      const rawNorthInput = String(payload.num || payload.category || payload.packageid || payload.offerid || payload.amount || '100').trim();
+      const northCategoryMap: Record<string, string> = {
+        '22.5': '22.5',
+        '813': '22.5',
+        '40': '40',
+        '1446': '40',
+        '45': '45',
+        '1626': '45',
+        '60': '60',
+        '2169': '60',
+        '85': '85',
+        '3072': '85',
+        '100': '100',
+        '3615': '100',
+        '125': '125',
+        '4518': '125',
+        '150': '150',
+        '5424': '150',
+        '209': '209',
+        '7554': '209',
+        '300': '300',
+        '10845': '300',
+        '505': '505',
+        '18255': '505',
+        '1270': '1270',
+        '45912': '1270'
+      };
+      apiRequestParams.num = northCategoryMap[rawNorthInput] || rawNorthInput;
     } else if (service === 'sabaoffer') {
       endpoint = 'sabaoffer';
       delete apiRequestParams.action;
@@ -502,15 +523,29 @@ export async function POST(request: Request) {
       endpoint = 'sbay';
       apiRequestParams.action = action || 'bill';
       // ضمان تمرير num رقمي للمزود دائماً لمنع خطأ num parametr is required
-      let resolvedNum = String(payload.num || '').trim();
-      if (!resolvedNum) {
-        const amtVal = parseFloat(String(payload.amount || '0')) || 0;
-        const matchedCategory = Object.keys(SABAFON_SOUTH_INSTANT_PRICES).find(
-          k => SABAFON_SOUTH_INSTANT_PRICES[k] === amtVal
-        );
-        resolvedNum = matchedCategory || (amtVal > 0 ? String(amtVal) : String(payload.packageid || payload.offerid || '600'));
-      }
-      apiRequestParams.num = resolvedNum;
+      const rawSouthInput = String(payload.num || payload.category || payload.packageid || payload.offerid || payload.amount || '600').trim();
+      const southCategoryMap: Record<string, string> = {
+        '600': '600',
+        '960': '600',
+        '940': '600',
+        '941': '600',
+        '1000': '1000',
+        '1600': '1000',
+        '1568': '1000',
+        '1650': '1650',
+        '2640': '1650',
+        '2587': '1650',
+        '2500': '2500',
+        '4000': '2500',
+        '3920': '2500',
+        '5000': '5000',
+        '8000': '5000',
+        '7840': '5000',
+        '10000': '10000',
+        '16000': '10000',
+        '15680': '10000'
+      };
+      apiRequestParams.num = southCategoryMap[rawSouthInput] || '600';
     } else if (service === 'sabaunits' || service === 'saba_units') {
       endpoint = 'sabaunits';
       delete apiRequestParams.action;
