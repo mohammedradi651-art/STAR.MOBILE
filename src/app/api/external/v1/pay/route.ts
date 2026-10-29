@@ -307,8 +307,35 @@ export async function POST(req: Request) {
 
     const rawResultMsg = String(result.resultDesc || result.message || '').trim();
     const normResultMsg = rawResultMsg.toLowerCase();
+    // 1. الكشف الصارم عن مؤشرات الفشل أولاً
+    const isFailure =
+      result.resultCode === "-1" ||
+      result.resultCode === -1 ||
+      result.status === 'failed' ||
+      result.status === 'ban' ||
+      result.isBan === 1 ||
+      result.isBan === '1' ||
+      result.action === 'ban' ||
+      rawResultMsg.includes('لم تتم') ||
+      rawResultMsg.includes('لم يتم') ||
+      rawResultMsg.includes('فشل') ||
+      rawResultMsg.includes('فشلت') ||
+      rawResultMsg.includes('رفض') ||
+      rawResultMsg.includes('رفضت') ||
+      rawResultMsg.includes('خطأ') ||
+      rawResultMsg.includes('غير صحيح') ||
+      rawResultMsg.includes('غير مسجل') ||
+      rawResultMsg.includes('غير كاف') ||
+      rawResultMsg.includes('لا يمكن') ||
+      normResultMsg.includes('fail') ||
+      normResultMsg.includes('error') ||
+      normResultMsg.includes('invalid') ||
+      normResultMsg.includes('reject');
+
+    // 2. الكشف عن النجاح المؤكد فقط إذا لم تكن هناك أي مؤشرات فشل
     const isExplicitDone =
-      result.status === 'success' ||
+      !isFailure &&
+      (result.status === 'success' ||
       result.status === 'done' ||
       result.action === 'done' ||
       result.isDone === 1 ||
@@ -318,10 +345,11 @@ export async function POST(req: Request) {
       rawResultMsg.includes('تم التنفيذ') ||
       rawResultMsg.includes('تم السداد') ||
       rawResultMsg.includes('تم الشحن') ||
-      rawResultMsg.includes('تمت العملية') ||
-      rawResultMsg.includes('بنجاح');
+      rawResultMsg.includes('تمت العملية بنجاح'));
 
+    // 3. حالة قيد الانتظار والمعالجة لدى المزود:
     const isPending =
+      !isFailure &&
       !isExplicitDone &&
       (result.status === 'pending' ||
       result.status === 'wait' ||
@@ -347,14 +375,14 @@ export async function POST(req: Request) {
       normResultMsg.includes('queu') ||
       normResultMsg.includes('prog'));
 
+    // 4. حالة النجاح المؤكد والتنفيذ الفعلي:
     const isSuccess =
+      !isFailure &&
       !isPending &&
       (isExplicitDone ||
-       result.status === 'success' ||
-       result.action === 'done' ||
-       result.readiness === 'جاهزة' ||
-       result.resultCode === "0" ||
-       result.resultCode === 0);
+       ((result.resultCode === "0" || result.resultCode === 0) &&
+        !result.isBan &&
+        result.status !== 'failed'));
 
     if (isSuccess) {
       // نجاح العملية -> تحديث الحالة إلى جاهزة

@@ -204,16 +204,30 @@ export async function POST(request: Request) {
             payload.mobile = tx.recipientPhoneNumber || tx.phoneNumber;
           }
           const rawLocalMsg = String(tx.providerMessage || tx.notes || '').toLowerCase();
+          const isLocalFailure =
+            tx.status === 'failed' ||
+            tx.readiness === 'فاشلة' ||
+            Boolean(tx.refunded) ||
+            rawLocalMsg.includes('لم تتم') ||
+            rawLocalMsg.includes('لم يتم') ||
+            rawLocalMsg.includes('فشل') ||
+            rawLocalMsg.includes('فشلت') ||
+            rawLocalMsg.includes('رفض') ||
+            rawLocalMsg.includes('خطأ') ||
+            rawLocalMsg.includes('غير صحيح');
+
           const isLocalExplicitDone =
-            tx.status === 'success' ||
+            !isLocalFailure &&
+            (tx.status === 'success' ||
             tx.readiness === 'جاهزة' ||
             rawLocalMsg.includes('تم تنفيذ') ||
             rawLocalMsg.includes('تم التنفيذ') ||
             rawLocalMsg.includes('تم السداد') ||
             rawLocalMsg.includes('تم الشحن') ||
-            rawLocalMsg.includes('بنجاح');
+            rawLocalMsg.includes('تمت العملية بنجاح'));
 
           const isLocalPending =
+            !isLocalFailure &&
             !isLocalExplicitDone &&
             (rawLocalMsg.includes('proc') ||
             rawLocalMsg.includes('pend') ||
@@ -225,8 +239,8 @@ export async function POST(request: Request) {
             rawLocalMsg.includes('قيد المعالجة') ||
             rawLocalMsg.includes('جاري المعالجة'));
 
-          const isDone = isLocalExplicitDone || ((tx.status === 'success' || tx.readiness === 'جاهزة') && !isLocalPending);
-          const isFailed = tx.status === 'failed' || tx.readiness === 'فاشلة';
+          const isDone = !isLocalFailure && (isLocalExplicitDone || ((tx.status === 'success' || tx.readiness === 'جاهزة') && !isLocalPending));
+          const isFailed = isLocalFailure || tx.status === 'failed' || tx.readiness === 'فاشلة';
           // إذا كانت العملية محسومة مسبقاً (ناجحة أو فاشلة)، نعيد حالتها فوراً
           if (isDone || isFailed) {
             return NextResponse.json({
@@ -789,8 +803,32 @@ export async function POST(request: Request) {
         const rawStatusDesc = String(data?.resultDesc || data?.message || data?.reason || '').trim();
         const normStatusDesc = rawStatusDesc.toLowerCase();
 
+        const isStatusFailure =
+          data?.isBan === 1 ||
+          data?.isBan === '1' ||
+          data?.action === 'ban' ||
+          data?.status === 'ban' ||
+          data?.status === 'failed' ||
+          data?.readiness === 'فاشلة' ||
+          data?.resultCode === "-1" ||
+          data?.resultCode === -1 ||
+          rawStatusDesc.includes('لم تتم') ||
+          rawStatusDesc.includes('لم يتم') ||
+          rawStatusDesc.includes('فشل') ||
+          rawStatusDesc.includes('فشلت') ||
+          rawStatusDesc.includes('رفض') ||
+          rawStatusDesc.includes('خطأ') ||
+          rawStatusDesc.includes('غير صحيح') ||
+          rawStatusDesc.includes('غير مسجل') ||
+          rawStatusDesc.includes('غير كاف') ||
+          normStatusDesc.includes('fail') ||
+          normStatusDesc.includes('error') ||
+          normStatusDesc.includes('invalid') ||
+          normStatusDesc.includes('reject');
+
         const isExplicitDone =
-          data?.isDone === 1 ||
+          !isStatusFailure &&
+          (data?.isDone === 1 ||
           data?.isDone === '1' ||
           data?.action === 'done' ||
           data?.status === 'done' ||
@@ -800,9 +838,10 @@ export async function POST(request: Request) {
           rawStatusDesc.includes('تم التنفيذ') ||
           rawStatusDesc.includes('تم السداد') ||
           rawStatusDesc.includes('تم الشحن') ||
-          rawStatusDesc.includes('بنجاح');
+          rawStatusDesc.includes('تمت العملية بنجاح'));
 
         const isStatusPending =
+          !isStatusFailure &&
           !isExplicitDone &&
           (data?.resultCode === "-2" ||
           data?.resultCode === -2 ||
@@ -830,25 +869,22 @@ export async function POST(request: Request) {
           ((data?.isDone === 0 || data?.isDone === '0') && (data?.isBan === 0 || data?.isBan === '0')));
 
         const isProviderDone =
+          !isStatusFailure &&
           !isStatusPending &&
           (isExplicitDone ||
-           data?.isDone === 1 ||
-           data?.isDone === '1' ||
-           data?.action === 'done' ||
-           data?.status === 'done' ||
-           data?.status === 'success' ||
-           data?.readiness === 'جاهزة' ||
-           data?.resultCode === '0' ||
-           data?.resultCode === 0);
+           ((data?.resultCode === '0' || data?.resultCode === 0) &&
+            !data?.isBan &&
+            data?.status !== 'failed'));
 
         const isProviderBan =
-          !isStatusPending &&
-          (data?.isBan === 1 ||
-           data?.isBan === '1' ||
-           data?.action === 'ban' ||
-           data?.status === 'ban' ||
-           data?.status === 'failed' ||
-           data?.readiness === 'فاشلة');
+          isStatusFailure ||
+          (!isStatusPending &&
+           (data?.isBan === 1 ||
+            data?.isBan === '1' ||
+            data?.action === 'ban' ||
+            data?.status === 'ban' ||
+            data?.status === 'failed' ||
+            data?.readiness === 'فاشلة'));
 
         let targetUserId = checkTxUserId || clientUserId;
         let targetAmount = checkTxAmount;
@@ -910,8 +946,35 @@ export async function POST(request: Request) {
       const rawDesc = String(data?.resultDesc || data?.message || data?.reason || '').trim();
       const normDesc = rawDesc.toLowerCase();
 
+      // 1. الكشف الصارم عن مؤشرات الفشل والرفض أولاً لحمايتها من الكلمات الإيجابية مثل "لم تتم بنجاح"
+      const isFailure =
+        data?.resultCode === "-1" ||
+        data?.resultCode === -1 ||
+        data?.status === 'failed' ||
+        data?.status === 'ban' ||
+        data?.isBan === 1 ||
+        data?.isBan === '1' ||
+        data?.action === 'ban' ||
+        rawDesc.includes('لم تتم') ||
+        rawDesc.includes('لم يتم') ||
+        rawDesc.includes('فشل') ||
+        rawDesc.includes('فشلت') ||
+        rawDesc.includes('رفض') ||
+        rawDesc.includes('رفضت') ||
+        rawDesc.includes('خطأ') ||
+        rawDesc.includes('غير صحيح') ||
+        rawDesc.includes('غير مسجل') ||
+        rawDesc.includes('غير كاف') ||
+        rawDesc.includes('لا يمكن') ||
+        normDesc.includes('fail') ||
+        normDesc.includes('error') ||
+        normDesc.includes('invalid') ||
+        normDesc.includes('reject');
+
+      // 2. الكشف عن النجاح المؤكد فقط إذا لم تكن هناك أي مؤشرات فشل
       const isExplicitDone =
-        data?.isDone === 1 ||
+        !isFailure &&
+        (data?.isDone === 1 ||
         data?.isDone === '1' ||
         data?.action === 'done' ||
         data?.status === 'done' ||
@@ -921,11 +984,11 @@ export async function POST(request: Request) {
         rawDesc.includes('تم التنفيذ') ||
         rawDesc.includes('تم السداد') ||
         rawDesc.includes('تم الشحن') ||
-        rawDesc.includes('تمت العملية') ||
-        rawDesc.includes('بنجاح');
+        rawDesc.includes('تمت العملية بنجاح'));
 
-      // حالة قيد الانتظار والمعالجة لدى المزود:
+      // 3. حالة قيد الانتظار والمعالجة لدى المزود:
       const isPending =
+        !isFailure &&
         !isExplicitDone &&
         (data?.resultCode === "-2" ||
         data?.resultCode === -2 ||
@@ -952,16 +1015,11 @@ export async function POST(request: Request) {
         normDesc.includes('prog') ||
         ((data?.isDone === 0 || data?.isDone === '0') && (data?.isBan === 0 || data?.isBan === '0')));
 
-      // حالة النجاح المؤكد والتنفيذ الفعلي (فقط إذا لم تكن العملية قيد الانتظار):
+      // 4. حالة النجاح المؤكد والتنفيذ الفعلي:
       const isSuccess =
+        !isFailure &&
         !isPending &&
         (isExplicitDone ||
-         data?.isDone === 1 ||
-         data?.isDone === '1' ||
-         data?.action === 'done' ||
-         data?.status === 'done' ||
-         data?.status === 'success' ||
-         data?.readiness === 'جاهزة' ||
          ((data?.resultCode === "0" || data?.resultCode === 0) &&
           !data?.isBan &&
           data?.isBan !== '1' &&

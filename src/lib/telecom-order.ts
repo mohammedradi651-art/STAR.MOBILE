@@ -385,8 +385,36 @@ export async function executeTelecomRequestWithTimeout({
   const rawDesc = String(data?.resultDesc || data?.message || '');
   const normDesc = rawDesc.toLowerCase();
 
+  // 1. الكشف الصارم عن مؤشرات الفشل أولاً
+  const isFailure =
+    !ok ||
+    data?.resultCode === "-1" ||
+    data?.resultCode === -1 ||
+    data?.status === 'failed' ||
+    data?.status === 'ban' ||
+    data?.isBan === 1 ||
+    data?.isBan === '1' ||
+    data?.action === 'ban' ||
+    rawDesc.includes('لم تتم') ||
+    rawDesc.includes('لم يتم') ||
+    rawDesc.includes('فشل') ||
+    rawDesc.includes('فشلت') ||
+    rawDesc.includes('رفض') ||
+    rawDesc.includes('رفضت') ||
+    rawDesc.includes('خطأ') ||
+    rawDesc.includes('غير صحيح') ||
+    rawDesc.includes('غير مسجل') ||
+    rawDesc.includes('غير كاف') ||
+    rawDesc.includes('لا يمكن') ||
+    normDesc.includes('fail') ||
+    normDesc.includes('error') ||
+    normDesc.includes('invalid') ||
+    normDesc.includes('reject');
+
+  // 2. الكشف عن النجاح المؤكد فقط إذا لم تكن هناك أي مؤشرات فشل
   const isExplicitDone =
-    data?.status === 'success' ||
+    !isFailure &&
+    (data?.status === 'success' ||
     data?.status === 'done' ||
     data?.action === 'done' ||
     data?.isDone === 1 ||
@@ -396,10 +424,11 @@ export async function executeTelecomRequestWithTimeout({
     rawDesc.includes('تم التنفيذ') ||
     rawDesc.includes('تم السداد') ||
     rawDesc.includes('تم الشحن') ||
-    rawDesc.includes('تمت العملية') ||
-    rawDesc.includes('بنجاح');
+    rawDesc.includes('تمت العملية بنجاح'));
 
+  // 3. حالة قيد الانتظار والمعالجة لدى المزود:
   const isPending =
+    !isFailure &&
     !isExplicitDone &&
     (data?.status === 'pending' ||
       data?.status === 'wait' ||
@@ -432,15 +461,12 @@ export async function executeTelecomRequestWithTimeout({
   }
 
   const isSuccess =
-    ok &&
+    !isFailure &&
     !isPending &&
     (isExplicitDone ||
-      data?.resultCode === '0' ||
-      data?.resultCode === 0 ||
-      data?.status === 'success' ||
-      data?.action === 'done' ||
-      data?.isDone === 1 ||
-      data?.isDone === '1');
+      ((data?.resultCode === '0' || data?.resultCode === 0) &&
+       !data?.isBan &&
+       data?.status !== 'failed'));
 
   if (isSuccess) {
     await markPaymentSuccess(firestore, userId, transid, data?.resultDesc || data?.message);

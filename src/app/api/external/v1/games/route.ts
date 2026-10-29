@@ -361,8 +361,35 @@ export async function POST(req: Request) {
     const rawResultMsg = String(telecomResult?.resultDesc || telecomResult?.message || telecomResult?.reason || '').trim();
     const normResultMsg = rawResultMsg.toLowerCase();
 
+    // 1. الكشف الصارم عن مؤشرات الفشل والرفض أولاً
+    const isFailure =
+      telecomResult?.resultCode === "-1" ||
+      telecomResult?.resultCode === -1 ||
+      telecomResult?.status === 'failed' ||
+      telecomResult?.status === 'ban' ||
+      telecomResult?.isBan === 1 ||
+      telecomResult?.isBan === '1' ||
+      telecomResult?.action === 'ban' ||
+      rawResultMsg.includes('لم تتم') ||
+      rawResultMsg.includes('لم يتم') ||
+      rawResultMsg.includes('فشل') ||
+      rawResultMsg.includes('فشلت') ||
+      rawResultMsg.includes('رفض') ||
+      rawResultMsg.includes('رفضت') ||
+      rawResultMsg.includes('خطأ') ||
+      rawResultMsg.includes('غير صحيح') ||
+      rawResultMsg.includes('غير مسجل') ||
+      rawResultMsg.includes('غير كاف') ||
+      rawResultMsg.includes('لا يمكن') ||
+      normResultMsg.includes('fail') ||
+      normResultMsg.includes('error') ||
+      normResultMsg.includes('invalid') ||
+      normResultMsg.includes('reject');
+
+    // 2. الكشف عن النجاح المؤكد فقط إذا لم تكن هناك أي مؤشرات فشل
     const isExplicitDone =
-      telecomResult?.status === 'success' ||
+      !isFailure &&
+      (telecomResult?.status === 'success' ||
       telecomResult?.status === 'done' ||
       telecomResult?.action === 'done' ||
       telecomResult?.isDone === 1 ||
@@ -371,9 +398,11 @@ export async function POST(req: Request) {
       rawResultMsg.includes('تم تنفيذ') ||
       rawResultMsg.includes('تم التنفيذ') ||
       rawResultMsg.includes('تم الشحن') ||
-      rawResultMsg.includes('بنجاح');
+      rawResultMsg.includes('تمت العملية بنجاح'));
 
+    // 3. حالة قيد الانتظار والمعالجة لدى المزود:
     const isPending =
+      !isFailure &&
       !isExplicitDone &&
       (telecomResult?.status === 'pending' ||
        telecomResult?.status === 'wait' ||
@@ -386,10 +415,12 @@ export async function POST(req: Request) {
        telecomResult?.resultCode === "-2" ||
        telecomResult?.resultCode === -2 ||
        rawResultMsg.includes('انتظار') ||
+       rawResultMsg.includes('معالج') ||
        rawResultMsg.includes('قيد التنفيذ') ||
        rawResultMsg.includes('جاري التنفيذ') ||
        rawResultMsg.includes('قيد المعالجة') ||
        rawResultMsg.includes('جاري المعالجة') ||
+       rawResultMsg.includes('قبول') ||
        rawResultMsg.includes('معلق') ||
        normResultMsg.includes('proc') ||
        normResultMsg.includes('pend') ||
@@ -397,11 +428,14 @@ export async function POST(req: Request) {
        normResultMsg.includes('queu') ||
        normResultMsg.includes('prog'));
 
+    // 4. حالة النجاح المؤكد والتنفيذ الفعلي:
     const isSuccess =
+      !isFailure &&
       !isPending &&
       (isExplicitDone ||
-       telecomResult?.resultCode === "0" ||
-       telecomResult?.resultCode === 0);
+       ((telecomResult?.resultCode === "0" || telecomResult?.resultCode === 0) &&
+        !telecomResult?.isBan &&
+        telecomResult?.status !== 'failed'));
 
     if (isSuccess) {
       // 1. نجاح مؤكد من المزود -> تحديث المعاملة إلى جاهزة
