@@ -8,13 +8,13 @@
   },
   "rates": {
     "yemen_mobile": 0,
-    "you_general": 0,
+    "you_general": 3,
     "you_unified": 0,
-    "sabafon_units": 0,
-    "sabafon_general": 0,
+    "sabafon_units": 44,
+    "sabafon_general": 3,
     "sabafon_south": 0,
-    "y_credit": 0,
-    "y_packages": 0,
+    "y_credit": 3.75,
+    "y_packages": 3.75,
     "aden_net": 0,
     "yemen_4g": 0,
     "internet_telephone": 0,
@@ -22,8 +22,8 @@
     "electricity": 0,
     "water": 0,
     "wifi": 0,
-    "pubg": 0,
-    "freefire": 0
+    "pubg": 3.2,
+    "freefire": 3
   },
   "vip_rates": {
     "yemen_mobile": 0,
