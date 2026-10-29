@@ -24,7 +24,8 @@ import {
   CheckCircle2,
   Coins,
   Package,
-  Hash
+  Hash,
+  Gamepad2
 } from 'lucide-react';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
@@ -33,7 +34,9 @@ import { Toaster } from '@/components/ui/toaster';
 import { useRouter } from 'next/navigation';
 import { 
   DEFAULT_SERVICES_CONFIG, 
-  SystemServicesConfig 
+  SystemServicesConfig,
+  calculateGamePrice,
+  GamePackage
 } from '@/lib/services-config';
 import { cn } from '@/lib/utils';
 
@@ -46,7 +49,9 @@ const LOGOS = {
   yemen_4g: 'https://i.postimg.cc/FsmGqt98/1768999789252.jpg',
   aden_net: 'https://i.postimg.cc/FFV6dDqd/FB-IMG-1770843160346.jpg',
   landline_adsl: 'https://i.postimg.cc/ZRHzd8jN/FB-IMG-1768999572493.jpg',
-  alwadi: 'https://i.postimg.cc/MKMWP3VG/15.jpg'
+  alwadi: 'https://i.postimg.cc/MKMWP3VG/15.jpg',
+  pubg: 'https://i.postimg.cc/XYP5H9vQ/2J2L4wpmxzn-Xwg-CUwx-IV9y-L9w2NGG9RQd3I1Bu-KW.png',
+  freefire: 'https://i.postimg.cc/Pqdhw9QC/R.png'
 };
 
 export default function ApiServicesManagementPage() {
@@ -63,7 +68,7 @@ export default function ApiServicesManagementPage() {
   );
   const { data: remoteConfig } = useDoc<SystemServicesConfig>(configDocRef);
 
-  const [activeTab, setActiveTab] = useState<'telecom' | 'alwadi' | 'networks' | 'api_creds'>('telecom');
+  const [activeTab, setActiveTab] = useState<'telecom' | 'alwadi' | 'networks' | 'games' | 'api_creds'>('telecom');
   const [config, setConfig] = useState<SystemServicesConfig>(DEFAULT_SERVICES_CONFIG);
   const [showPassword, setShowPassword] = useState(false);
   const [showAlwadiPass, setShowAlwadiPass] = useState(false);
@@ -73,6 +78,9 @@ export default function ApiServicesManagementPage() {
 
   useEffect(() => {
     if (remoteConfig) {
+      const defaultGames = DEFAULT_SERVICES_CONFIG.games!;
+      const remoteGames = remoteConfig.games;
+
       setConfig({
         telecomApi: { ...DEFAULT_SERVICES_CONFIG.telecomApi, ...(remoteConfig.telecomApi || {}) },
         yemen_mobile: { ...DEFAULT_SERVICES_CONFIG.yemen_mobile, ...(remoteConfig.yemen_mobile || {}) },
@@ -100,6 +108,19 @@ export default function ApiServicesManagementPage() {
           }
         },
         networks: { ...DEFAULT_SERVICES_CONFIG.networks, ...(remoteConfig.networks || {}) },
+        games: {
+          enabled: remoteGames?.enabled ?? defaultGames.enabled,
+          pubg: {
+            enabled: remoteGames?.pubg?.enabled ?? defaultGames.pubg.enabled,
+            rate: Number(remoteGames?.pubg?.rate ?? defaultGames.pubg.rate),
+            packages: remoteGames?.pubg?.packages ?? defaultGames.pubg.packages,
+          },
+          freefire: {
+            enabled: remoteGames?.freefire?.enabled ?? defaultGames.freefire.enabled,
+            rate: Number(remoteGames?.freefire?.rate ?? defaultGames.freefire.rate),
+            packages: remoteGames?.freefire?.packages ?? defaultGames.freefire.packages,
+          }
+        }
       });
     }
   }, [remoteConfig]);
@@ -215,6 +236,38 @@ export default function ApiServicesManagementPage() {
     }));
   };
 
+  const updateGameRate = (gameKey: 'pubg' | 'freefire', rate: number) => {
+    setConfig(prev => {
+      const prevGames = prev.games || DEFAULT_SERVICES_CONFIG.games!;
+      return {
+        ...prev,
+        games: {
+          ...prevGames,
+          [gameKey]: {
+            ...prevGames[gameKey],
+            rate: rate
+          }
+        }
+      };
+    });
+  };
+
+  const toggleGameEnabled = (gameKey: 'pubg' | 'freefire', enabled: boolean) => {
+    setConfig(prev => {
+      const prevGames = prev.games || DEFAULT_SERVICES_CONFIG.games!;
+      return {
+        ...prev,
+        games: {
+          ...prevGames,
+          [gameKey]: {
+            ...prevGames[gameKey],
+            enabled
+          }
+        }
+      };
+    });
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#F8FAFC] dark:bg-slate-950 relative overflow-hidden">
       
@@ -279,13 +332,13 @@ export default function ApiServicesManagementPage() {
           </div>
         </div>
 
-        {/* أزرار التبويبات الأربعة */}
-        <div className="grid grid-cols-4 gap-1 bg-card p-1 rounded-xl border shadow-sm">
+        {/* أزرار التبويبات الخمسة */}
+        <div className="grid grid-cols-5 gap-1 bg-card p-1 rounded-xl border shadow-sm">
           <button
             type="button"
             onClick={() => setActiveTab('telecom')}
             className={cn(
-              "flex flex-col items-center justify-center py-2 px-1 rounded-lg font-black text-[10px] transition-all gap-1",
+              "flex flex-col items-center justify-center py-2 px-0.5 rounded-lg font-black text-[9px] transition-all gap-1",
               activeTab === 'telecom'
                 ? "bg-primary text-white shadow-sm"
                 : "text-muted-foreground hover:bg-muted"
@@ -299,7 +352,7 @@ export default function ApiServicesManagementPage() {
             type="button"
             onClick={() => setActiveTab('alwadi')}
             className={cn(
-              "flex flex-col items-center justify-center py-2 px-1 rounded-lg font-black text-[10px] transition-all gap-1",
+              "flex flex-col items-center justify-center py-2 px-0.5 rounded-lg font-black text-[9px] transition-all gap-1",
               activeTab === 'alwadi'
                 ? "bg-primary text-white shadow-sm"
                 : "text-muted-foreground hover:bg-muted"
@@ -313,7 +366,7 @@ export default function ApiServicesManagementPage() {
             type="button"
             onClick={() => setActiveTab('networks')}
             className={cn(
-              "flex flex-col items-center justify-center py-2 px-1 rounded-lg font-black text-[10px] transition-all gap-1",
+              "flex flex-col items-center justify-center py-2 px-0.5 rounded-lg font-black text-[9px] transition-all gap-1",
               activeTab === 'networks'
                 ? "bg-primary text-white shadow-sm"
                 : "text-muted-foreground hover:bg-muted"
@@ -325,9 +378,23 @@ export default function ApiServicesManagementPage() {
 
           <button
             type="button"
+            onClick={() => setActiveTab('games')}
+            className={cn(
+              "flex flex-col items-center justify-center py-2 px-0.5 rounded-lg font-black text-[9px] transition-all gap-1",
+              activeTab === 'games'
+                ? "bg-primary text-white shadow-sm"
+                : "text-muted-foreground hover:bg-muted"
+            )}
+          >
+            <Gamepad2 className="w-3.5 h-3.5" />
+            <span>الألعاب</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('api_creds')}
             className={cn(
-              "flex flex-col items-center justify-center py-2 px-1 rounded-lg font-black text-[10px] transition-all gap-1",
+              "flex flex-col items-center justify-center py-2 px-0.5 rounded-lg font-black text-[9px] transition-all gap-1",
               activeTab === 'api_creds'
                 ? "bg-primary text-white shadow-sm"
                 : "text-muted-foreground hover:bg-muted"
@@ -645,7 +712,198 @@ export default function ApiServicesManagementPage() {
           </div>
         )}
 
-        {/* 4. تبويب سيرفر الـ API */}
+        {/* 4. تبويب شحن الألعاب */}
+        {activeTab === 'games' && (
+          <div className="space-y-3">
+            {/* بطاقة توضيحية */}
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-start gap-2.5">
+              <Gamepad2 className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+              <div className="text-[11px] space-y-1">
+                <p className="font-black text-amber-800 dark:text-amber-400">أسعار ونسب شحن الألعاب للربط البرمجي (API)</p>
+                <p className="text-muted-foreground font-bold leading-relaxed">
+                  سعر الباقة لأصحاب الـ API يُحسب تلقائياً بالمعادلة: <span className="font-mono text-primary font-black">(السعر الأساسي × النسبة)</span>.
+                  يمكنك تغيير نسبة أي لعبة في أي وقت وحفظها لتُطبق فورياً على جميع طلبات الـ API.
+                </p>
+              </div>
+            </div>
+
+            {/* 1. ببجي موبايل */}
+            <Card className="rounded-2xl border shadow-sm bg-card overflow-hidden">
+              <div className="p-3 bg-muted/40 border-b flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="relative w-9 h-9 rounded-xl overflow-hidden border shadow-sm">
+                    <Image src={LOGOS.pubg} alt="ببجي" fill className="object-cover" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black">ببجي موبايل (PUBG Mobile)</h3>
+                    <p className="text-[10px] text-muted-foreground font-bold">شحن شدات UC للربط البرمجي</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <span className={cn(
+                    "text-[10px] font-black px-2 py-0.5 rounded-full border shadow-2xs",
+                    (config.games?.pubg?.enabled ?? true)
+                      ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" 
+                      : "bg-destructive/10 text-destructive border-destructive/20"
+                  )}>
+                    {(config.games?.pubg?.enabled ?? true) ? "مفعلة" : "معطلة"}
+                  </span>
+                  <Switch 
+                    checked={config.games?.pubg?.enabled ?? true} 
+                    onCheckedChange={(val) => toggleGameEnabled('pubg', val)}
+                  />
+                </div>
+              </div>
+
+              <CardContent className="p-3 space-y-3">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[11px] font-black">معامل النسبة لببجي (الافتراضي 3.02):</Label>
+                    <div className="flex items-center gap-1">
+                      {[3.02, 3.0, 3.1].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => updateGameRate('pubg', preset)}
+                          className={cn(
+                            "text-[9px] font-black px-1.5 py-0.5 rounded border transition-all",
+                            (config.games?.pubg?.rate ?? 3.02) === preset
+                              ? "bg-primary text-white border-primary"
+                              : "bg-card text-muted-foreground"
+                          )}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <RateDecimalInput 
+                    value={config.games?.pubg?.rate}
+                    onChange={(val) => updateGameRate('pubg', val)}
+                    defaultValue={3.02}
+                    placeholder="مثال: 3.02"
+                  />
+                </div>
+
+                {/* جدول باقات ببجي وأسعارها بعد النسبة */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[10px] font-black text-muted-foreground block">جدول باقات ببجي وسعر البيع المحتسب:</span>
+                  <div className="border rounded-xl overflow-hidden divide-y text-[11px]">
+                    <div className="grid grid-cols-4 bg-muted/60 p-2 font-black text-muted-foreground text-[10px] text-center">
+                      <span>الباقة</span>
+                      <span>الكود</span>
+                      <span>الأساس</span>
+                      <span className="text-primary font-black">سعر الـ API</span>
+                    </div>
+                    {(config.games?.pubg?.packages ?? DEFAULT_SERVICES_CONFIG.games!.pubg.packages).map((pkg) => {
+                      const rate = config.games?.pubg?.rate ?? 3.02;
+                      const calculated = calculateGamePrice(pkg.basePrice, rate);
+                      return (
+                        <div key={pkg.id} className="grid grid-cols-4 p-2 items-center text-center font-bold hover:bg-muted/30">
+                          <span className="font-black text-foreground">{pkg.name}</span>
+                          <span className="font-mono text-[10px] text-muted-foreground">{pkg.code}</span>
+                          <span className="text-muted-foreground">{pkg.basePrice}</span>
+                          <span className="font-black text-emerald-600 dark:text-emerald-400 font-mono">{calculated.toLocaleString()} ر.ي</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 2. فري فاير */}
+            <Card className="rounded-2xl border shadow-sm bg-card overflow-hidden">
+              <div className="p-3 bg-muted/40 border-b flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="relative w-9 h-9 rounded-xl overflow-hidden border shadow-sm">
+                    <Image src={LOGOS.freefire} alt="فري فاير" fill className="object-cover" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-black">فري فاير (Free Fire)</h3>
+                    <p className="text-[10px] text-muted-foreground font-bold">شحن جواهر وعضويات للربط البرمجي</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <span className={cn(
+                    "text-[10px] font-black px-2 py-0.5 rounded-full border shadow-2xs",
+                    (config.games?.freefire?.enabled ?? true)
+                      ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" 
+                      : "bg-destructive/10 text-destructive border-destructive/20"
+                  )}>
+                    {(config.games?.freefire?.enabled ?? true) ? "مفعلة" : "معطلة"}
+                  </span>
+                  <Switch 
+                    checked={config.games?.freefire?.enabled ?? true} 
+                    onCheckedChange={(val) => toggleGameEnabled('freefire', val)}
+                  />
+                </div>
+              </div>
+
+              <CardContent className="p-3 space-y-3">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[11px] font-black">معامل النسبة لفري فاير (الافتراضي 2.98):</Label>
+                    <div className="flex items-center gap-1">
+                      {[2.98, 3.0, 2.9].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => updateGameRate('freefire', preset)}
+                          className={cn(
+                            "text-[9px] font-black px-1.5 py-0.5 rounded border transition-all",
+                            (config.games?.freefire?.rate ?? 2.98) === preset
+                              ? "bg-primary text-white border-primary"
+                              : "bg-card text-muted-foreground"
+                          )}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <RateDecimalInput 
+                    value={config.games?.freefire?.rate}
+                    onChange={(val) => updateGameRate('freefire', val)}
+                    defaultValue={2.98}
+                    placeholder="مثال: 2.98"
+                  />
+                </div>
+
+                {/* جدول باقات فري فاير وأسعارها بعد النسبة */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[10px] font-black text-muted-foreground block">جدول باقات فري فاير وسعر البيع المحتسب:</span>
+                  <div className="border rounded-xl overflow-hidden divide-y text-[11px]">
+                    <div className="grid grid-cols-4 bg-muted/60 p-2 font-black text-muted-foreground text-[10px] text-center">
+                      <span>الباقة</span>
+                      <span>الكود</span>
+                      <span>الأساس</span>
+                      <span className="text-primary font-black">سعر الـ API</span>
+                    </div>
+                    {(config.games?.freefire?.packages ?? DEFAULT_SERVICES_CONFIG.games!.freefire.packages).map((pkg) => {
+                      const rate = config.games?.freefire?.rate ?? 2.98;
+                      const calculated = calculateGamePrice(pkg.basePrice, rate);
+                      return (
+                        <div key={pkg.id} className="grid grid-cols-4 p-2 items-center text-center font-bold hover:bg-muted/30">
+                          <span className="font-black text-foreground">{pkg.name}</span>
+                          <span className="font-mono text-[10px] text-muted-foreground">{pkg.code}</span>
+                          <span className="text-muted-foreground">{pkg.basePrice}</span>
+                          <span className="font-black text-emerald-600 dark:text-emerald-400 font-mono">{calculated.toLocaleString()} ر.ي</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* 5. تبويب سيرفر الـ API */}
         {activeTab === 'api_creds' && (
           <div className="space-y-3">
             <Card className="rounded-2xl border shadow-sm bg-card overflow-hidden">

@@ -28,6 +28,25 @@ export interface SabafonPricingSetting extends ServicePricingSetting {
   instantSouthRate?: number; // نسبة الشحن الفوري جنوب (عدن - عملة مرتفعة)
 }
 
+export interface GamePackage {
+  id: string;
+  name: string;
+  basePrice: number;
+  code: string;
+}
+
+export interface GameServiceSetting {
+  enabled: boolean;
+  rate: number;
+  packages: GamePackage[];
+}
+
+export interface GamesConfig {
+  enabled: boolean;
+  pubg: GameServiceSetting;
+  freefire: GameServiceSetting;
+}
+
 export interface SystemServicesConfig {
   telecomApi: TelecomApiCredentials;
   yemen_mobile: ServicePricingSetting;
@@ -46,6 +65,7 @@ export interface SystemServicesConfig {
     };
   };
   networks: ServicePricingSetting;
+  games?: GamesConfig;
   updatedAt?: string;
 }
 
@@ -137,8 +157,47 @@ export const DEFAULT_SERVICES_CONFIG: SystemServicesConfig = {
     percentage: 0,
     fixedFee: 0,
     notice: ''
+  },
+  games: {
+    enabled: true,
+    pubg: {
+      enabled: true,
+      rate: 3.02,
+      packages: [
+        { id: '10', name: '10 شدة', basePrice: 138, code: '10' },
+        { id: '60', name: '60 شدة', basePrice: 495, code: '60' },
+        { id: '325', name: '325 شدة', basePrice: 2454, code: '325' },
+        { id: '385', name: '385 شدة', basePrice: 2944, code: '385' },
+        { id: '660', name: '660 شدة', basePrice: 4909, code: '660' },
+        { id: '720', name: '720 شدة', basePrice: 5404, code: '720' },
+        { id: '1800', name: '1800 شدة', basePrice: 12283, code: '1800' },
+        { id: '3850', name: '3850 شدة', basePrice: 24413, code: '3850' },
+        { id: '8100', name: '8100 شدة', basePrice: 48832, code: '8100' },
+      ]
+    },
+    freefire: {
+      enabled: true,
+      rate: 2.98,
+      packages: [
+        { id: '100', name: '100 جوهرة', basePrice: 534, code: '100' },
+        { id: '210', name: '210 جوهرة', basePrice: 1068, code: '210' },
+        { id: '530', name: '530 جوهرة', basePrice: 2669, code: '530' },
+        { id: '1080', name: '1080 جوهرة', basePrice: 5339, code: '1080' },
+        { id: '2200', name: '2200 جوهرة', basePrice: 10677, code: '2200' },
+        { id: 'weekly', name: 'عضوية اسبوعية', basePrice: 1200, code: 'weekly' },
+        { id: 'monthly', name: 'عضوية شهرية', basePrice: 5875, code: 'monthly' },
+        { id: 'booyah', name: 'بويا باس', basePrice: 1797, code: 'booyah' },
+      ]
+    }
   }
 };
+
+/**
+ * دالة احتساب سعر باقة اللعبة للـ API بناءً على السعر الأساسي والنسبة
+ */
+export function calculateGamePrice(basePrice: number, rate: number): number {
+  return Math.round((basePrice * rate) * 100) / 100;
+}
 
 /**
  * تقريب العملة إلى منزلتين عشريتين بدقة

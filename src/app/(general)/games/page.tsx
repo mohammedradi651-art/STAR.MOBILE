@@ -6,32 +6,32 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { 
-  CheckCircle, 
-  Wallet, 
-  Loader2, 
-  User,
-  Gamepad2,
-  Zap,
-  ShieldCheck,
-  Star,
-  AlertCircle,
-  Hash,
-  Calendar,
-  History,
-  ChevronLeft,
-  Gem,
-  Trophy,
-  Database,
-  Clock
+import {
+    CheckCircle,
+    Wallet,
+    Loader2,
+    User,
+    Gamepad2,
+    Zap,
+    ShieldCheck,
+    Star,
+    AlertCircle,
+    Hash,
+    Calendar,
+    History,
+    ChevronLeft,
+    Gem,
+    Trophy,
+    Database,
+    Clock
 } from 'lucide-react';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
 } from '@/components/ui/dialog';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, writeBatch, increment, collection as firestoreCollection } from 'firebase/firestore';
@@ -64,6 +64,8 @@ const PUBG_PACKAGES: GameOffer[] = [
     { amount: '660 شدة', price: 15000, code: '660' },
     { amount: '720 شدة', price: 17500, code: '720' },
     { amount: '1800 شدة', price: 39000, code: '1800' },
+    { amount: '3850 شدة', price: 74000, code: '3850' },
+    { amount: '8100 شدة', price: 148000, code: '8100' },
 ];
 
 const FF_PACKAGES: GameOffer[] = [
@@ -151,7 +153,7 @@ export default function GamesPage() {
                 userId: user.uid,
                 transid,
                 amount: totalToDeduct,
-                telecomPayload: { 
+                telecomPayload: {
                     service: 'games',
                     type: activeGame,
                     uniqcode: selectedOffer.code,
@@ -163,10 +165,10 @@ export default function GamesPage() {
 
             setShowSuccess(true);
         } catch (e: any) {
-            toast({ 
-                variant: "destructive", 
-                title: "فشل في عملية الشحن", 
-                description: e.message 
+            toast({
+                variant: "destructive",
+                title: "فشل في عملية الشحن",
+                description: e.message
             });
         } finally {
             setIsProcessing(false);
@@ -237,11 +239,11 @@ export default function GamesPage() {
     return (
         <div className="flex flex-col h-full bg-[#F4F7F9] dark:bg-slate-950">
             {isProcessing && <ProcessingOverlay message="جاري معالجة طلبك..." />}
-            
+
             <SimpleHeader title={activeGame ? (activeGame === 'pubg' ? 'شدات ببجي' : 'جواهر فري فاير') : 'معرض الألعاب'} />
-            
+
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                
+
                 {!activeGame ? (
                     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
                         <div className="text-center space-y-2 mb-2">
@@ -254,8 +256,8 @@ export default function GamesPage() {
 
                         <div className="grid grid-cols-1 gap-4">
                             {GAMES.map((game) => (
-                                <Card 
-                                    key={game.id} 
+                                <Card
+                                    key={game.id}
                                     className="cursor-pointer overflow-hidden rounded-[32px] border-none shadow-lg active:scale-[0.98] transition-all group"
                                     onClick={() => setActiveGame(game.id as any)}
                                 >
@@ -284,11 +286,11 @@ export default function GamesPage() {
                     <div className="space-y-4 animate-in fade-in-0 duration-500 pb-10">
                         {/* Game Banner Header */}
                         <Card className="overflow-hidden rounded-[32px] shadow-xl border-none h-48 relative">
-                            <Image 
-                                src={currentGameInfo?.banner || ''} 
-                                alt={currentGameInfo?.name || ''} 
-                                fill 
-                                className="object-cover" 
+                            <Image
+                                src={currentGameInfo?.banner || ''}
+                                alt={currentGameInfo?.name || ''}
+                                fill
+                                className="object-cover"
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-6">
                                 <div className="flex justify-between items-center w-full">
@@ -315,15 +317,15 @@ export default function GamesPage() {
                                         ? calculateFinalServicePrice(pkg.price, config.networks)
                                         : pkg.price;
                                     return (
-                                        <Card 
-                                            key={pkg.code} 
+                                        <Card
+                                            key={pkg.code}
                                             className="cursor-pointer hover:bg-primary/5 transition-all active:scale-[0.98] border-none shadow-sm rounded-3xl overflow-hidden group"
                                             onClick={() => setSelectedOffer(pkg)}
                                         >
                                             <CardContent className="p-4 flex items-center justify-between">
                                                 <div className="flex items-center gap-4">
                                                     <div className="relative h-12 w-12 shrink-0 rounded-2xl overflow-hidden bg-muted p-1 group-hover:scale-110 transition-transform">
-                                                        <Image 
+                                                        <Image
                                                             src={currentGameInfo?.icon || ''}
                                                             alt="Icon"
                                                             fill
@@ -361,7 +363,7 @@ export default function GamesPage() {
                     <div className="bg-mesh-gradient p-8 text-center relative overflow-hidden">
                         <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-3xl animate-pulse" />
                         <div className="relative w-20 h-20 mx-auto mb-4 rounded-2xl overflow-hidden border-4 border-white/20 shadow-2xl">
-                            <Image 
+                            <Image
                                 src={currentGameInfo?.icon || ''}
                                 alt="Icon"
                                 fill
@@ -371,16 +373,16 @@ export default function GamesPage() {
                         <h3 className="text-white font-black text-xl drop-shadow-md">تأكيد عملية الشحن</h3>
                         <p className="text-white/70 text-xs font-bold mt-1 uppercase tracking-widest">{selectedOffer?.amount}</p>
                     </div>
-                    
+
                     <div className="p-6 space-y-6 bg-card">
                         <div className="space-y-2">
                             <Label htmlFor="playerid" className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mr-1">رقم اللاعب (Player ID)</Label>
                             <div className="relative">
-                                <Input 
+                                <Input
                                     id="playerid"
-                                    placeholder="أدخل الـ ID الخاص بك" 
+                                    placeholder="أدخل الـ ID الخاص بك"
                                     type="tel"
-                                    value={playerId} 
+                                    value={playerId}
                                     onChange={e => setPlayerId(e.target.value.replace(/\D/g, ''))}
                                     className="rounded-2xl h-14 text-center text-2xl font-black border-none bg-muted/20 focus-visible:ring-primary tracking-widest"
                                 />
