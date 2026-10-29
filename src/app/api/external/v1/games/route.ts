@@ -40,17 +40,30 @@ function extractApiKey(req: Request, body?: any): string | null {
   return null;
 }
 
+// كاش في الذاكرة للتحقق من المفاتيح لتوفير قراءات Firestore عند كثرة الاستعلامات
+const apiKeyCache = new Map<string, { data: { userId: string; userData: any }; expiry: number }>();
+
 /**
- * التحقق من صاحب المفتاح
+ * التحقق من صاحب المفتاح مع كاش لتوفير القراءات
  */
-async function verifyUserByApiKey(apiKey: string, firestore: any): Promise<{ userId: string; userData: any } | null> {
+async function verifyUserByApiKey(apiKey: string, firestore: any, bypassCache = false): Promise<{ userId: string; userData: any } | null> {
   if (!apiKey) return null;
+
+  const now = Date.now();
+  if (!bypassCache) {
+    const cached = apiKeyCache.get(apiKey);
+    if (cached && now < cached.expiry) {
+      return cached.data;
+    }
+  }
 
   try {
     const q = query(collection(firestore, 'users'), where('apiKey', '==', apiKey));
     const snap = await getDocs(q);
     if (!snap.empty) {
-      return { userId: snap.docs[0].id, userData: snap.docs[0].data() };
+      const res = { userId: snap.docs[0].id, userData: snap.docs[0].data() };
+      apiKeyCache.set(apiKey, { data: res, expiry: now + 60 * 1000 }); // كاش لمدة دقيقة
+      return res;
     }
   } catch (e) {
     console.error('Error verifying apiKey in games:', e);
@@ -74,10 +87,20 @@ async function verifyUserByApiKey(apiKey: string, firestore: any): Promise<{ use
   return null;
 }
 
+// كاش في ذاكرة السيرفر لحفظ النسب ومنع استهلاك قراءات Firestore نهائياً
+let cachedGamesConfig: any = null;
+let gamesConfigCacheExpiry = 0;
+const CACHE_TTL_MS = 2 * 60 * 1000; // دقيقتين كاش سريع
+
 /**
- * جلب إعدادات الألعاب والنسب المحدثة من Firestore
+ * جلب إعدادات الألعاب والنسب - الباقات ثابتة في الكود والنسب تُجلب مع كاش ذاكرة لتوفير القراءات
  */
 async function getGamesConfig(firestore: any) {
+  const now = Date.now();
+  if (cachedGamesConfig && now < gamesConfigCacheExpiry) {
+    return cachedGamesConfig;
+  }
+
   let config: SystemServicesConfig = DEFAULT_SERVICES_CONFIG;
   try {
     const configSnap = await getDoc(doc(firestore, 'system_settings', 'telecom_config'));
@@ -91,19 +114,23 @@ async function getGamesConfig(firestore: any) {
   const defaultGames = DEFAULT_SERVICES_CONFIG.games!;
   const remoteGames = config.games;
 
-  return {
+  // الباقات وأسماؤها وأسعارها الأساسية مأخوذة من الكود مباشرة بدون استهلاك قراءات
+  cachedGamesConfig = {
     enabled: remoteGames?.enabled ?? defaultGames.enabled,
     pubg: {
       enabled: remoteGames?.pubg?.enabled ?? defaultGames.pubg.enabled,
       rate: Number(remoteGames?.pubg?.rate ?? defaultGames.pubg.rate),
-      packages: remoteGames?.pubg?.packages ?? defaultGames.pubg.packages,
+      packages: defaultGames.pubg.packages, // ثابتة في الكود
     },
     freefire: {
       enabled: remoteGames?.freefire?.enabled ?? defaultGames.freefire.enabled,
       rate: Number(remoteGames?.freefire?.rate ?? defaultGames.freefire.rate),
-      packages: remoteGames?.freefire?.packages ?? defaultGames.freefire.packages,
+      packages: defaultGames.freefire.packages, // ثابتة في الكود
     }
   };
+
+  gamesConfigCacheExpiry = now + CACHE_TTL_MS;
+  return cachedGamesConfig;
 }
 
 /**
@@ -215,7 +242,11 @@ export async function POST(req: Request) {
       }, { status: 401, headers: corsHeaders });
     }
 
-    const authResult = await verifyUserByApiKey(apiKey, firestore);
+    const action = String(body.action || 'pay').toLowerCase().trim();
+    const isPayment = action !== 'packages' && action !== 'list' && action !== 'pricing';
+
+    // في طلبات الباقات نستخدم الكاش لتوفير القراءات، أما في السداد نقرأ الرصيد الحي
+    const authResult = await verifyUserByApiKey(apiKey, firestore, isPayment);
     if (!authResult) {
       return NextResponse.json({
         success: false,
@@ -234,8 +265,6 @@ export async function POST(req: Request) {
         timestamp
       }, { status: 403, headers: corsHeaders });
     }
-
-    const action = String(body.action || 'pay').toLowerCase().trim();
 
     // 1. إذا كان الطلب استعراض الباقات والأسعار عبر POST
     if (action === 'packages' || action === 'list' || action === 'pricing') {
