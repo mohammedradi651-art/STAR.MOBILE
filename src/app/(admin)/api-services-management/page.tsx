@@ -28,7 +28,7 @@ import {
   Gamepad2
 } from 'lucide-react';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteField } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { useRouter } from 'next/navigation';
@@ -36,7 +36,9 @@ import {
   DEFAULT_SERVICES_CONFIG, 
   SystemServicesConfig,
   calculateGamePrice,
-  GamePackage
+  GamePackage,
+  PUBG_BASE_PACKAGES,
+  FREEFIRE_BASE_PACKAGES
 } from '@/lib/services-config';
 import { cn } from '@/lib/utils';
 
@@ -113,12 +115,10 @@ export default function ApiServicesManagementPage() {
           pubg: {
             enabled: remoteGames?.pubg?.enabled ?? defaultGames.pubg.enabled,
             rate: Number(remoteGames?.pubg?.rate ?? defaultGames.pubg.rate),
-            packages: remoteGames?.pubg?.packages ?? defaultGames.pubg.packages,
           },
           freefire: {
             enabled: remoteGames?.freefire?.enabled ?? defaultGames.freefire.enabled,
             rate: Number(remoteGames?.freefire?.rate ?? defaultGames.freefire.rate),
-            packages: remoteGames?.freefire?.packages ?? defaultGames.freefire.packages,
           }
         }
       });
@@ -142,8 +142,21 @@ export default function ApiServicesManagementPage() {
     if (!firestore || !configDocRef) return;
     setIsSaving(true);
     try {
-      const dataToSave = {
+      const dataToSave: any = {
         ...config,
+        games: {
+          enabled: config.games?.enabled ?? true,
+          pubg: {
+            enabled: config.games?.pubg?.enabled ?? true,
+            rate: Number(config.games?.pubg?.rate ?? 3.02),
+            packages: deleteField() // حذف مصفوفة الفئات من قاعدة البيانات تماماً
+          },
+          freefire: {
+            enabled: config.games?.freefire?.enabled ?? true,
+            rate: Number(config.games?.freefire?.rate ?? 2.98),
+            packages: deleteField() // حذف مصفوفة الفئات من قاعدة البيانات تماماً
+          }
+        },
         updatedAt: new Date().toISOString()
       };
       await setDoc(configDocRef, dataToSave, { merge: true });
@@ -797,7 +810,7 @@ export default function ApiServicesManagementPage() {
                       <span>الأساس</span>
                       <span className="text-primary font-black">سعر الـ API</span>
                     </div>
-                    {(config.games?.pubg?.packages ?? DEFAULT_SERVICES_CONFIG.games!.pubg.packages).map((pkg) => {
+                    {PUBG_BASE_PACKAGES.map((pkg) => {
                       const rate = config.games?.pubg?.rate ?? 3.02;
                       const calculated = calculateGamePrice(pkg.basePrice, rate);
                       return (
@@ -884,7 +897,7 @@ export default function ApiServicesManagementPage() {
                       <span>الأساس</span>
                       <span className="text-primary font-black">سعر الـ API</span>
                     </div>
-                    {(config.games?.freefire?.packages ?? DEFAULT_SERVICES_CONFIG.games!.freefire.packages).map((pkg) => {
+                    {FREEFIRE_BASE_PACKAGES.map((pkg) => {
                       const rate = config.games?.freefire?.rate ?? 2.98;
                       const calculated = calculateGamePrice(pkg.basePrice, rate);
                       return (

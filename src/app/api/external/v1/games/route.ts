@@ -1,14 +1,21 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
 import { collection, query, where, getDocs, doc, writeBatch, increment, getDoc } from 'firebase/firestore';
-import { DEFAULT_SERVICES_CONFIG, SystemServicesConfig, calculateGamePrice, GamePackage } from '@/lib/services-config';
+import { 
+  DEFAULT_SERVICES_CONFIG, 
+  SystemServicesConfig, 
+  calculateGamePrice, 
+  GamePackage,
+  PUBG_BASE_PACKAGES,
+  FREEFIRE_BASE_PACKAGES
+} from '@/lib/services-config';
 import { generateTransId, generateBackpass } from '@/lib/telecom-order';
 
 export const dynamic = 'force-dynamic';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-api-key',
 };
 
@@ -40,30 +47,64 @@ function extractApiKey(req: Request, body?: any): string | null {
   return null;
 }
 
-// كاش في الذاكرة للتحقق من المفاتيح لتوفير قراءات Firestore عند كثرة الاستعلامات
-const apiKeyCache = new Map<string, { data: { userId: string; userData: any }; expiry: number }>();
+// كاش في الذاكرة لتوفير القراءات
+let cachedGamesConfig: {
+  enabled: boolean;
+  pubg: { enabled: boolean; rate: number };
+  freefire: { enabled: boolean; rate: number };
+} | null = null;
+let gamesConfigCacheExpiry = 0;
+const CACHE_TTL_MS = 2 * 60 * 1000; // دقيقتين
 
 /**
- * التحقق من صاحب المفتاح مع كاش لتوفير القراءات
+ * جلب معاملات النسب فقط من قاعدة البيانات مع كاش لتوفير القراءات
  */
-async function verifyUserByApiKey(apiKey: string, firestore: any, bypassCache = false): Promise<{ userId: string; userData: any } | null> {
-  if (!apiKey) return null;
-
+async function getGamesRatesConfig(firestore: any) {
   const now = Date.now();
-  if (!bypassCache) {
-    const cached = apiKeyCache.get(apiKey);
-    if (cached && now < cached.expiry) {
-      return cached.data;
-    }
+  if (cachedGamesConfig && now < gamesConfigCacheExpiry) {
+    return cachedGamesConfig;
   }
+
+  let config: SystemServicesConfig = DEFAULT_SERVICES_CONFIG;
+  try {
+    const configSnap = await getDoc(doc(firestore, 'system_settings', 'telecom_config'));
+    if (configSnap.exists()) {
+      config = { ...DEFAULT_SERVICES_CONFIG, ...(configSnap.data() as any) };
+    }
+  } catch (e) {
+    console.warn("Could not read telecom_config in games API:", e);
+  }
+
+  const defaultGames = DEFAULT_SERVICES_CONFIG.games!;
+  const remoteGames = config.games;
+
+  cachedGamesConfig = {
+    enabled: remoteGames?.enabled ?? defaultGames.enabled,
+    pubg: {
+      enabled: remoteGames?.pubg?.enabled ?? defaultGames.pubg.enabled,
+      rate: Number(remoteGames?.pubg?.rate ?? defaultGames.pubg.rate),
+    },
+    freefire: {
+      enabled: remoteGames?.freefire?.enabled ?? defaultGames.freefire.enabled,
+      rate: Number(remoteGames?.freefire?.rate ?? defaultGames.freefire.rate),
+    }
+  };
+
+  gamesConfigCacheExpiry = now + CACHE_TTL_MS;
+  return cachedGamesConfig;
+}
+
+/**
+ * التحقق من صاحب المفتاح
+ */
+async function verifyUserByApiKey(apiKey: string, firestore: any): Promise<{ userId: string; userData: any } | null> {
+  if (!apiKey) return null;
 
   try {
     const q = query(collection(firestore, 'users'), where('apiKey', '==', apiKey));
     const snap = await getDocs(q);
     if (!snap.empty) {
-      const res = { userId: snap.docs[0].id, userData: snap.docs[0].data() };
-      apiKeyCache.set(apiKey, { data: res, expiry: now + 60 * 1000 }); // كاش لمدة دقيقة
-      return res;
+      return { userId: snap.docs[0].id, userData: snap.docs[0].data() };
     }
   } catch (e) {
     console.error('Error verifying apiKey in games:', e);
@@ -87,167 +128,9 @@ async function verifyUserByApiKey(apiKey: string, firestore: any, bypassCache = 
   return null;
 }
 
-// كاش في ذاكرة السيرفر لحفظ النسب ومنع استهلاك قراءات Firestore نهائياً
-let cachedGamesConfig: any = null;
-let gamesConfigCacheExpiry = 0;
-const CACHE_TTL_MS = 2 * 60 * 1000; // دقيقتين كاش سريع
-
 /**
- * جلب إعدادات الألعاب والنسب - الباقات ثابتة في الكود والنسب تُجلب مع كاش ذاكرة لتوفير القراءات
- */
-async function getGamesConfig(firestore: any) {
-  const now = Date.now();
-  if (cachedGamesConfig && now < gamesConfigCacheExpiry) {
-    return cachedGamesConfig;
-  }
-
-  let config: SystemServicesConfig = DEFAULT_SERVICES_CONFIG;
-  try {
-    const configSnap = await getDoc(doc(firestore, 'system_settings', 'telecom_config'));
-    if (configSnap.exists()) {
-      config = { ...DEFAULT_SERVICES_CONFIG, ...(configSnap.data() as any) };
-    }
-  } catch (e) {
-    console.warn("Could not read telecom_config in games API:", e);
-  }
-
-  const defaultGames = DEFAULT_SERVICES_CONFIG.games!;
-  const remoteGames = config.games;
-
-  // الباقات وأسماؤها وأسعارها الأساسية مأخوذة من الكود مباشرة بدون استهلاك قراءات
-  cachedGamesConfig = {
-    enabled: remoteGames?.enabled ?? defaultGames.enabled,
-    pubg: {
-      enabled: remoteGames?.pubg?.enabled ?? defaultGames.pubg.enabled,
-      rate: Number(remoteGames?.pubg?.rate ?? defaultGames.pubg.rate),
-      packages: defaultGames.pubg.packages, // ثابتة في الكود
-    },
-    freefire: {
-      enabled: remoteGames?.freefire?.enabled ?? defaultGames.freefire.enabled,
-      rate: Number(remoteGames?.freefire?.rate ?? defaultGames.freefire.rate),
-      packages: defaultGames.freefire.packages, // ثابتة في الكود
-    }
-  };
-
-  gamesConfigCacheExpiry = now + CACHE_TTL_MS;
-  return cachedGamesConfig;
-}
-
-/**
- * GET: استعراض الباقات والأسعار الحالية للألعاب
- */
-export async function GET(req: Request) {
-  const timestamp = new Date().toISOString();
-  try {
-    const apiKey = extractApiKey(req);
-    const { firestore } = initializeServerFirebase();
-
-    if (!apiKey) {
-      return NextResponse.json({
-        success: false,
-        code: 'SM_UNAUTHORIZED',
-        message: 'مفتاح الـ API مطلوب للاطلاع على أسعار الألعاب',
-        timestamp
-      }, { status: 401, headers: corsHeaders });
-    }
-
-    const authResult = await verifyUserByApiKey(apiKey, firestore);
-    if (!authResult) {
-      return NextResponse.json({
-        success: false,
-        code: 'SM_FORBIDDEN',
-        message: 'مفتاح الربط API غير صحيح أو غير مفعل',
-        timestamp
-      }, { status: 403, headers: corsHeaders });
-    }
-
-    const gamesConfig = await getGamesConfig(firestore);
-    if (!gamesConfig.enabled) {
-      return NextResponse.json({
-        success: false,
-        code: 'SM_SERVICE_DISABLED',
-        message: 'خدمة الألعاب معطلة حالياً في النظام',
-        timestamp
-      }, { status: 403, headers: corsHeaders });
-    }
-
-    // تجهيز قائمة ببجي
-    const pubgPackages = gamesConfig.pubg.packages.map((pkg: GamePackage) => ({
-      id: pkg.id,
-      code: pkg.code,
-      name: pkg.name,
-      basePrice: pkg.basePrice,
-      rate: gamesConfig.pubg.rate,
-      price: calculateGamePrice(pkg.basePrice, gamesConfig.pubg.rate)
-    }));
-
-    // تجهيز قائمة فري فاير
-    const freefirePackages = gamesConfig.freefire.packages.map((pkg: GamePackage) => ({
-      id: pkg.id,
-      code: pkg.code,
-      name: pkg.name,
-      basePrice: pkg.basePrice,
-      rate: gamesConfig.freefire.rate,
-      price: calculateGamePrice(pkg.basePrice, gamesConfig.freefire.rate)
-    }));
-
-    const { searchParams } = new URL(req.url);
-    const targetGame = (searchParams.get('game') || searchParams.get('type') || '').toLowerCase().trim();
-
-    let responseData: any = {
-      pubg: {
-        name: 'ببجي موبايل',
-        enabled: gamesConfig.pubg.enabled,
-        rate: gamesConfig.pubg.rate,
-        packages: pubgPackages
-      },
-      freefire: {
-        name: 'فري فاير',
-        enabled: gamesConfig.freefire.enabled,
-        rate: gamesConfig.freefire.rate,
-        packages: freefirePackages
-      }
-    };
-
-    if (targetGame === 'pubg' || targetGame.includes('ببجي')) {
-      responseData = {
-        game: 'pubg',
-        name: 'ببجي موبايل',
-        enabled: gamesConfig.pubg.enabled,
-        rate: gamesConfig.pubg.rate,
-        packages: pubgPackages
-      };
-    } else if (targetGame === 'freefire' || targetGame === 'free_fire' || targetGame.includes('فاير')) {
-      responseData = {
-        game: 'freefire',
-        name: 'فري فاير',
-        enabled: gamesConfig.freefire.enabled,
-        rate: gamesConfig.freefire.rate,
-        packages: freefirePackages
-      };
-    }
-
-    return NextResponse.json({
-      success: true,
-      code: 'SM_SUCCESS',
-      message: 'تم جلب باقات وأسعار الألعاب بنجاح',
-      data: responseData,
-      userBalance: Number(authResult.userData.balance || 0),
-      timestamp
-    }, { headers: corsHeaders });
-
-  } catch (error: any) {
-    return NextResponse.json({
-      success: false,
-      code: 'SM_SERVER_ERROR',
-      message: error?.message || 'خطأ داخلي في السيرفر',
-      timestamp
-    }, { status: 500, headers: corsHeaders });
-  }
-}
-
-/**
- * POST: تنفيذ الشحن الفوري أو جلب الباقات
+ * POST: تنفيذ شحن فئات الألعاب فقط
+ * POST /api/external/v1/games
  */
 export async function POST(req: Request) {
   const timestamp = new Date().toISOString();
@@ -265,11 +148,7 @@ export async function POST(req: Request) {
       }, { status: 401, headers: corsHeaders });
     }
 
-    const action = String(body.action || 'pay').toLowerCase().trim();
-    const isPayment = action !== 'packages' && action !== 'list' && action !== 'pricing';
-
-    // في طلبات الباقات نستخدم الكاش لتوفير القراءات، أما في السداد نقرأ الرصيد الحي
-    const authResult = await verifyUserByApiKey(apiKey, firestore, isPayment);
+    const authResult = await verifyUserByApiKey(apiKey, firestore);
     if (!authResult) {
       return NextResponse.json({
         success: false,
@@ -279,7 +158,7 @@ export async function POST(req: Request) {
       }, { status: 403, headers: corsHeaders });
     }
 
-    const gamesConfig = await getGamesConfig(firestore);
+    const gamesConfig = await getGamesRatesConfig(firestore);
     if (!gamesConfig.enabled) {
       return NextResponse.json({
         success: false,
@@ -289,72 +168,7 @@ export async function POST(req: Request) {
       }, { status: 403, headers: corsHeaders });
     }
 
-    // 1. إذا كان الطلب استعراض الباقات والأسعار عبر POST
-    if (action === 'packages' || action === 'list' || action === 'pricing') {
-      const pubgPackages = gamesConfig.pubg.packages.map((pkg: GamePackage) => ({
-        id: pkg.id,
-        code: pkg.code,
-        name: pkg.name,
-        basePrice: pkg.basePrice,
-        rate: gamesConfig.pubg.rate,
-        price: calculateGamePrice(pkg.basePrice, gamesConfig.pubg.rate)
-      }));
-
-      const freefirePackages = gamesConfig.freefire.packages.map((pkg: GamePackage) => ({
-        id: pkg.id,
-        code: pkg.code,
-        name: pkg.name,
-        basePrice: pkg.basePrice,
-        rate: gamesConfig.freefire.rate,
-        price: calculateGamePrice(pkg.basePrice, gamesConfig.freefire.rate)
-      }));
-
-      const targetGame = String(body.game || body.type || '').toLowerCase().trim();
-
-      let responseData: any = {
-        pubg: {
-          name: 'ببجي موبايل',
-          enabled: gamesConfig.pubg.enabled,
-          rate: gamesConfig.pubg.rate,
-          packages: pubgPackages
-        },
-        freefire: {
-          name: 'فري فاير',
-          enabled: gamesConfig.freefire.enabled,
-          rate: gamesConfig.freefire.rate,
-          packages: freefirePackages
-        }
-      };
-
-      if (targetGame === 'pubg' || targetGame.includes('ببجي')) {
-        responseData = {
-          game: 'pubg',
-          name: 'ببجي موبايل',
-          enabled: gamesConfig.pubg.enabled,
-          rate: gamesConfig.pubg.rate,
-          packages: pubgPackages
-        };
-      } else if (targetGame === 'freefire' || targetGame === 'free_fire' || targetGame.includes('فاير')) {
-        responseData = {
-          game: 'freefire',
-          name: 'فري فاير',
-          enabled: gamesConfig.freefire.enabled,
-          rate: gamesConfig.freefire.rate,
-          packages: freefirePackages
-        };
-      }
-
-      return NextResponse.json({
-        success: true,
-        code: 'SM_SUCCESS',
-        message: 'تم جلب باقات وأسعار الألعاب بنجاح',
-        data: responseData,
-        userBalance: Number(authResult.userData.balance || 0),
-        timestamp
-      }, { headers: corsHeaders });
-    }
-
-    // 2. إذا كان الطلب عملية شحن (Payment / Charge)
+    // تحديد اللعبة
     const rawGame = String(body.game || body.type || body.service || '').toLowerCase().trim();
     const isPubg = rawGame === 'pubg' || rawGame.includes('ببجي');
     const isFreeFire = rawGame === 'freefire' || rawGame === 'free_fire' || rawGame.includes('فاير');
@@ -363,7 +177,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         success: false,
         code: 'SM_VALIDATION_ERROR',
-        message: 'نوع اللعبة غير مدعوم. الألعاب المتاحة حالياً: pubg (ببجي موبايل) أو freefire (فري فاير).',
+        message: 'نوع اللعبة غير مدعوم. الألعاب المتاحة: pubg (ببجي موبايل) أو freefire (فري فاير).',
         timestamp
       }, { status: 400, headers: corsHeaders });
     }
@@ -400,13 +214,15 @@ export async function POST(req: Request) {
       }, { status: 400, headers: corsHeaders });
     }
 
-    // البحث عن الباقة المطلوبة
-    const targetPackage = gameSetting.packages.find((p: GamePackage) => 
+    // جلب الباقات والأسعار الأساسية من الكود البرمجي حصراً بدون أي قراءة من قاعدة البيانات
+    const packagesList = isPubg ? PUBG_BASE_PACKAGES : FREEFIRE_BASE_PACKAGES;
+
+    const targetPackage = packagesList.find((p: GamePackage) => 
       p.code === packageCode || p.id === packageCode || p.name.includes(packageCode)
     );
 
     if (!targetPackage) {
-      const availableCodes = gameSetting.packages.map((p: GamePackage) => `${p.code} (${p.name})`).join(', ');
+      const availableCodes = packagesList.map((p: GamePackage) => `${p.code} (${p.name})`).join(', ');
       return NextResponse.json({
         success: false,
         code: 'SM_VALIDATION_ERROR',
@@ -415,11 +231,11 @@ export async function POST(req: Request) {
       }, { status: 400, headers: corsHeaders });
     }
 
-    // احتساب السعر المخصوم وفق النسبة المحددة
+    // احتساب السعر المخصوم وفق معامل النسبة المحدد في لوحة الإدارة
     const finalPrice = calculateGamePrice(targetPackage.basePrice, gameSetting.rate);
     const userBalance = Number(authResult.userData.balance || 0);
 
-    // فحص الرصيد الكافي
+    // فحص كفاية الرصيد
     if (userBalance < finalPrice) {
       return NextResponse.json({
         success: false,
@@ -429,7 +245,7 @@ export async function POST(req: Request) {
       }, { status: 400, headers: corsHeaders });
     }
 
-    // تجهيز المعاملة المالية
+    // توليد أرقام المعاملة
     const transid = generateTransId();
     const backpass = generateBackpass();
     const now = new Date().toISOString();
@@ -443,7 +259,7 @@ export async function POST(req: Request) {
     const userRef = doc(firestore, 'users', authResult.userId);
     batch.update(userRef, { balance: increment(-finalPrice) });
 
-    // ب. تسجيل المعاملة في كشف حساب العميل لتظهر في سجل عملياته كعملية ناجحة
+    // ب. تسجيل المعاملة في كشف حساب العميل لتظهر له في سجل عملياته كعملية ناجحة
     const userTxRef = doc(firestore, `users/${authResult.userId}/transactions`, transid);
     batch.set(userTxRef, {
       id: transid,
@@ -461,7 +277,7 @@ export async function POST(req: Request) {
       serviceCategory: 'الالعاب'
     });
 
-    // ج. تسجيل المعاملة في paymentTransactions لتأمين التحقق والـ Webhook
+    // ج. تسجيل المعاملة في paymentTransactions
     const globalTxRef = doc(firestore, 'paymentTransactions', transid);
     batch.set(globalTxRef, {
       id: transid,
@@ -485,7 +301,7 @@ export async function POST(req: Request) {
 
     await batch.commit();
 
-    // د. إرسال الطلب للمزود (اشحن لي) عبر سيرفر الاتصالات
+    // د. إرسال الطلب للمزود (اشحن لي) عبر السيرفر الداخلي
     const origin = new URL(req.url).origin;
     try {
       fetch(`${origin}/api/telecom`, {
@@ -534,7 +350,7 @@ export async function POST(req: Request) {
     }, { headers: corsHeaders });
 
   } catch (error: any) {
-    console.error('Games API Error:', error);
+    console.error('Games Charge API Error:', error);
     return NextResponse.json({
       success: false,
       code: 'SM_SERVER_ERROR',
@@ -543,4 +359,3 @@ export async function POST(req: Request) {
     }, { status: 500, headers: corsHeaders });
   }
 }
-
