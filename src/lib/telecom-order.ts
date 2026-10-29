@@ -350,9 +350,9 @@ export async function executeTelecomRequestWithTimeout({
     backurl: BACKURL
   };
 
-  // مهلة 10 ثوانٍ
+  // مهلة 25 ثانية لضمان استقبال رد تفعيل الباقات وسداد الاتصالات بنجاح
   const timeoutPromise = new Promise<{ timeout: true }>((resolve) => {
-    setTimeout(() => resolve({ timeout: true }), 10000);
+    setTimeout(() => resolve({ timeout: true }), 25000);
   });
 
   const fetchPromise = (async () => {
@@ -384,28 +384,46 @@ export async function executeTelecomRequestWithTimeout({
 
   const rawDesc = String(data?.resultDesc || data?.message || '');
   const normDesc = rawDesc.toLowerCase();
+
+  const isExplicitDone =
+    data?.status === 'success' ||
+    data?.status === 'done' ||
+    data?.action === 'done' ||
+    data?.isDone === 1 ||
+    data?.isDone === '1' ||
+    data?.readiness === 'جاهزة' ||
+    rawDesc.includes('تم تنفيذ') ||
+    rawDesc.includes('تم التنفيذ') ||
+    rawDesc.includes('تم السداد') ||
+    rawDesc.includes('تم الشحن') ||
+    rawDesc.includes('تمت العملية') ||
+    rawDesc.includes('بنجاح');
+
   const isPending =
-    data?.status === 'pending' ||
-    data?.status === 'wait' ||
-    data?.status === 'waiting' ||
-    data?.status === 'process' ||
-    data?.status === 'proccess' ||
-    data?.status === 'processing' ||
-    data?.status === 'proccessing' ||
-    data?.readiness === 'قيد الانتظار' ||
-    data?.resultCode === '-2' ||
-    data?.resultCode === -2 ||
-    rawDesc.includes('انتظار') ||
-    rawDesc.includes('معالج') ||
-    rawDesc.includes('تنفيذ') ||
-    rawDesc.includes('قبول') ||
-    rawDesc.includes('معلق') ||
-    rawDesc.includes('جاري') ||
-    normDesc.includes('proc') ||
-    normDesc.includes('pend') ||
-    normDesc.includes('wait') ||
-    normDesc.includes('queu') ||
-    normDesc.includes('prog');
+    !isExplicitDone &&
+    (data?.status === 'pending' ||
+      data?.status === 'wait' ||
+      data?.status === 'waiting' ||
+      data?.status === 'process' ||
+      data?.status === 'proccess' ||
+      data?.status === 'processing' ||
+      data?.status === 'proccessing' ||
+      data?.readiness === 'قيد الانتظار' ||
+      data?.resultCode === '-2' ||
+      data?.resultCode === -2 ||
+      rawDesc.includes('انتظار') ||
+      rawDesc.includes('معالج') ||
+      rawDesc.includes('قيد التنفيذ') ||
+      rawDesc.includes('جاري التنفيذ') ||
+      rawDesc.includes('قيد المعالجة') ||
+      rawDesc.includes('جاري المعالجة') ||
+      rawDesc.includes('قبول') ||
+      rawDesc.includes('معلق') ||
+      normDesc.includes('proc') ||
+      normDesc.includes('pend') ||
+      normDesc.includes('wait') ||
+      normDesc.includes('queu') ||
+      normDesc.includes('prog'));
 
   // إذا كان الرد الصادر من الـ API يفيد بأن العملية قيد الانتظار والمعالجة لدى المزود
   if (isPending) {
@@ -416,7 +434,8 @@ export async function executeTelecomRequestWithTimeout({
   const isSuccess =
     ok &&
     !isPending &&
-    (data?.resultCode === '0' ||
+    (isExplicitDone ||
+      data?.resultCode === '0' ||
       data?.resultCode === 0 ||
       data?.status === 'success' ||
       data?.action === 'done' ||

@@ -307,8 +307,23 @@ export async function POST(req: Request) {
 
     const rawResultMsg = String(result.resultDesc || result.message || '').trim();
     const normResultMsg = rawResultMsg.toLowerCase();
+    const isExplicitDone =
+      result.status === 'success' ||
+      result.status === 'done' ||
+      result.action === 'done' ||
+      result.isDone === 1 ||
+      result.isDone === '1' ||
+      result.readiness === 'جاهزة' ||
+      rawResultMsg.includes('تم تنفيذ') ||
+      rawResultMsg.includes('تم التنفيذ') ||
+      rawResultMsg.includes('تم السداد') ||
+      rawResultMsg.includes('تم الشحن') ||
+      rawResultMsg.includes('تمت العملية') ||
+      rawResultMsg.includes('بنجاح');
+
     const isPending =
-      result.status === 'pending' ||
+      !isExplicitDone &&
+      (result.status === 'pending' ||
       result.status === 'wait' ||
       result.status === 'waiting' ||
       result.status === 'process' ||
@@ -320,19 +335,22 @@ export async function POST(req: Request) {
       result.resultCode === -2 ||
       rawResultMsg.includes('انتظار') ||
       rawResultMsg.includes('معالج') ||
-      rawResultMsg.includes('تنفيذ') ||
+      rawResultMsg.includes('قيد التنفيذ') ||
+      rawResultMsg.includes('جاري التنفيذ') ||
+      rawResultMsg.includes('قيد المعالجة') ||
+      rawResultMsg.includes('جاري المعالجة') ||
       rawResultMsg.includes('قبول') ||
       rawResultMsg.includes('معلق') ||
-      rawResultMsg.includes('جاري') ||
       normResultMsg.includes('proc') ||
       normResultMsg.includes('pend') ||
       normResultMsg.includes('wait') ||
       normResultMsg.includes('queu') ||
-      normResultMsg.includes('prog');
+      normResultMsg.includes('prog'));
 
     const isSuccess =
       !isPending &&
-      (result.status === 'success' ||
+      (isExplicitDone ||
+       result.status === 'success' ||
        result.action === 'done' ||
        result.readiness === 'جاهزة' ||
        result.resultCode === "0" ||

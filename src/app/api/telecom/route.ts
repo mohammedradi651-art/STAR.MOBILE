@@ -204,15 +204,28 @@ export async function POST(request: Request) {
             payload.mobile = tx.recipientPhoneNumber || tx.phoneNumber;
           }
           const rawLocalMsg = String(tx.providerMessage || tx.notes || '').toLowerCase();
+          const isLocalExplicitDone =
+            tx.status === 'success' ||
+            tx.readiness === 'جاهزة' ||
+            rawLocalMsg.includes('تم تنفيذ') ||
+            rawLocalMsg.includes('تم التنفيذ') ||
+            rawLocalMsg.includes('تم السداد') ||
+            rawLocalMsg.includes('تم الشحن') ||
+            rawLocalMsg.includes('بنجاح');
+
           const isLocalPending =
-            rawLocalMsg.includes('proc') ||
+            !isLocalExplicitDone &&
+            (rawLocalMsg.includes('proc') ||
             rawLocalMsg.includes('pend') ||
             rawLocalMsg.includes('wait') ||
             rawLocalMsg.includes('انتظار') ||
             rawLocalMsg.includes('معالج') ||
-            rawLocalMsg.includes('تنفيذ');
+            rawLocalMsg.includes('قيد التنفيذ') ||
+            rawLocalMsg.includes('جاري التنفيذ') ||
+            rawLocalMsg.includes('قيد المعالجة') ||
+            rawLocalMsg.includes('جاري المعالجة'));
 
-          const isDone = (tx.status === 'success' || tx.readiness === 'جاهزة') && !isLocalPending;
+          const isDone = isLocalExplicitDone || ((tx.status === 'success' || tx.readiness === 'جاهزة') && !isLocalPending);
           const isFailed = tx.status === 'failed' || tx.readiness === 'فاشلة';
           // إذا كانت العملية محسومة مسبقاً (ناجحة أو فاشلة)، نعيد حالتها فوراً
           if (isDone || isFailed) {
@@ -776,8 +789,22 @@ export async function POST(request: Request) {
         const rawStatusDesc = String(data?.resultDesc || data?.message || data?.reason || '').trim();
         const normStatusDesc = rawStatusDesc.toLowerCase();
 
+        const isExplicitDone =
+          data?.isDone === 1 ||
+          data?.isDone === '1' ||
+          data?.action === 'done' ||
+          data?.status === 'done' ||
+          data?.status === 'success' ||
+          data?.readiness === 'جاهزة' ||
+          rawStatusDesc.includes('تم تنفيذ') ||
+          rawStatusDesc.includes('تم التنفيذ') ||
+          rawStatusDesc.includes('تم السداد') ||
+          rawStatusDesc.includes('تم الشحن') ||
+          rawStatusDesc.includes('بنجاح');
+
         const isStatusPending =
-          data?.resultCode === "-2" ||
+          !isExplicitDone &&
+          (data?.resultCode === "-2" ||
           data?.resultCode === -2 ||
           data?.status === 'pending' ||
           data?.status === 'wait' ||
@@ -789,25 +816,30 @@ export async function POST(request: Request) {
           data?.readiness === 'قيد الانتظار' ||
           rawStatusDesc.includes('انتظار') ||
           rawStatusDesc.includes('معالج') ||
-          rawStatusDesc.includes('تنفيذ') ||
+          rawStatusDesc.includes('قيد التنفيذ') ||
+          rawStatusDesc.includes('جاري التنفيذ') ||
+          rawStatusDesc.includes('قيد المعالجة') ||
+          rawStatusDesc.includes('جاري المعالجة') ||
           rawStatusDesc.includes('قبول') ||
           rawStatusDesc.includes('معلق') ||
-          rawStatusDesc.includes('جاري') ||
           normStatusDesc.includes('proc') ||
           normStatusDesc.includes('pend') ||
           normStatusDesc.includes('wait') ||
           normStatusDesc.includes('queu') ||
           normStatusDesc.includes('prog') ||
-          ((data?.isDone === 0 || data?.isDone === '0') && (data?.isBan === 0 || data?.isBan === '0'));
+          ((data?.isDone === 0 || data?.isDone === '0') && (data?.isBan === 0 || data?.isBan === '0')));
 
         const isProviderDone =
           !isStatusPending &&
-          (data?.isDone === 1 ||
+          (isExplicitDone ||
+           data?.isDone === 1 ||
            data?.isDone === '1' ||
            data?.action === 'done' ||
            data?.status === 'done' ||
            data?.status === 'success' ||
-           data?.readiness === 'جاهزة');
+           data?.readiness === 'جاهزة' ||
+           data?.resultCode === '0' ||
+           data?.resultCode === 0);
 
         const isProviderBan =
           !isStatusPending &&
@@ -878,10 +910,24 @@ export async function POST(request: Request) {
       const rawDesc = String(data?.resultDesc || data?.message || data?.reason || '').trim();
       const normDesc = rawDesc.toLowerCase();
 
+      const isExplicitDone =
+        data?.isDone === 1 ||
+        data?.isDone === '1' ||
+        data?.action === 'done' ||
+        data?.status === 'done' ||
+        data?.status === 'success' ||
+        data?.readiness === 'جاهزة' ||
+        rawDesc.includes('تم تنفيذ') ||
+        rawDesc.includes('تم التنفيذ') ||
+        rawDesc.includes('تم السداد') ||
+        rawDesc.includes('تم الشحن') ||
+        rawDesc.includes('تمت العملية') ||
+        rawDesc.includes('بنجاح');
+
       // حالة قيد الانتظار والمعالجة لدى المزود:
-      // (سواء كان الرد resultCode: -2 أو status: pending أو كان النص يفيد بأن العملية قيد الانتظار أو المعالجة)
       const isPending =
-        data?.resultCode === "-2" ||
+        !isExplicitDone &&
+        (data?.resultCode === "-2" ||
         data?.resultCode === -2 ||
         data?.status === 'pending' ||
         data?.status === 'wait' ||
@@ -893,21 +939,24 @@ export async function POST(request: Request) {
         data?.readiness === 'قيد الانتظار' ||
         rawDesc.includes('انتظار') ||
         rawDesc.includes('معالج') ||
-        rawDesc.includes('تنفيذ') ||
+        rawDesc.includes('قيد التنفيذ') ||
+        rawDesc.includes('جاري التنفيذ') ||
+        rawDesc.includes('قيد المعالجة') ||
+        rawDesc.includes('جاري المعالجة') ||
         rawDesc.includes('قبول') ||
         rawDesc.includes('معلق') ||
-        rawDesc.includes('جاري') ||
         normDesc.includes('proc') ||
         normDesc.includes('pend') ||
         normDesc.includes('wait') ||
         normDesc.includes('queu') ||
         normDesc.includes('prog') ||
-        ((data?.isDone === 0 || data?.isDone === '0') && (data?.isBan === 0 || data?.isBan === '0'));
+        ((data?.isDone === 0 || data?.isDone === '0') && (data?.isBan === 0 || data?.isBan === '0')));
 
       // حالة النجاح المؤكد والتنفيذ الفعلي (فقط إذا لم تكن العملية قيد الانتظار):
       const isSuccess =
         !isPending &&
-        (data?.isDone === 1 ||
+        (isExplicitDone ||
+         data?.isDone === 1 ||
          data?.isDone === '1' ||
          data?.action === 'done' ||
          data?.status === 'done' ||

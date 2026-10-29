@@ -9,7 +9,7 @@ import {
   PUBG_BASE_PACKAGES,
   FREEFIRE_BASE_PACKAGES
 } from '@/lib/services-config';
-import { generateTransId, generateBackpass } from '@/lib/telecom-order';
+import { generateTransId, generateBackpass, formatProviderErrorMessage } from '@/lib/telecom-order';
 
 export const dynamic = 'force-dynamic';
 
@@ -255,11 +255,11 @@ export async function POST(req: Request) {
 
     const batch = writeBatch(firestore);
 
-    // أ. خصم المبلغ من رصيد العميل
+    // أ. خصم المبلغ من رصيد العميل مبدئياً
     const userRef = doc(firestore, 'users', authResult.userId);
     batch.update(userRef, { balance: increment(-finalPrice) });
 
-    // ب. تسجيل المعاملة في كشف حساب العميل لتظهر له في سجل عملياته كعملية ناجحة
+    // ب. تسجيل المعاملة في كشف حساب العميل بحالة معلقة (قيد الانتظار) كالمستخدم العادي
     const userTxRef = doc(firestore, `users/${authResult.userId}/transactions`, transid);
     batch.set(userTxRef, {
       id: transid,
@@ -271,13 +271,13 @@ export async function POST(req: Request) {
       notes: txNotes,
       recipientPhoneNumber: playerId,
       accountNumber: playerId,
-      status: 'success', // ناجحة نفس العميل العادي
-      readiness: 'جاهزة',
+      status: 'pending',
+      readiness: 'قيد الانتظار',
       transid: transid,
       serviceCategory: 'الالعاب'
     });
 
-    // ج. تسجيل المعاملة في paymentTransactions
+    // ج. تسجيل المعاملة في paymentTransactions بحالة معلقة
     const globalTxRef = doc(firestore, 'paymentTransactions', transid);
     batch.set(globalTxRef, {
       id: transid,
@@ -301,11 +301,18 @@ export async function POST(req: Request) {
 
     await batch.commit();
 
-    // د. إرسال الطلب للمزود (اشحن لي) عبر السيرفر الداخلي
+    // د. إرسال الطلب للمزود (اشحن لي) عبر السيرفر الداخلي وانتظار النتيجة
     const origin = new URL(req.url).origin;
+    let telecomResult: any = null;
+    let isTimeout = false;
+
     try {
-      fetch(`${origin}/api/telecom`, {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000); // مهلة 20 ثانية
+
+      const telecomRes = await fetch(`${origin}/api/telecom`, {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           'x-app-source': 'internal'
@@ -319,35 +326,186 @@ export async function POST(req: Request) {
           transid: transid,
           backpass: backpass
         })
-      }).catch(err => console.error("Async telecom call error:", err));
-    } catch (e) {
-      console.warn("Could not initiate background telecom request:", e);
+      });
+      clearTimeout(timeoutId);
+      telecomResult = await telecomRes.json().catch(() => ({}));
+    } catch (fetchErr: any) {
+      isTimeout = true;
+      console.warn("Games Charge API: telecom request timed out or error:", fetchErr);
     }
 
-    const remainingBalance = Number((userBalance - finalPrice).toFixed(2));
+    // إذا تأخر الاتصال عن المهلة -> تظل العملية معلقة قيد الانتظار
+    if (isTimeout) {
+      return NextResponse.json({
+        success: true,
+        code: 'SM_PENDING',
+        message: 'تم إرسال الطلب وهو قيد المعالجة لدى المزود (قيد الانتظار)',
+        transactionId: transid,
+        data: {
+          transid: transid,
+          game: gameKey,
+          gameName: gameTitle,
+          packageName: targetPackage.name,
+          packageCode: targetPackage.code,
+          playerId: playerId,
+          amount: finalPrice,
+          status: 'pending',
+          readiness: 'قيد الانتظار',
+          previousBalance: userBalance,
+          remainingBalance: Number((userBalance - finalPrice).toFixed(2))
+        },
+        timestamp: now
+      }, { headers: corsHeaders });
+    }
 
-    return NextResponse.json({
-      success: true,
-      code: 'SM_SUCCESS',
-      message: 'تم شحن الطلب بنجاح وخصم المبلغ من رصيدك',
-      transactionId: transid,
-      data: {
-        transid: transid,
-        game: gameKey,
-        gameName: gameTitle,
-        packageName: targetPackage.name,
-        packageCode: targetPackage.code,
-        playerId: playerId,
-        basePrice: targetPackage.basePrice,
-        rate: gameSetting.rate,
-        amount: finalPrice,
-        status: 'ready',
+    const rawResultMsg = String(telecomResult?.resultDesc || telecomResult?.message || telecomResult?.reason || '').trim();
+    const normResultMsg = rawResultMsg.toLowerCase();
+
+    const isExplicitDone =
+      telecomResult?.status === 'success' ||
+      telecomResult?.status === 'done' ||
+      telecomResult?.action === 'done' ||
+      telecomResult?.isDone === 1 ||
+      telecomResult?.isDone === '1' ||
+      telecomResult?.readiness === 'جاهزة' ||
+      rawResultMsg.includes('تم تنفيذ') ||
+      rawResultMsg.includes('تم التنفيذ') ||
+      rawResultMsg.includes('تم الشحن') ||
+      rawResultMsg.includes('بنجاح');
+
+    const isPending =
+      !isExplicitDone &&
+      (telecomResult?.status === 'pending' ||
+       telecomResult?.status === 'wait' ||
+       telecomResult?.status === 'waiting' ||
+       telecomResult?.status === 'process' ||
+       telecomResult?.status === 'proccess' ||
+       telecomResult?.status === 'processing' ||
+       telecomResult?.status === 'proccessing' ||
+       telecomResult?.readiness === 'قيد الانتظار' ||
+       telecomResult?.resultCode === "-2" ||
+       telecomResult?.resultCode === -2 ||
+       rawResultMsg.includes('انتظار') ||
+       rawResultMsg.includes('قيد التنفيذ') ||
+       rawResultMsg.includes('جاري التنفيذ') ||
+       rawResultMsg.includes('قيد المعالجة') ||
+       rawResultMsg.includes('جاري المعالجة') ||
+       rawResultMsg.includes('معلق') ||
+       normResultMsg.includes('proc') ||
+       normResultMsg.includes('pend') ||
+       normResultMsg.includes('wait') ||
+       normResultMsg.includes('queu') ||
+       normResultMsg.includes('prog'));
+
+    const isSuccess =
+      !isPending &&
+      (isExplicitDone ||
+       telecomResult?.resultCode === "0" ||
+       telecomResult?.resultCode === 0);
+
+    if (isSuccess) {
+      // 1. نجاح مؤكد من المزود -> تحديث المعاملة إلى جاهزة
+      const successPayload = {
+        status: 'success',
         readiness: 'جاهزة',
-        previousBalance: userBalance,
-        remainingBalance: remainingBalance
-      },
-      timestamp: now
-    }, { headers: corsHeaders });
+        providerMessage: telecomResult?.resultDesc || telecomResult?.message || 'تم شحن الحساب بنجاح',
+        completedAt: new Date().toISOString()
+      };
+      const successBatch = writeBatch(firestore);
+      successBatch.update(userTxRef, successPayload);
+      successBatch.set(globalTxRef, successPayload, { merge: true });
+      await successBatch.commit();
+
+      const remainingBalance = Number((userBalance - finalPrice).toFixed(2));
+
+      return NextResponse.json({
+        success: true,
+        code: 'SM_SUCCESS',
+        message: 'تم شحن الطلب بنجاح',
+        transactionId: transid,
+        data: {
+          transid: transid,
+          game: gameKey,
+          gameName: gameTitle,
+          packageName: targetPackage.name,
+          packageCode: targetPackage.code,
+          playerId: playerId,
+          basePrice: targetPackage.basePrice,
+          rate: gameSetting.rate,
+          amount: finalPrice,
+          status: 'ready',
+          readiness: 'جاهزة',
+          previousBalance: userBalance,
+          remainingBalance: remainingBalance
+        },
+        timestamp: now
+      }, { headers: corsHeaders });
+
+    } else if (isPending) {
+      // 2. قيد الانتظار لدى المزود -> المعاملة تبقى معلقة
+      return NextResponse.json({
+        success: true,
+        code: 'SM_PENDING',
+        message: telecomResult?.resultDesc || telecomResult?.message || 'تم إرسال الطلب وهو قيد المعالجة لدى المزود (قيد الانتظار)',
+        transactionId: transid,
+        data: {
+          transid: transid,
+          game: gameKey,
+          gameName: gameTitle,
+          packageName: targetPackage.name,
+          packageCode: targetPackage.code,
+          playerId: playerId,
+          amount: finalPrice,
+          status: 'pending',
+          readiness: 'قيد الانتظار',
+          previousBalance: userBalance,
+          remainingBalance: Number((userBalance - finalPrice).toFixed(2))
+        },
+        timestamp: now
+      }, { headers: corsHeaders });
+
+    } else {
+      // 3. فشل أو رفض من المزود -> إرجاع المبلغ لحساب العميل فوراً وتحديث المعاملة إلى فاشلة
+      const cleanFailReason = formatProviderErrorMessage(
+        telecomResult?.resultDesc || telecomResult?.message || telecomResult?.reason || 'تم رفض العملية من قبل المزود.'
+      );
+
+      const failBatch = writeBatch(firestore);
+      failBatch.update(userRef, { balance: increment(finalPrice) });
+      const failPayload = {
+        status: 'failed',
+        readiness: 'فاشلة',
+        refunded: true,
+        providerMessage: cleanFailReason,
+        notes: `${txNotes}\nالسبب من المزود: ${cleanFailReason}`,
+        failedAt: new Date().toISOString()
+      };
+      failBatch.update(userTxRef, failPayload);
+      failBatch.set(globalTxRef, failPayload, { merge: true });
+      await failBatch.commit();
+
+      return NextResponse.json({
+        success: false,
+        code: 'SM_PROVIDER_REJECTED',
+        message: cleanFailReason,
+        transactionId: transid,
+        data: {
+          transid: transid,
+          game: gameKey,
+          gameName: gameTitle,
+          packageName: targetPackage.name,
+          packageCode: targetPackage.code,
+          playerId: playerId,
+          amount: finalPrice,
+          status: 'failed',
+          readiness: 'فاشلة',
+          refunded: true,
+          previousBalance: userBalance,
+          remainingBalance: userBalance
+        },
+        timestamp: now
+      }, { status: 400, headers: corsHeaders });
+    }
 
   } catch (error: any) {
     console.error('Games Charge API Error:', error);
