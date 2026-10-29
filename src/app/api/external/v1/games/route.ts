@@ -191,24 +191,47 @@ export async function GET(req: Request) {
       price: calculateGamePrice(pkg.basePrice, gamesConfig.freefire.rate)
     }));
 
+    const { searchParams } = new URL(req.url);
+    const targetGame = (searchParams.get('game') || searchParams.get('type') || '').toLowerCase().trim();
+
+    let responseData: any = {
+      pubg: {
+        name: 'ببجي موبايل',
+        enabled: gamesConfig.pubg.enabled,
+        rate: gamesConfig.pubg.rate,
+        packages: pubgPackages
+      },
+      freefire: {
+        name: 'فري فاير',
+        enabled: gamesConfig.freefire.enabled,
+        rate: gamesConfig.freefire.rate,
+        packages: freefirePackages
+      }
+    };
+
+    if (targetGame === 'pubg' || targetGame.includes('ببجي')) {
+      responseData = {
+        game: 'pubg',
+        name: 'ببجي موبايل',
+        enabled: gamesConfig.pubg.enabled,
+        rate: gamesConfig.pubg.rate,
+        packages: pubgPackages
+      };
+    } else if (targetGame === 'freefire' || targetGame === 'free_fire' || targetGame.includes('فاير')) {
+      responseData = {
+        game: 'freefire',
+        name: 'فري فاير',
+        enabled: gamesConfig.freefire.enabled,
+        rate: gamesConfig.freefire.rate,
+        packages: freefirePackages
+      };
+    }
+
     return NextResponse.json({
       success: true,
       code: 'SM_SUCCESS',
       message: 'تم جلب باقات وأسعار الألعاب بنجاح',
-      data: {
-        pubg: {
-          name: 'ببجي موبايل',
-          enabled: gamesConfig.pubg.enabled,
-          rate: gamesConfig.pubg.rate,
-          packages: pubgPackages
-        },
-        freefire: {
-          name: 'فري فاير',
-          enabled: gamesConfig.freefire.enabled,
-          rate: gamesConfig.freefire.rate,
-          packages: freefirePackages
-        }
-      },
+      data: responseData,
       userBalance: Number(authResult.userData.balance || 0),
       timestamp
     }, { headers: corsHeaders });
@@ -286,24 +309,46 @@ export async function POST(req: Request) {
         price: calculateGamePrice(pkg.basePrice, gamesConfig.freefire.rate)
       }));
 
+      const targetGame = String(body.game || body.type || '').toLowerCase().trim();
+
+      let responseData: any = {
+        pubg: {
+          name: 'ببجي موبايل',
+          enabled: gamesConfig.pubg.enabled,
+          rate: gamesConfig.pubg.rate,
+          packages: pubgPackages
+        },
+        freefire: {
+          name: 'فري فاير',
+          enabled: gamesConfig.freefire.enabled,
+          rate: gamesConfig.freefire.rate,
+          packages: freefirePackages
+        }
+      };
+
+      if (targetGame === 'pubg' || targetGame.includes('ببجي')) {
+        responseData = {
+          game: 'pubg',
+          name: 'ببجي موبايل',
+          enabled: gamesConfig.pubg.enabled,
+          rate: gamesConfig.pubg.rate,
+          packages: pubgPackages
+        };
+      } else if (targetGame === 'freefire' || targetGame === 'free_fire' || targetGame.includes('فاير')) {
+        responseData = {
+          game: 'freefire',
+          name: 'فري فاير',
+          enabled: gamesConfig.freefire.enabled,
+          rate: gamesConfig.freefire.rate,
+          packages: freefirePackages
+        };
+      }
+
       return NextResponse.json({
         success: true,
         code: 'SM_SUCCESS',
         message: 'تم جلب باقات وأسعار الألعاب بنجاح',
-        data: {
-          pubg: {
-            name: 'ببجي موبايل',
-            enabled: gamesConfig.pubg.enabled,
-            rate: gamesConfig.pubg.rate,
-            packages: pubgPackages
-          },
-          freefire: {
-            name: 'فري فاير',
-            enabled: gamesConfig.freefire.enabled,
-            rate: gamesConfig.freefire.rate,
-            packages: freefirePackages
-          }
-        },
+        data: responseData,
         userBalance: Number(authResult.userData.balance || 0),
         timestamp
       }, { headers: corsHeaders });
