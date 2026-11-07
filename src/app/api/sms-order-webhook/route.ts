@@ -379,8 +379,8 @@ export async function POST(req: Request) {
       // خصم رصيد المشتري
       batch.update(userDoc.ref, { balance: increment(-finalCategoryPrice) });
 
-      // تحديث حالة الكرت إلى مباع
-      batch.update(cardDoc.ref, { status: 'sold', soldTo: userDoc.id, soldTimestamp: now });
+      // حذف الكرت فوراً من مخزون صاحب الشبكة بمجرد شرائه
+      batch.delete(cardDoc.ref);
 
       // تسجيل العملية في سجل العمليات الخاص بالعميل بنفس التنسيق المعتاد 100%
       const txRef = doc(collection(firestore, `users/${userDoc.id}/transactions`));

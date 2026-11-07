@@ -70,14 +70,14 @@ const OwnerDashboard = () => (
     <PWAInstallPrompt />
     <DashboardHero />
     <div className="grid grid-cols-2 gap-3 px-4">
-      <Link href="/my-network" className="block">
+      <Link href="/my-network/manage" className="block">
         <Card className="rounded-[24px] border-border/20 shadow-sm bg-card/80 backdrop-blur-sm cursor-pointer hover:bg-muted/50 transition-all active:scale-[0.98]">
           <CardContent className="p-4 text-center font-bold text-primary">إدارة شبكتي</CardContent>
         </Card>
       </Link>
       <Link href="/my-network/withdraw" className="block">
         <Card className="rounded-[24px] border-border/20 shadow-sm bg-card/80 backdrop-blur-sm cursor-pointer hover:bg-muted/50 transition-all active:scale-[0.98]">
-          <CardContent className="p-4 text-center font-bold text-primary">سحب الأرباح</CardContent>
+          <CardContent className="p-4 text-center font-bold text-primary">سحب الرصيد</CardContent>
         </Card>
       </Link>
     </div>

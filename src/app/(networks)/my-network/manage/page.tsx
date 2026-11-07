@@ -352,21 +352,25 @@ export default function OwnerNetworkManagePage() {
 
                             <div className="flex-1 text-right overflow-hidden">
                                 <h4 className="font-black text-base text-foreground mb-1 truncate">{cat.name}</h4>
-                                <div className="flex items-center justify-end gap-3 opacity-70">
+                                <div className="flex items-center justify-start gap-3 opacity-80 mt-1">
                                     <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground">
-                                        <Database className="w-3 h-3" />
-                                        <span>{cat.capacity || '-'}</span>
+                                        <Database className="w-3 h-3 text-primary" />
+                                        <span>التخزين: {cat.capacity || '-'}</span>
                                     </div>
                                     <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground border-r pr-3">
-                                        <Clock className="w-3 h-3" />
-                                        <span>{cat.validity || '-'}</span>
+                                        <Clock className="w-3 h-3 text-primary" />
+                                        <span>الصلاحية: {cat.validity || '-'}</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="text-left shrink-0">
-                                <p className="font-black text-primary text-base leading-tight">{cat.price.toLocaleString('en-US')}</p>
-                                <p className="text-[8px] font-bold text-muted-foreground uppercase opacity-60">ريال يمني</p>
+                            <div className="text-left shrink-0 flex flex-col items-end">
+                                <p className="font-black text-primary text-base leading-tight">
+                                    {cat.price.toLocaleString('en-US')} <span className="text-[10px] font-bold text-muted-foreground">ر.ي</span>
+                                </p>
+                                <span className="text-[10px] font-black text-emerald-600 bg-emerald-500/10 dark:bg-emerald-500/20 px-2.5 py-0.5 rounded-full mt-1.5 inline-block border border-emerald-500/20">
+                                    متاح: {(cardsByCategory[cat.id] || []).length}
+                                </span>
                             </div>
 
                             <div className="flex flex-col gap-1.5 border-r pr-3 mr-1">
@@ -484,19 +488,16 @@ export default function OwnerNetworkManagePage() {
                                     <div key={card.id} className="p-3 bg-muted/10 rounded-xl flex items-center justify-between border border-transparent hover:border-primary/10 transition-colors group">
                                         <div className="flex items-center gap-3">
                                             <p className="font-mono font-black text-sm tracking-widest text-foreground">{card.cardNumber}</p>
-                                            <Badge className={cn(
-                                                "text-[8px] font-black h-4 px-1.5 border-none",
-                                                card.status === 'sold' ? 'bg-red-500/10 text-red-600' : 'bg-green-500/10 text-green-600'
-                                            )}>
-                                                {card.status === 'sold' ? 'مباع' : 'متاح'}
-                                            </Badge>
                                         </div>
-                                        {card.status === 'available' && (
-                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="flex items-center gap-2">
+                                            <Badge className="text-[9px] font-black h-5 px-2.5 border-none bg-emerald-500/10 text-emerald-600">
+                                                متاح
+                                            </Badge>
+                                            <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
                                                 <button onClick={() => handleEditCardClick(card)} className="p-1.5 hover:bg-primary/10 rounded-lg text-primary transition-colors"><Edit className="h-3.5 w-3.5" /></button>
                                                 <button onClick={() => setCardToDelete(card)} className="p-1.5 hover:bg-destructive/10 rounded-lg text-destructive transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
                                             </div>
-                                        )}
+                                        </div>
                                     </div>
                                 ))
                             ) : (

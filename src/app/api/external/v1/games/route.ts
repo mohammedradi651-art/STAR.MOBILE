@@ -248,6 +248,7 @@ export async function POST(req: Request) {
     // توليد أرقام المعاملة
     const transid = generateTransId();
     const backpass = generateBackpass();
+    const clientBackUrl = body.backurl || body.backUrl || body.callbackUrl || body.callback_url || null;
     const now = new Date().toISOString();
     const gameTitle = isPubg ? 'ببجي موبايل' : 'فري فاير';
     const txType = `شحن ${isPubg ? 'شدات' : 'جواهر'}: ${targetPackage.name}`;
@@ -274,6 +275,7 @@ export async function POST(req: Request) {
       status: 'pending',
       readiness: 'قيد الانتظار',
       transid: transid,
+      clientBackUrl: clientBackUrl,
       serviceCategory: 'الالعاب'
     });
 
@@ -282,6 +284,7 @@ export async function POST(req: Request) {
     batch.set(globalTxRef, {
       id: transid,
       transid: transid,
+      clientBackUrl: clientBackUrl,
       userId: authResult.userId,
       amount: finalPrice,
       basePrice: targetPackage.basePrice,

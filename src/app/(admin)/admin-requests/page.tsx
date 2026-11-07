@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { collection, doc, query, orderBy, updateDoc, increment, writeBatch, getDocs, where, limit } from 'firebase/firestore';
+import { collection, doc, query, orderBy, updateDoc, increment, writeBatch, getDocs, getDoc, where, limit } from 'firebase/firestore';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -88,6 +88,8 @@ type WaterRequest = {
 
 type WithdrawalRequest = {
   id: string;
+  transactionId?: string;
+  balanceDeducted?: boolean;
   ownerId: string;
   ownerName: string;
   ownerPhoneNumber: string;
@@ -97,7 +99,11 @@ type WithdrawalRequest = {
   recipientName: string;
   accountNumber: string;
   status: 'pending' | 'approved' | 'rejected';
+  readiness?: string;
+  rejectReason?: string;
   requestTimestamp: string;
+  completedAt?: string;
+  rejectedAt?: string;
 };
 
 const SafeFormatDate = (dateStr?: string) => {
@@ -249,6 +255,34 @@ export default function AdminRequestsPage() {
     if (!selectedWith || !withAction || !firestore) return;
     const batch = writeBatch(firestore);
     try {
+      const now = new Date().toISOString();
+
+      // البحث عن معاملة العميل المرتبطة بطلب السحب
+      let txDocRef = null;
+      let existingNotes = '';
+
+      if (selectedWith.transactionId) {
+        const candidateRef = doc(firestore, `users/${selectedWith.ownerId}/transactions`, selectedWith.transactionId);
+        const candidateSnap = await getDoc(candidateRef);
+        if (candidateSnap.exists()) {
+          txDocRef = candidateRef;
+          existingNotes = candidateSnap.data()?.notes || '';
+        }
+      }
+
+      if (!txDocRef) {
+        const txQ = query(
+          collection(firestore, `users/${selectedWith.ownerId}/transactions`),
+          where('requestId', '==', selectedWith.id),
+          limit(1)
+        );
+        const txSnap = await getDocs(txQ);
+        if (!txSnap.empty) {
+          txDocRef = txSnap.docs[0].ref;
+          existingNotes = txSnap.docs[0].data()?.notes || '';
+        }
+      }
+
       if (withAction === 'approve') {
         const soldCardsRef = collection(firestore, 'soldCards');
         const q = query(soldCardsRef, where('ownerId', '==', selectedWith.ownerId), where('payoutStatus', '==', 'pending'));
@@ -260,19 +294,66 @@ export default function AdminRequestsPage() {
             batch.update(c.ref, { payoutStatus: 'completed' });
           } else break;
         }
+
+        // تحديث حالة العملية عند مالك الشبكة إلى "جاهزة"
+        if (txDocRef) {
+          batch.update(txDocRef, {
+            status: 'completed',
+            readiness: 'جاهزة',
+            completedAt: now
+          });
+        }
+
         batch.set(doc(collection(firestore, `users/${selectedWith.ownerId}/notifications`)), {
-          title: 'تمت الموافقة على طلب السحب',
-          body: `تمت الموافقة على طلب سحب مبلغ ${selectedWith.amount.toLocaleString()} ريال بنجاح.`,
-          timestamp: new Date().toISOString(),
+          title: 'تمت الموافقة على طلب السحب 💸',
+          body: `تمت الموافقة على طلب سحب مبلغ ${Number(selectedWith.amount).toLocaleString('en-US')} ريال بنجاح وتم التحويل لحسابك.`,
+          timestamp: now,
+        });
+
+        batch.update(doc(firestore, 'withdrawalRequests', selectedWith.id), { 
+          status: 'approved',
+          readiness: 'جاهزة',
+          completedAt: now
         });
       } else {
+        // رفض طلب السحب:
+        const failReason = withRejectNote?.trim() || 'تم رفض طلب السحب من قبل الإدارة';
+        const finalNotes = existingNotes 
+          ? `${existingNotes} | سبب الرفض: ${failReason}`
+          : `سبب الرفض: ${failReason}`;
+
+        // 1. إعادة المبلغ فوراً لرصيد مالك الشبكة إذا كان قد خُصم
+        const userRef = doc(firestore, 'users', selectedWith.ownerId);
+        if (selectedWith.balanceDeducted || selectedWith.transactionId || txDocRef) {
+          batch.update(userRef, { balance: increment(selectedWith.amount) });
+        }
+
+        // 2. تحديث حركة العميل إلى "فاشلة" مع وضع السبب في الملاحظة
+        if (txDocRef) {
+          batch.update(txDocRef, {
+            status: 'failed',
+            readiness: 'فاشلة',
+            notes: finalNotes,
+            providerMessage: failReason,
+            failedAt: now,
+            refunded: true
+          });
+        }
+
         batch.set(doc(collection(firestore, `users/${selectedWith.ownerId}/notifications`)), {
-          title: 'تم رفض طلب السحب',
-          body: `تم رفض طلب سحب مبلغ ${selectedWith.amount.toLocaleString()} ريال. السبب: ${withRejectNote || 'لا يوجد سبب محدد.'}`,
-          timestamp: new Date().toISOString(),
+          title: 'تم رفض طلب السحب ❌',
+          body: `تم رفض طلب سحب مبلغ ${Number(selectedWith.amount).toLocaleString('en-US')} ريال وإعادة الرصيد لحسابك. السبب: ${failReason}`,
+          timestamp: now,
+        });
+
+        batch.update(doc(firestore, 'withdrawalRequests', selectedWith.id), { 
+          status: 'rejected',
+          readiness: 'فاشلة',
+          rejectReason: failReason,
+          rejectedAt: now
         });
       }
-      batch.update(doc(firestore, 'withdrawalRequests', selectedWith.id), { status: withAction === 'approve' ? 'approved' : 'rejected' });
+
       await batch.commit();
       toast({ title: 'نجاح', description: `تم ${withAction === 'approve' ? 'قبول' : 'رفض'} طلب السحب.` });
       setWithAction(null);
@@ -604,7 +685,7 @@ export default function AdminRequestsPage() {
           <div className="bg-[#0048ad] p-6 text-center text-white">
             <DialogHeader>
               <DialogTitle className="text-white text-center font-black text-lg">تفاصيل طلب السحب</DialogTitle>
-              <DialogDescription className="text-white/80 text-center text-xs">مراجعة بيانات سحب أرباح الشبكة</DialogDescription>
+              <DialogDescription className="text-white/80 text-center text-xs">مراجعة بيانات سحب رصيد الشبكة</DialogDescription>
             </DialogHeader>
           </div>
           {selectedWith && (

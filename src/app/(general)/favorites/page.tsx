@@ -256,23 +256,20 @@ export default function FavoritesPage() {
         return;
     }
 
-    let localBalanceDeducted = false;
+    let purchaseSuccessfullyCommitted = false;
+    let isExternalOrderDeducted = false;
+
     try {
         const now = new Date().toISOString();
         let finalCardID = '';
 
         if (selectedNetwork.isLocal) {
-            // 1. شبكة محلية: خصم المبلغ فوراً لحمايته في حال انقطاع النت
-            await updateDoc(userDocRef, { balance: increment(-effectivePrice) });
-            localBalanceDeducted = true;
-
+            // 1. شبكة محلية: التحقق من توفر الكروت أولاً قبل أي خصم
             const cardsRef = collection(firestore, `networks/${selectedNetwork.id}/cards`);
             const q = query(cardsRef, where('categoryId', '==', selectedCategory.id), where('status', '==', 'available'), firestoreLimit(1));
             const availableCardsSnapshot = await getDocs(q);
 
             if (availableCardsSnapshot.empty) {
-                await updateDoc(userDocRef, { balance: increment(effectivePrice) });
-                localBalanceDeducted = false;
                 throw new Error('نعتذر، لا توجد كروت متاحة حالياً في هذه الفئة.');
             }
             
@@ -286,8 +283,10 @@ export default function FavoritesPage() {
             const commission = Math.ceil(categoryPrice * 0.10);
             const payoutAmount = categoryPrice - commission;
 
+            // دمج خصم الرصيد مع حذف الكرت من المخزون في معاملة ذرية واحدة (Batch)
             const batch = writeBatch(firestore);
-            batch.update(cardToPurchaseDoc.ref, { status: 'sold', soldTo: user.uid, soldTimestamp: now });
+            batch.update(userDocRef, { balance: increment(-effectivePrice) });
+            batch.delete(cardToPurchaseDoc.ref); // حذف الكرت فوراً من مخزون صاحب الشبكة بمجرد شرائه
             batch.set(doc(collection(firestore, `users/${user.uid}/transactions`)), {
                 userId: user.uid, 
                 transactionDate: now, 
@@ -333,6 +332,7 @@ export default function FavoritesPage() {
             }
 
             await batch.commit();
+            purchaseSuccessfullyCommitted = true;
             setPurchasedCard({ cardID: cardData.cardNumber });
             setShowConfirmPurchase(null);
             setSelectedNetwork(null);
@@ -374,6 +374,7 @@ export default function FavoritesPage() {
                 createdAt: now,
             });
             await initBatch.commit();
+            isExternalOrderDeducted = true;
 
             let isHandled = false;
             let timeoutId: any = null;
@@ -400,6 +401,7 @@ export default function FavoritesPage() {
                         errorReason: reason || 'فشل الشراء من المزود'
                     });
                     await refundBatch.commit();
+                    isExternalOrderDeducted = false;
                 } catch (refErr) {
                     console.error("Refund commit error:", refErr);
                 }
@@ -449,6 +451,8 @@ export default function FavoritesPage() {
                         completedAt: new Date().toISOString()
                     });
                     await finishBatch.commit().catch(() => {});
+                    purchaseSuccessfullyCommitted = true;
+                    isExternalOrderDeducted = false;
                 } catch (e) {
                     console.error("Update success error:", e);
                 }
@@ -545,9 +549,11 @@ export default function FavoritesPage() {
         }
     } catch (error: any) {
         console.error("Purchase execution error:", error);
-        if (localBalanceDeducted && userDocRef) {
+        // حماية تامة: لا يتم استرجاع الرصيد إطلاقاً إذا تم تأكيد وحفظ الشراء بنجاح
+        if (!purchaseSuccessfullyCommitted && isExternalOrderDeducted && userDocRef) {
             try {
                 await updateDoc(userDocRef, { balance: increment(effectivePrice) });
+                isExternalOrderDeducted = false;
             } catch (refErr) {
                 console.error("Refund failed:", refErr);
             }

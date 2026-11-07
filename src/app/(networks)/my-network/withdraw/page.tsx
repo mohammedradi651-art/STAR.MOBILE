@@ -21,7 +21,7 @@ import {
     Smartphone
 } from 'lucide-react';
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection, addDocumentNonBlocking } from '@/firebase';
-import { doc, collection, writeBatch, query, where } from 'firebase/firestore';
+import { doc, collection, writeBatch, query, where, increment } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
@@ -121,7 +121,15 @@ export default function WithdrawPage() {
 
         setIsProcessing(true);
 
+        const now = new Date().toISOString();
+        const requestDocRef = doc(collection(firestore, 'withdrawalRequests'));
+        const txDocRef = doc(collection(firestore, `users/${user.uid}/transactions`));
+
+        const txNotes = `سحب إلى: ${selectedMethod.name} | رقم الحساب: ${accountNumber} | المستلم: ${recipientName}`;
+
         const requestData = {
+            id: requestDocRef.id,
+            transactionId: txDocRef.id,
             ownerId: user.uid,
             ownerName: userProfile.displayName,
             ownerPhoneNumber: userProfile.phoneNumber,
@@ -131,12 +139,39 @@ export default function WithdrawPage() {
             recipientName,
             accountNumber,
             status: 'pending',
-            requestTimestamp: new Date().toISOString()
+            readiness: 'قيد الانتظار',
+            balanceDeducted: true,
+            requestTimestamp: now,
+            createdAt: now
+        };
+
+        const txData = {
+            id: txDocRef.id,
+            requestId: requestDocRef.id,
+            userId: user.uid,
+            transactionDate: now,
+            createdAt: now,
+            amount: numericAmount,
+            transactionType: 'سحب رصيد الشبكة',
+            notes: txNotes,
+            status: 'pending',
+            readiness: 'قيد الانتظار',
+            paymentMethod: selectedMethod.name,
+            accountNumber,
+            recipientName,
+            refunded: false
         };
 
         try {
-            const requestsCollection = collection(firestore, 'withdrawalRequests');
-            await addDocumentNonBlocking(requestsCollection, requestData);
+            const batch = writeBatch(firestore);
+            // 1. خصم الرصيد فوراً من حساب مالك الشبكة
+            batch.update(userDocRef, { balance: increment(-numericAmount) });
+            // 2. تسجيل المعاملة في كشف حسابه بحالة قيد الانتظار
+            batch.set(txDocRef, txData);
+            // 3. إرسال طلب السحب للإدارة مع ربطه بالمعاملة
+            batch.set(requestDocRef, requestData);
+
+            await batch.commit();
 
             setShowSuccess(true);
             audioRef.current?.play().catch(() => {});
@@ -195,7 +230,7 @@ export default function WithdrawPage() {
     return (
         <div className="flex flex-col h-full bg-[#F8FAFC] dark:bg-slate-950">
             {isProcessing && <ProcessingOverlay message="جاري إرسال طلبك..." />}
-            <SimpleHeader title="سحب الأرباح" />
+            <SimpleHeader title="سحب الرصيد" />
             
             <div className="flex-1 overflow-y-auto pb-32 no-scrollbar">
                 {/* Hero Section */}
@@ -206,7 +241,7 @@ export default function WithdrawPage() {
                             <ArrowUpFromLine className="h-8 w-8 text-white" />
                         </div>
                         <div className="space-y-1">
-                            <h2 className="text-2xl font-black text-white tracking-tight">تحويل أرباحك</h2>
+                            <h2 className="text-2xl font-black text-white tracking-tight">سحب الرصيد</h2>
                             <p className="text-[10px] text-white/80 font-bold uppercase tracking-[0.2em]">اسحب رصيدك المتوفر إلى حسابك البنكي</p>
                         </div>
                     </div>
@@ -217,7 +252,7 @@ export default function WithdrawPage() {
                     <Card className="overflow-hidden rounded-[32px] shadow-xl border-none bg-white dark:bg-slate-900 -mt-16 relative z-10 mx-2">
                         <CardContent className="p-6 flex items-center justify-between">
                             <div className="text-right">
-                                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">إجمالي الأرباح المتاحة</p>
+                                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">إجمالي الرصيد المتاح</p>
                                 <div className="flex items-baseline gap-1">
                                     <h2 className="text-3xl font-black text-primary">
                                         {isLoading ? <Skeleton className="h-8 w-24 rounded-lg" /> : userBalance.toLocaleString('en-US')}
@@ -311,7 +346,7 @@ export default function WithdrawPage() {
                                             type="tel"
                                             value={accountNumber} 
                                             onChange={e => setAccountNumber(e.target.value)} 
-                                            placeholder="أدخل رقم الحساب أو الجوال" 
+                                            placeholder="أدخل رقم الحساب" 
                                             className="h-12 bg-muted/20 border border-primary/5 rounded-2xl pr-11 text-right font-bold font-mono tracking-wider focus-visible:ring-0 focus-visible:border-primary/40 transition-colors"
                                         />
                                         <Building className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60 group-focus-within:text-primary transition-colors" />

@@ -357,24 +357,20 @@ export default function CombinedNetworksPage() {
         return;
     }
 
-    let localBalanceDeducted = false;
+    let purchaseSuccessfullyCommitted = false;
+    let isExternalOrderDeducted = false;
+
     try {
         const now = new Date().toISOString();
         let finalCardID = '';
 
         if (selectedNetwork.isLocal) {
-            // 1. الشبكات المحلية: خصم المبلغ فوراً لحمايته في حال انقطاع النت
-            await updateDoc(userDocRef, { balance: increment(-effectivePrice) });
-            localBalanceDeducted = true;
-
+            // 1. الشبكات المحلية: التحقق من توفر الكروت أولاً قبل أي خصم
             const cardsRef = collection(firestore, `networks/${selectedNetwork.id}/cards`);
             const q = query(cardsRef, where('categoryId', '==', selectedCategory.id), where('status', '==', 'available'), firestoreLimit(1));
             const availableCardsSnapshot = await getDocs(q);
 
             if (availableCardsSnapshot.empty) {
-                // استرجاع المبلغ فوراً لعدم توفر كروت
-                await updateDoc(userDocRef, { balance: increment(effectivePrice) });
-                localBalanceDeducted = false;
                 throw new Error('لا توجد كروت متاحة حالياً في هذه الفئة.');
             }
             
@@ -386,8 +382,10 @@ export default function CombinedNetworksPage() {
             const payoutAmount = selectedCategory.price - commission;
             const ownerId = selectedNetwork.ownerId || 'admin';
 
+            // دمج خصم الرصيد مع حذف الكرت من المخزون في معاملة ذرية واحدة (Batch)
             const batch = writeBatch(firestore);
-            batch.update(cardToPurchaseDoc.ref, { status: 'sold', soldTo: user.uid, soldTimestamp: now });
+            batch.update(userDocRef, { balance: increment(-effectivePrice) });
+            batch.delete(cardToPurchaseDoc.ref); // حذف الكرت فوراً من مخزون صاحب الشبكة بمجرد شرائه
             batch.set(doc(collection(firestore, `users/${user.uid}/transactions`)), {
                 userId: user.uid, 
                 transactionDate: now, 
@@ -433,6 +431,7 @@ export default function CombinedNetworksPage() {
             }
 
             await batch.commit();
+            purchaseSuccessfullyCommitted = true;
             setPurchasedCard({ cardID: cardData.cardNumber });
             setShowConfirmPurchase(null);
             setSelectedNetwork(null);
@@ -474,6 +473,7 @@ export default function CombinedNetworksPage() {
                 createdAt: now,
             });
             await initBatch.commit();
+            isExternalOrderDeducted = true;
 
             let isHandled = false;
             let timeoutId: any = null;
@@ -500,6 +500,7 @@ export default function CombinedNetworksPage() {
                         errorReason: reason || 'فشل الشراء من المزود'
                     });
                     await refundBatch.commit();
+                    isExternalOrderDeducted = false;
                 } catch (refErr) {
                     console.error("Refund commit error:", refErr);
                 }
@@ -549,6 +550,8 @@ export default function CombinedNetworksPage() {
                         completedAt: new Date().toISOString()
                     });
                     await finishBatch.commit().catch(() => {});
+                    purchaseSuccessfullyCommitted = true;
+                    isExternalOrderDeducted = false;
                 } catch (e) {
                     console.error("Update success error:", e);
                 }
@@ -638,10 +641,11 @@ export default function CombinedNetworksPage() {
         }
     } catch (error: any) {
         console.error("Purchase execution error:", error);
-        // استرجاع الرصيد في حال حدوث أي خطأ استثنائي
-        if (userDocRef) {
+        // حماية تامة: لا يتم استرجاع الرصيد إطلاقاً إذا تم تأكيد وحفظ الشراء بنجاح
+        if (!purchaseSuccessfullyCommitted && isExternalOrderDeducted && userDocRef) {
             try {
                 await updateDoc(userDocRef, { balance: increment(effectivePrice) });
+                isExternalOrderDeducted = false;
             } catch (refErr) {
                 console.error("Failed to refund on error:", refErr);
             }
