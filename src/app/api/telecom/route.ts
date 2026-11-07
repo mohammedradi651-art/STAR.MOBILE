@@ -364,6 +364,8 @@ export async function POST(request: Request) {
         const telecomDetails = resolveTelecomDetails({ ...body, amount: requiredCost });
         const finalRecipientPhone = telecomDetails.recipientPhoneNumber || targetMobile;
 
+        const clientBackUrl = payload.backurl ? String(payload.backurl).trim() : null;
+
         const txRecord = {
           id: transid,
           userId: clientUserId,
@@ -379,7 +381,8 @@ export async function POST(request: Request) {
           status: 'pending',
           readiness: 'قيد الانتظار',
           refunded: false,
-          serviceCategory: telecomDetails.serviceName || service || 'اتصالات'
+          serviceCategory: telecomDetails.serviceName || service || 'اتصالات',
+          clientBackUrl: clientBackUrl
         };
 
         batch.set(clientTxRef, txRecord);
@@ -1179,6 +1182,10 @@ async function markSuccessInDb(firestore: any, userId: string, transid: string, 
   try {
     const userTxRef = doc(firestore, `users/${userId}/transactions`, transid);
     const globalTxRef = doc(firestore, 'paymentTransactions', transid);
+    const snap = await getDoc(userTxRef);
+    const clientBackUrl = snap.exists() ? (snap.data()?.clientBackUrl || null) : null;
+    const txData = snap.exists() ? snap.data() : null;
+
     const updateData = {
       status: 'success',
       readiness: 'جاهزة',
@@ -1189,6 +1196,24 @@ async function markSuccessInDb(firestore: any, userId: string, transid: string, 
     batch.update(userTxRef, updateData);
     batch.update(globalTxRef, updateData);
     await batch.commit();
+
+    if (clientBackUrl) {
+      try {
+        fetch(clientBackUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'User-Agent': 'StarMobile-Webhook/1.0' },
+          body: JSON.stringify({
+            transid: transid,
+            status: 'success',
+            readiness: 'جاهزة',
+            amount: txData?.amount || 0,
+            mobile: txData?.recipientPhoneNumber || txData?.phoneNumber,
+            service: txData?.transactionType || 'سداد',
+            message: message || 'تم تنفيذ العملية بنجاح'
+          })
+        }).catch(() => {});
+      } catch (_) {}
+    }
   } catch (e) {
     console.error("Failed to update transaction to success:", e);
   }
@@ -1212,6 +1237,8 @@ async function refundUser(firestore: any, userId: string, transid: string, amoun
     const currentNotes = snap.exists() ? (snap.data()?.notes || '') : '';
     const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
     const updatedNotes = cleanNotes ? `${cleanNotes}\nسبب الرفض: ${reason}` : `سبب الرفض: ${reason}`;
+    const clientBackUrl = snap.exists() ? (snap.data()?.clientBackUrl || null) : null;
+    const txData = snap.exists() ? snap.data() : null;
 
     const updateData: any = {
       status: 'failed',
@@ -1230,6 +1257,25 @@ async function refundUser(firestore: any, userId: string, transid: string, amoun
     batch.update(userTxRef, updateData);
     batch.update(globalTxRef, updateData);
     await batch.commit();
+
+    if (clientBackUrl) {
+      try {
+        fetch(clientBackUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'User-Agent': 'StarMobile-Webhook/1.0' },
+          body: JSON.stringify({
+            transid: transid,
+            status: 'failed',
+            readiness: 'فاشلة',
+            amount: txData?.amount || amount,
+            mobile: txData?.recipientPhoneNumber || txData?.phoneNumber,
+            service: txData?.transactionType || 'سداد',
+            refunded: true,
+            message: reason
+          })
+        }).catch(() => {});
+      } catch (_) {}
+    }
   } catch (e) {
     console.error("Failed to refund user in API route:", e);
   }
