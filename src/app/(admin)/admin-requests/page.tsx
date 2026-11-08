@@ -41,7 +41,8 @@ import {
   MapPin, 
   CheckCircle2, 
   Building,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { useToast } from '@/hooks/use-toast';
@@ -106,6 +107,28 @@ type WithdrawalRequest = {
   rejectedAt?: string;
 };
 
+type DepositRequest = {
+  id: string;
+  transactionId?: string;
+  userId: string;
+  userName: string;
+  userPhone: string;
+  bank: 'alomqy' | 'kuraimi' | 'amjad';
+  bankName: string;
+  account?: string;
+  reference?: string;
+  refOrAccount: string;
+  amount: number;
+  status: 'pending' | 'approved' | 'rejected';
+  readiness: 'قيد الانتظار' | 'جاهزة' | 'فاشلة';
+  methodName?: string;
+  rejectReason?: string;
+  createdAt: string;
+  timestamp: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+};
+
 const SafeFormatDate = (dateStr?: string) => {
   if (!dateStr) return '...';
   try {
@@ -126,7 +149,7 @@ export default function AdminRequestsPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  const [activeMainTab, setActiveMainTab] = useState<'electricity' | 'water' | 'withdrawals'>('electricity');
+  const [activeMainTab, setActiveMainTab] = useState<'electricity' | 'water' | 'withdrawals' | 'deposits'>('electricity');
 
   // --- 1. ELECTRICITY DATA ---
   const electQuery = useMemoFirebase(
@@ -178,6 +201,24 @@ export default function AdminRequestsPage() {
     withRequests?.forEach(r => (r.status === 'pending' ? active.push(r) : archived.push(r)));
     return { activeWith: active, archivedWith: archived };
   }, [withRequests]);
+
+  // --- 4. DEPOSITS DATA ---
+  const depQuery = useMemoFirebase(
+    () => (firestore ? query(collection(firestore, 'depositRequests'), orderBy('createdAt', 'desc'), limit(100)) : null),
+    [firestore]
+  );
+  const { data: depRequests, isLoading: isLoadingDep } = useCollection<DepositRequest>(depQuery);
+  const [selectedDep, setSelectedDep] = useState<DepositRequest | null>(null);
+  const [depAction, setDepAction] = useState<'approve' | 'reject' | null>(null);
+  const [depRejectNote, setDepRejectNote] = useState('');
+  const [isProcessingDep, setIsProcessingDep] = useState(false);
+
+  const { activeDep, archivedDep } = useMemo(() => {
+    const active: DepositRequest[] = [];
+    const archived: DepositRequest[] = [];
+    depRequests?.forEach(r => (r.status === 'pending' ? active.push(r) : archived.push(r)));
+    return { activeDep: active, archivedDep: archived };
+  }, [depRequests]);
 
   // --- HANDLERS: ELECTRICITY ---
   const handleElectComplete = async (reqId: string) => {
@@ -364,26 +405,116 @@ export default function AdminRequestsPage() {
     }
   };
 
+  // --- HANDLERS: DEPOSITS ---
+  const handleDepActionConfirm = async () => {
+    if (!selectedDep || !depAction || !firestore) return;
+    setIsProcessingDep(true);
+    try {
+      const now = new Date().toISOString();
+      const batch = writeBatch(firestore);
+
+      if (depAction === 'approve') {
+        const userRef = doc(firestore, 'users', selectedDep.userId);
+        batch.update(userRef, { balance: increment(selectedDep.amount) });
+
+        const depRef = doc(firestore, 'depositRequests', selectedDep.id);
+        batch.update(depRef, {
+          status: 'approved',
+          readiness: 'جاهزة',
+          approvedAt: now
+        });
+
+        if (selectedDep.transactionId) {
+          const txRef = doc(firestore, `users/${selectedDep.userId}/transactions`, selectedDep.transactionId);
+          batch.update(txRef, {
+            status: 'success',
+            readiness: 'جاهزة',
+            completedAt: now,
+            notes: `تم تأكيد الإيداع وإضافة مبلغ ${selectedDep.amount.toLocaleString()} ر.ي إلى محفظتك بنجاح.`
+          });
+        }
+
+        const notifRef = doc(collection(firestore, `users/${selectedDep.userId}/notifications`));
+        batch.set(notifRef, {
+          id: notifRef.id,
+          title: 'تم شحن رصيدك بنجاح ✅',
+          body: `تمت الموافقة على طلب إيداعك بمبلغ ${selectedDep.amount.toLocaleString()} ر.ي عبر ${selectedDep.bankName}. الرصيد متاح في محفظتك الآن.`,
+          type: 'deposit_approved',
+          read: false,
+          createdAt: now,
+          timestamp: now
+        });
+      } else {
+        const failReason = depRejectNote.trim() || 'لم يتم العثور على إيداع مطابق في البنك';
+        const depRef = doc(firestore, 'depositRequests', selectedDep.id);
+        batch.update(depRef, {
+          status: 'rejected',
+          readiness: 'فاشلة',
+          rejectReason: failReason,
+          rejectedAt: now
+        });
+
+        if (selectedDep.transactionId) {
+          const txRef = doc(firestore, `users/${selectedDep.userId}/transactions`, selectedDep.transactionId);
+          batch.update(txRef, {
+            status: 'failed',
+            readiness: 'فاشلة',
+            rejectReason: failReason,
+            providerMessage: failReason,
+            failedAt: now,
+            notes: `تم رفض طلب الإيداع. السبب: ${failReason}`
+          });
+        }
+
+        const notifRef = doc(collection(firestore, `users/${selectedDep.userId}/notifications`));
+        batch.set(notifRef, {
+          id: notifRef.id,
+          title: 'تعذر قبول طلب التغذية ❌',
+          body: `تم رفض طلب تغذية رصيدك بمبلغ ${selectedDep.amount.toLocaleString()} ر.ي. السبب: ${failReason}`,
+          type: 'deposit_rejected',
+          read: false,
+          createdAt: now,
+          timestamp: now
+        });
+      }
+
+      await batch.commit();
+      toast({
+        title: depAction === 'approve' ? 'تمت الموافقة بنجاح 🎉' : 'تم رفض الطلب',
+        description: depAction === 'approve'
+          ? `تم شحن ${selectedDep.amount.toLocaleString()} ر.ي لحساب ${selectedDep.userName || selectedDep.userPhone}.`
+          : 'تم تحديث حالة العملية للمستخدم وحفظ سبب الرفض.'
+      });
+      setDepAction(null);
+      setSelectedDep(null);
+      setDepRejectNote('');
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'خطأ', description: e.message || 'فشلت العملية.' });
+    } finally {
+      setIsProcessingDep(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-background">
       <SimpleHeader title="الطلبات" />
 
-      {/* الرأس: التبويبات الثلاثة الرئيسية */}
+      {/* الرأس: التبويبات الرئيسية الأربعة */}
       <div className="p-3 bg-card border-b">
-        <div className="grid grid-cols-3 gap-2 bg-muted/60 p-1.5 rounded-2xl">
+        <div className="grid grid-cols-4 gap-1.5 bg-muted/60 p-1 rounded-2xl">
           <button
             onClick={() => setActiveMainTab('electricity')}
             className={cn(
-              "flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-black text-xs transition-all relative",
+              "flex flex-col sm:flex-row items-center justify-center gap-1 py-2 rounded-xl font-black text-[11px] transition-all relative",
               activeMainTab === 'electricity' 
                 ? "bg-amber-500 text-white shadow-md scale-[1.02]" 
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
-            <Zap className="h-4 w-4" />
+            <Zap className="h-3.5 w-3.5" />
             <span>الكهرباء</span>
             {activeElect.length > 0 && (
-              <span className="absolute -top-1.5 -right-1 bg-destructive text-white text-[9px] font-black h-4 w-4 rounded-full flex items-center justify-center border border-white">
+              <span className="absolute -top-1 -right-1 bg-destructive text-white text-[8px] font-black h-4 w-4 rounded-full flex items-center justify-center border border-white">
                 {activeElect.length}
               </span>
             )}
@@ -392,16 +523,16 @@ export default function AdminRequestsPage() {
           <button
             onClick={() => setActiveMainTab('water')}
             className={cn(
-              "flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-black text-xs transition-all relative",
+              "flex flex-col sm:flex-row items-center justify-center gap-1 py-2 rounded-xl font-black text-[11px] transition-all relative",
               activeMainTab === 'water' 
                 ? "bg-blue-600 text-white shadow-md scale-[1.02]" 
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
-            <Droplets className="h-4 w-4" />
+            <Droplets className="h-3.5 w-3.5" />
             <span>الماء</span>
             {activeWater.length > 0 && (
-              <span className="absolute -top-1.5 -right-1 bg-destructive text-white text-[9px] font-black h-4 w-4 rounded-full flex items-center justify-center border border-white">
+              <span className="absolute -top-1 -right-1 bg-destructive text-white text-[8px] font-black h-4 w-4 rounded-full flex items-center justify-center border border-white">
                 {activeWater.length}
               </span>
             )}
@@ -410,17 +541,35 @@ export default function AdminRequestsPage() {
           <button
             onClick={() => setActiveMainTab('withdrawals')}
             className={cn(
-              "flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-black text-xs transition-all relative",
+              "flex flex-col sm:flex-row items-center justify-center gap-1 py-2 rounded-xl font-black text-[11px] transition-all relative",
               activeMainTab === 'withdrawals' 
                 ? "bg-[#0048ad] text-white shadow-md scale-[1.02]" 
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
-            <Banknote className="h-4 w-4" />
+            <Banknote className="h-3.5 w-3.5" />
             <span>السحب</span>
             {activeWith.length > 0 && (
-              <span className="absolute -top-1.5 -right-1 bg-destructive text-white text-[9px] font-black h-4 w-4 rounded-full flex items-center justify-center border border-white">
+              <span className="absolute -top-1 -right-1 bg-destructive text-white text-[8px] font-black h-4 w-4 rounded-full flex items-center justify-center border border-white">
                 {activeWith.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveMainTab('deposits')}
+            className={cn(
+              "flex flex-col sm:flex-row items-center justify-center gap-1 py-2 rounded-xl font-black text-[11px] transition-all relative",
+              activeMainTab === 'deposits' 
+                ? "bg-emerald-600 text-white shadow-md scale-[1.02]" 
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Wallet className="h-3.5 w-3.5" />
+            <span>الإيداعات</span>
+            {activeDep.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[8px] font-black h-4 w-4 rounded-full flex items-center justify-center border border-white animate-pulse">
+                {activeDep.length}
               </span>
             )}
           </button>
@@ -580,6 +729,61 @@ export default function AdminRequestsPage() {
                         <div className="text-right">
                           <p className="font-black text-sm">{req.ownerName || 'مالك شبكة'}</p>
                           <p className="text-[10px] text-muted-foreground">{req.paymentMethodName}</p>
+                        </div>
+                      </div>
+                      <Badge className={cn("text-[10px] font-black", req.status === 'approved' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
+                        {req.status === 'approved' ? 'مقبول' : 'مرفوض'}
+                      </Badge>
+                    </CardContent>
+                  </Card>
+                ))}
+              </TabsContent>
+            </div>
+          </Tabs>
+        )}
+
+        {/* --- 4. تبويب الإيداعات والتغذية --- */}
+        {activeMainTab === 'deposits' && (
+          <Tabs defaultValue="active" className="w-full flex flex-col">
+            <TabsList className="grid w-full grid-cols-2 rounded-none bg-muted/30 border-b">
+              <TabsTrigger value="active" className="font-bold text-xs">طلبات حالية ({activeDep.length})</TabsTrigger>
+              <TabsTrigger value="archived" className="font-bold text-xs">الأرشيف ({archivedDep.length})</TabsTrigger>
+            </TabsList>
+            <div className="p-4">
+              <TabsContent value="active" className="space-y-3 mt-0">
+                {isLoadingDep ? (
+                  [1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)
+                ) : activeDep.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-16 text-xs font-bold">لا توجد طلبات تغذية معلقة حالياً.</p>
+                ) : (
+                  activeDep.map(req => (
+                    <Card key={req.id} className="cursor-pointer hover:bg-muted/30 transition-all rounded-[24px] border-none shadow-sm" onClick={() => setSelectedDep(req)}>
+                      <CardContent className="p-4 flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 bg-emerald-500/10 rounded-xl"><Wallet className="h-5 w-5 text-emerald-600" /></div>
+                          <div className="text-right">
+                            <p className="font-black text-sm">{req.userName || 'عميل'}</p>
+                            <p className="text-[10px] text-muted-foreground font-bold">{req.bankName} - {req.refOrAccount}</p>
+                          </div>
+                        </div>
+                        <div className="text-left">
+                          <p className="font-black text-emerald-600 text-sm">{Number(req.amount || 0).toLocaleString()} ر.ي</p>
+                          <p className="text-[9px] text-muted-foreground">{SafeFormatDate(req.createdAt || req.timestamp)}</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </TabsContent>
+              <TabsContent value="archived" className="space-y-3 mt-0">
+                {archivedDep.map(req => (
+                  <Card key={req.id} className="opacity-70 rounded-[24px] border-none shadow-sm cursor-pointer" onClick={() => setSelectedDep(req)}>
+                    <CardContent className="p-4 flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-muted rounded-xl"><Archive className="h-5 w-5 text-muted-foreground" /></div>
+                        <div className="text-right">
+                          <p className="font-black text-sm">{req.userName || 'عميل'}</p>
+                          <p className="text-[10px] text-muted-foreground">{req.bankName} - {req.refOrAccount}</p>
                         </div>
                       </div>
                       <Badge className={cn("text-[10px] font-black", req.status === 'approved' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
@@ -784,6 +988,87 @@ export default function AdminRequestsPage() {
               onClick={handleWithActionConfirm}
             >
               {withAction === 'approve' ? 'تأكيد القبول' : 'تأكيد الرفض'}
+            </AlertDialogAction>
+            <AlertDialogCancel className="rounded-2xl h-11 font-black">إلغاء</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* --- MODAL: DEPOSIT DETAILS --- */}
+      <Dialog open={!!selectedDep} onOpenChange={(open) => !open && setSelectedDep(null)}>
+        <DialogContent className="max-w-sm rounded-[32px] overflow-hidden p-0 border-none shadow-2xl bg-card">
+          <div className="bg-emerald-600 p-6 text-center text-white">
+            <DialogHeader>
+              <DialogTitle className="text-white text-center font-black text-lg">تفاصيل طلب التغذية</DialogTitle>
+              <DialogDescription className="text-white/80 text-center text-xs">مراجعة بيانات إيداع العميل</DialogDescription>
+            </DialogHeader>
+          </div>
+          {selectedDep && (
+            <div className="p-6 space-y-4">
+              <div className="space-y-1">
+                <InfoRow icon={User} label="اسم العميل" value={selectedDep.userName || 'عميل'} />
+                <InfoRow icon={Phone} label="رقم الهاتف" value={selectedDep.userPhone || 'غير متوفر'} />
+                <hr className="my-2 border-dashed" />
+                <InfoRow icon={Building} label="البنك المستلم" value={selectedDep.bankName} />
+                <InfoRow icon={Hash} label="رقم الحساب / المرجع" value={selectedDep.refOrAccount} />
+                <div className="flex justify-between items-center py-2.5 bg-muted/60 rounded-xl px-3 mt-2">
+                  <span className="font-black text-xs">المبلغ المطلوب:</span>
+                  <span className="font-black text-emerald-600 text-base">{Number(selectedDep.amount || 0).toLocaleString()} ر.ي</span>
+                </div>
+                {selectedDep.rejectReason && (
+                  <div className="bg-red-500/10 p-2.5 rounded-xl text-xs text-red-600 font-bold border border-red-500/20 mt-2">
+                    سبب الرفض: {selectedDep.rejectReason}
+                  </div>
+                )}
+              </div>
+              {selectedDep.status === 'pending' ? (
+                <div className="grid grid-cols-2 gap-3 pt-3">
+                  <Button variant="destructive" className="rounded-2xl h-11 font-black" onClick={() => setDepAction('reject')}>
+                    <X className="ml-1.5 h-4 w-4" /> رفض
+                  </Button>
+                  <Button className="rounded-2xl h-11 font-black bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setDepAction('approve')}>
+                    <Check className="ml-1.5 h-4 w-4" /> موافق وشحن
+                  </Button>
+                </div>
+              ) : (
+                <DialogClose asChild><Button variant="outline" className="w-full rounded-2xl h-11 font-black">إغلاق</Button></DialogClose>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* --- ALERT: DEPOSIT ACTION --- */}
+      <AlertDialog open={!!depAction} onOpenChange={(open) => !open && setDepAction(null)}>
+        <AlertDialogContent className="rounded-[32px] max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-center font-black">
+              {depAction === 'approve' ? 'تأكيد قبول طلب التغذية' : 'رفض طلب التغذية'}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-center text-xs pt-1">
+              {depAction === 'approve' 
+                ? `سيتم إضافة مبلغ ${Number(selectedDep?.amount || 0).toLocaleString()} ريال فوراً لحساب العميل.`
+                : 'يرجى كتابة سبب الرفض ليظهر للعميل في كشف حسابه:'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {depAction === 'reject' && (
+            <div className="py-2 space-y-1.5">
+              <Label className="text-[10px] font-black">سبب الرفض</Label>
+              <Textarea 
+                placeholder="اكتب سبب الرفض (مثال: لم نجد إشعار الإيداع في البنك)..." 
+                value={depRejectNote} 
+                onChange={(e) => setDepRejectNote(e.target.value)} 
+                className="rounded-2xl bg-muted/30 border-none text-xs" 
+              />
+            </div>
+          )}
+          <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-3">
+            <AlertDialogAction 
+              className={cn("rounded-2xl h-11 font-black", depAction === 'approve' ? "bg-emerald-600 hover:bg-emerald-700" : "bg-destructive hover:bg-destructive/90")}
+              onClick={handleDepActionConfirm}
+              disabled={isProcessingDep}
+            >
+              {isProcessingDep ? <Loader2 className="animate-spin h-4 w-4" /> : depAction === 'approve' ? 'تأكيد الشحن' : 'تأكيد الرفض'}
             </AlertDialogAction>
             <AlertDialogCancel className="rounded-2xl h-11 font-black">إلغاء</AlertDialogCancel>
           </AlertDialogFooter>

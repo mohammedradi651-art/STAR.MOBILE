@@ -73,6 +73,8 @@ type Transaction = {
   transid?: string;
   providerMessage?: string;
   accountNumber?: string;
+  phoneNumber?: string;
+  clientBackUrl?: string;
 };
 
 const getTransactionIcon = (type: string) => {
@@ -728,25 +730,6 @@ function UserReportPage() {
       batch.delete(globalTxRef);
 
       await batch.commit();
-
-      if (statusTargetTx.clientBackUrl) {
-        try {
-          fetch(statusTargetTx.clientBackUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'User-Agent': 'StarMobile-Webhook/1.0' },
-            body: JSON.stringify({
-              transid: transid,
-              status: targetStatus === 'success' ? 'success' : 'failed',
-              readiness: targetStatus === 'success' ? 'جاهزة' : 'فاشلة',
-              amount: amount,
-              mobile: statusTargetTx.recipientPhoneNumber || statusTargetTx.phoneNumber,
-              service: statusTargetTx.transactionType,
-              refunded: targetStatus !== 'success',
-              message: statusNote.trim() || (targetStatus === 'success' ? 'تم تأكيد العملية من الإدارة' : 'تم رفض العملية من الإدارة')
-            })
-          }).catch(() => {});
-        } catch (_) {}
-      }
 
       toast({
         title: 'تم حذف العملية بنجاح',

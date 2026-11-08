@@ -13,7 +13,8 @@ import {
     Loader2,
     CheckCircle,
     Zap,
-    Smartphone
+    Smartphone,
+    Clock
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -171,13 +172,65 @@ export default function TopUpPage() {
             const querySnapshot = await getDocs(q);
 
             if (querySnapshot.empty) {
-                toast({ 
-                    variant: 'destructive', 
-                    title: 'لم يتم العثور على الإيداع', 
-                    description: bankType === 'amjad' 
-                        ? 'عذراً، لم نجد حوالة مطابقة لاسمك ومبلغك في النظام. تأكد من كتابة اسمك الرباعي الصحيح في ملفك الشخصي.'
-                        : 'نعتذر، لم يتم العثور على إيصال مطابق للعملية في النظام.' 
+                // في حال لم يتوفر إشعار آلي فوري، يتم تحويل الطلب تلقائياً إلى "قيد الانتظار" للإدارة وعرض شاشة الإشعار للعميل
+                const now = new Date().toISOString();
+                const bankNameArabic = bankType === 'alomqy' ? 'العمقي (المشقاص)' : bankType === 'kuraimi' ? 'الكريمي' : 'بنك أمجاد';
+                const refOrAccount = bankType === 'alomqy' ? alomqyAccount.trim() : bankType === 'kuraimi' ? kuraimiReference.trim() : (userProfile.displayName || 'مطابقة بالاسم');
+
+                const depositReqRef = doc(collection(firestore, 'depositRequests'));
+                const txRef = doc(collection(firestore, `users/${userProfile.id}/transactions`));
+
+                const pendingTxNotes = `طلب تغذية حساب قيد المراجعة. ${bankType === 'alomqy' ? `رقم الحساب: ${alomqyAccount.trim()}` : bankType === 'kuraimi' ? `رقم المرجع: ${kuraimiReference.trim()}` : `المودع: ${userProfile.displayName}`}`;
+
+                const depositReqData = {
+                    id: depositReqRef.id,
+                    transactionId: txRef.id,
+                    userId: userProfile.id,
+                    userName: userProfile.displayName || '',
+                    userPhone: userProfile.phoneNumber || '',
+                    bank: bankType,
+                    bankName: bankNameArabic,
+                    account: bankType === 'alomqy' ? alomqyAccount.trim() : '',
+                    reference: bankType === 'kuraimi' ? kuraimiReference.trim() : '',
+                    refOrAccount: refOrAccount,
+                    amount: amt,
+                    status: 'pending',
+                    readiness: 'قيد الانتظار',
+                    methodName: selectedMethod?.name || bankNameArabic,
+                    createdAt: now,
+                    timestamp: now
+                };
+
+                const txData = {
+                    id: txRef.id,
+                    depositRequestId: depositReqRef.id,
+                    userId: userProfile.id,
+                    transactionDate: now,
+                    createdAt: now,
+                    amount: amt,
+                    transactionType: `تغذية رصيد - ${bankNameArabic}`,
+                    notes: pendingTxNotes,
+                    status: 'pending',
+                    readiness: 'قيد الانتظار',
+                    bank: bankType,
+                    refOrAccount: refOrAccount
+                };
+
+                const pendingBatch = writeBatch(firestore);
+                pendingBatch.set(depositReqRef, depositReqData);
+                pendingBatch.set(txRef, txData);
+                await pendingBatch.commit();
+
+                setLastTxDetails({
+                    account: refOrAccount,
+                    amount: amt,
+                    date: now,
+                    bank: bankType,
+                    bankName: bankNameArabic,
+                    isPending: true
                 });
+                setShowSuccess(true);
+                audioRef.current?.play().catch(() => {});
             } else {
                 const notifDoc = querySnapshot.docs[0];
                 const notifData = notifDoc.data();
@@ -195,7 +248,8 @@ export default function TopUpPage() {
                     amount: notifData.amount,
                     transactionType: `تغذية آلي - ${bankType === 'alomqy' ? 'المشقاص' : bankType === 'kuraimi' ? 'الكريمي' : 'بنك أمجاد'}`,
                     notes: `مطابقة آلية. الوسيلة: ${selectedMethod?.name}`,
-                    status: 'success'
+                    status: 'success',
+                    readiness: 'جاهزة'
                 });
 
                 await batch.commit();
@@ -225,7 +279,8 @@ export default function TopUpPage() {
                     account: bankType === 'alomqy' ? alomqyAccount : bankType === 'kuraimi' ? kuraimiReference : 'مطابقة بالاسم',
                     amount: notifData.amount,
                     date: now,
-                    bank: bankType
+                    bank: bankType,
+                    isPending: false
                 });
                 
                 setShowSuccess(true);
@@ -244,36 +299,82 @@ export default function TopUpPage() {
     const isAmjad = methodName.includes('امجاد') || methodName.includes('أمجاد');
 
     if (showSuccess && lastTxDetails) {
+        const isPending = Boolean(lastTxDetails.isPending);
         return (
             <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-black/60 backdrop-blur-3xl animate-in fade-in-0 duration-700">
-                <audio ref={audioRef} src="/ashar.mp3" preload="auto" />
-                <div className="w-full max-w-[320px] text-center space-y-8 animate-in zoom-in-95 duration-500">
+                <audio ref={audioRef} src={isPending ? "/sdad.mp3" : "/ashar.mp3"} preload="auto" />
+                <div className="w-full max-w-[340px] text-center space-y-6 animate-in zoom-in-95 duration-500">
                     <div className="relative mx-auto">
-                        <div className="absolute inset-0 bg-green-500/30 rounded-[40px] blur-3xl" />
-                        <div className="relative w-24 h-24 bg-green-500/20 backdrop-blur-md rounded-[32px] border border-green-500/30 mx-auto flex items-center justify-center shadow-2xl overflow-hidden">
-                            <CheckCircle2 className="h-12 w-12 text-green-400 animate-in zoom-in-50 duration-700" />
+                        <div className={cn(
+                            "absolute inset-0 rounded-[40px] blur-3xl",
+                            isPending ? "bg-amber-500/30" : "bg-green-500/30"
+                        )} />
+                        <div className={cn(
+                            "relative w-24 h-24 backdrop-blur-md rounded-[32px] border mx-auto flex items-center justify-center shadow-2xl overflow-hidden",
+                            isPending ? "bg-amber-500/20 border-amber-500/30" : "bg-green-500/20 border-green-500/30"
+                        )}>
+                            {isPending ? (
+                                <Clock className="h-12 w-12 text-amber-400 animate-in zoom-in-50 duration-700" />
+                            ) : (
+                                <CheckCircle2 className="h-12 w-12 text-green-400 animate-in zoom-in-50 duration-700" />
+                            )}
                         </div>
                     </div>
 
                     <div className="space-y-3">
-                        <h2 className="text-2xl font-black text-white drop-shadow-md">تم الشحن بنجاح</h2>
-                        <div className="bg-green-500/10 backdrop-blur-md py-4 px-6 rounded-[28px] border border-green-500/20 shadow-inner">
-                            <p className="text-green-200/70 text-[10px] font-black uppercase tracking-widest mb-1">المبلغ المضاف</p>
-                            <p className="text-3xl font-black text-green-400 tracking-tighter">
-                                {lastTxDetails.amount.toLocaleString()} <span className="text-sm font-bold text-green-400/60">ر.ي</span>
+                        <h2 className="text-2xl font-black text-white drop-shadow-md">
+                            {isPending ? "تم إرسال الطلب" : "تم الشحن بنجاح"}
+                        </h2>
+
+                        <div className={cn(
+                            "backdrop-blur-md py-4 px-6 rounded-[28px] border shadow-inner space-y-2",
+                            isPending ? "bg-amber-500/10 border-amber-500/20" : "bg-green-500/10 border-green-500/20"
+                        )}>
+                            <p className={cn(
+                                "text-[10px] font-black uppercase tracking-widest",
+                                isPending ? "text-amber-200/70" : "text-green-200/70"
+                            )}>
+                                {isPending ? "المبلغ المطلوب إيداعه" : "المبلغ المضاف"}
                             </p>
+                            <p className={cn(
+                                "text-3xl font-black tracking-tighter",
+                                isPending ? "text-amber-400" : "text-green-400"
+                            )}>
+                                {lastTxDetails.amount.toLocaleString()} <span className={cn("text-sm font-bold", isPending ? "text-amber-400/60" : "text-green-400/60")}>ر.ي</span>
+                            </p>
+                            {isPending && (
+                                <div className="pt-2 border-t border-amber-500/20 text-xs font-bold text-amber-300/90 flex justify-between items-center">
+                                    <span>الحالة:</span>
+                                    <span className="bg-amber-500/20 px-2.5 py-0.5 rounded-full text-amber-300 font-black">قيد الانتظار والمراجعة ⏳</span>
+                                </div>
+                            )}
                         </div>
-                        <p className="text-white/60 text-xs font-bold px-4 leading-relaxed">
-                            تمت إضافة الرصيد إلى محفظتك الإلكترونية بنجاح، يمكنك الآن استخدامه في جميع خدمات ستار موبايل.
+
+                        <p className="text-white/70 text-xs font-bold px-3 leading-relaxed">
+                            {isPending 
+                                ? "تم إرسال طلب التغذية للإدارة بنجاح وهو الآن قيد التدقيق، وسيتم إضافة الرصيد إلى محفظتك فوراً بمجرد تأكيده." 
+                                : "تمت إضافة الرصيد إلى محفظتك الإلكترونية بنجاح، يمكنك الآن استخدامه في جميع خدمات ستار موبايل."}
                         </p>
                     </div>
 
-                    <Button 
-                        className="w-full h-14 rounded-2xl font-black text-lg bg-[#0048ad] text-white shadow-xl shadow-primary/20 active:scale-95 transition-all border-none" 
-                        onClick={() => router.push('/login')}
-                    >
-                        الرئيسية
-                    </Button>
+                    <div className="space-y-2 pt-2">
+                        <Button 
+                            className={cn(
+                                "w-full h-14 rounded-2xl font-black text-lg text-white shadow-xl active:scale-95 transition-all border-none",
+                                isPending ? "bg-amber-600 hover:bg-amber-700 shadow-amber-600/30" : "bg-[#0048ad] hover:bg-[#003c91] shadow-primary/20"
+                            )} 
+                            onClick={() => router.push('/login')}
+                        >
+                            الرئيسية
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            className="w-full h-11 rounded-2xl font-bold text-sm text-white/70 hover:text-white hover:bg-white/10"
+                            onClick={() => router.push('/transactions')}
+                        >
+                            عرض سجل العمليات
+                        </Button>
+                    </div>
                 </div>
             </div>
         );

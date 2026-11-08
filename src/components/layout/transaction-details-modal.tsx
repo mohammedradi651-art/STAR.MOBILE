@@ -152,6 +152,7 @@ function drawModalExactToCanvas(
   canvas: HTMLCanvasElement,
   data: {
     serviceName: string;
+    categoryName?: string;
     phone?: string;
     amount: number;
     refId: string;
@@ -370,6 +371,10 @@ function drawModalExactToCanvas(
 
   drawRow('الخدمة:', data.serviceName, true);
 
+  if (data.categoryName) {
+    drawRow('الصنف:', data.categoryName);
+  }
+
   if (data.isAlwadi && data.subscriberName) {
     drawRow('اسم المشترك:', data.subscriberName, true);
   }
@@ -499,6 +504,45 @@ export function TransactionDetailsModal({
     .replace(/\s*-\s*api/gi, '')
     .trim();
 
+  // تحديد اسم الشركة والصنف بدقة لعمليات الاتصالات والألعاب
+  let companyName = cleanTxType;
+  let categoryName = 'رصيد';
+
+  const txLower = (cleanTxType + ' ' + (transaction.notes || '')).toLowerCase();
+  if (txLower.includes('يمن موبايل') || txLower.includes('موبايل')) {
+    companyName = 'يمن موبايل';
+  } else if (txLower.includes('سبأفون') || txLower.includes('سبافون')) {
+    companyName = 'سبأفون';
+  } else if (txLower.includes('يو') || txLower.includes('you')) {
+    companyName = 'يو';
+  } else if (txLower.includes('واي') || txLower.includes('why') || txLower.includes('way')) {
+    companyName = 'واي';
+  } else if (txLower.includes('فورجي') || txLower.includes('4g')) {
+    companyName = 'يمن فورجي';
+  } else if (txLower.includes('عدن')) {
+    companyName = 'عدن نت';
+  } else if (txLower.includes('هاتف') || txLower.includes('ثابت')) {
+    companyName = 'الهاتف الثابت';
+  } else if (txLower.includes('انترنت') || txLower.includes('أرضي') || txLower.includes('adsl')) {
+    companyName = 'الإنترنت الأرضي';
+  } else if (txLower.includes('ببجي') || txLower.includes('pubg')) {
+    companyName = 'ببجي موبايل';
+  } else if (txLower.includes('فري فاير') || txLower.includes('freefire')) {
+    companyName = 'فري فاير';
+  }
+
+  if (txLower.includes('باقة')) {
+    categoryName = 'تسديد باقة';
+    const pkgMatch = (cleanTxType + ' ' + (transaction.notes || '')).match(/باقة\s*([^\s-]+(?:\s+[^\s-]+){0,3})/);
+    if (pkgMatch && pkgMatch[1]) {
+      categoryName = `تسديد باقة ${pkgMatch[1].trim()}`;
+    }
+  } else if (txLower.includes('شدات')) {
+    categoryName = 'شدات ببجي';
+  } else if (txLower.includes('جواهر')) {
+    categoryName = 'جواهر فري فاير';
+  }
+
   // استخراج سبب الرفض إن وجد
   let cleanProviderReason = '';
   if (transaction.providerMessage) {
@@ -549,7 +593,8 @@ export function TransactionDetailsModal({
       const timeText = safeFormatDate(transaction.transactionDate || transaction.createdAt, 'h:mm:ss a');
 
       drawModalExactToCanvas(canvas, {
-        serviceName: cleanTxType,
+        serviceName: companyName,
+        categoryName: !isAlwadi ? categoryName : undefined,
         phone: phone || undefined,
         amount: transaction.amount,
         refId,
