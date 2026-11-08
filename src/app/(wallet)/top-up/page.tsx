@@ -302,7 +302,7 @@ export default function TopUpPage() {
         const isPending = Boolean(lastTxDetails.isPending);
         return (
             <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-black/60 backdrop-blur-3xl animate-in fade-in-0 duration-700">
-                <audio ref={audioRef} src={isPending ? "/sdad.mp3" : "/ashar.mp3"} preload="auto" />
+                <audio ref={audioRef} src={isPending ? "/sdad.mp3" : "/sdad.mp3"} preload="auto" />
                 <div className="w-full max-w-[340px] text-center space-y-6 animate-in zoom-in-95 duration-500">
                     <div className="relative mx-auto">
                         <div className={cn(
