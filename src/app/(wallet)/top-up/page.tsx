@@ -230,7 +230,9 @@ export default function TopUpPage() {
                     isPending: true
                 });
                 setShowSuccess(true);
-                audioRef.current?.play().catch(() => {});
+                try {
+                    new Audio('/ashar.mp3').play().catch(() => {});
+                } catch (_) {}
             } else {
                 const notifDoc = querySnapshot.docs[0];
                 const notifData = notifDoc.data();
@@ -284,6 +286,9 @@ export default function TopUpPage() {
                 });
                 
                 setShowSuccess(true);
+                try {
+                    new Audio('/ashar.mp3').play().catch(() => {});
+                } catch (_) {}
             }
         } catch (error: any) {
             console.error("Bank Deposit Processing Error:", error);
@@ -302,7 +307,7 @@ export default function TopUpPage() {
         const isPending = Boolean(lastTxDetails.isPending);
         return (
             <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-black/60 backdrop-blur-3xl animate-in fade-in-0 duration-700">
-                <audio ref={audioRef} src={isPending ? "/sdad.mp3" : "/sdad.mp3"} preload="auto" />
+                <audio ref={audioRef} src="/ashar.mp3" preload="auto" autoPlay />
                 <div className="w-full max-w-[340px] text-center space-y-6 animate-in zoom-in-95 duration-500">
                     <div className="relative mx-auto">
                         <div className={cn(
@@ -530,6 +535,7 @@ export default function TopUpPage() {
                     )}
                 </div>
             </div>
+            <audio src="/ashar.mp3" preload="auto" />
             <Toaster />
         </div>
     );
