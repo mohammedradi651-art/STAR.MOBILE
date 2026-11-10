@@ -6,7 +6,8 @@ import {
   validateTelecomRequest, 
   resolveTelecomDetails, 
   generateTransId, 
-  generateBackpass 
+  generateBackpass,
+  fetchYemenMobileSolfa
 } from '@/lib/telecom-order';
 
 /**
@@ -188,26 +189,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // احتساب السعر الدقيق من الربط البرمجي
-    const payAmount = calculateApiTransactionCost(body, systemConfig, effectiveUserData);
-    const clientBalance = Number(effectiveUserData.balance || 0);
-
-    if (clientBalance < payAmount) {
-      return NextResponse.json({
-        success: false,
-        code: 'SM_INSUFFICIENT_BALANCE',
-        message: isAdmin 
-          ? `رصيد العميل ${mobile} غير كافٍ. الرصيد: ${clientBalance} ر.ي، والمطلوب: ${payAmount} ر.ي.`
-          : `رصيد حسابك غير كافٍ لتنفيذ هذه العملية. الرصيد: ${clientBalance} ر.ي، والمطلوب: ${payAmount} ر.ي.`,
-        transactionId: null,
-        data: {
-          currentBalance: clientBalance,
-          requiredCost: payAmount
-        },
-        timestamp
-      }, { status: 400, headers: corsHeaders });
-    }
-
     // تحديد ما إذا كان الطلب خاصاً بباقة
     const isExplicitPackage = 
       action === 'billoffer' || 
@@ -219,6 +200,58 @@ export async function POST(req: Request) {
 
     const effectiveAction = action || (isExplicitPackage ? 'billoffer' : 'bill');
 
+    // فحص ومعالجة السلفة التلقائية لباقات يمن موبايل
+    const sLower = String(service || 'yemen').toLowerCase().trim();
+    const isYemenMobile = sLower === 'yemen' || sLower === 'yem' || sLower === 'offeryem';
+    const isYemenPackage = isYemenMobile && (effectiveAction === 'billoffer' || isExplicitPackage);
+
+    let detectedLoanAmount = parseFloat(String(body.loanAmount ?? body.loan_amount ?? body.solfaAmount ?? body.solfa_amount ?? 0)) || 0;
+    const isSolfaExplicitlyDisabled = body.solfa === 'N' || body.solfa === 'n' || body.solfa === '0' || body.solfa === 0 || body.solfa === false || body.solfa === 'no';
+
+    if (isYemenPackage && !isSolfaExplicitlyDisabled) {
+      if (detectedLoanAmount <= 0) {
+        // فحص حي وسريع للسلفة لنفس الرقم عبر المزود
+        const creds = {
+          apiBaseUrl: systemConfig.telecomApi?.apiBaseUrl,
+          userId: systemConfig.telecomApi?.userId || process.env.TELECOM_USERID,
+          password: systemConfig.telecomApi?.password || process.env.TELECOM_PASSWORD
+        };
+        const solfaResult = await fetchYemenMobileSolfa(mobile, creds);
+        if (solfaResult.isLoan && solfaResult.loanAmount > 0) {
+          detectedLoanAmount = solfaResult.loanAmount;
+          body.solfa = 'Y';
+          body.loanAmount = detectedLoanAmount;
+        } else if (solfaResult.isLoan) {
+          body.solfa = 'Y';
+        }
+      } else {
+        body.solfa = 'Y';
+        body.loanAmount = detectedLoanAmount;
+      }
+    }
+
+    // احتساب السعر الدقيق من الربط البرمجي (شامل الباقة والسلفة إن وجدت)
+    const payAmount = calculateApiTransactionCost(body, systemConfig, effectiveUserData);
+    const clientBalance = Number(effectiveUserData.balance || 0);
+
+    if (clientBalance < payAmount) {
+      const loanInfoMsg = detectedLoanAmount > 0 ? ` (شامل السلفة: ${detectedLoanAmount} ر.ي)` : '';
+      return NextResponse.json({
+        success: false,
+        code: 'SM_INSUFFICIENT_BALANCE',
+        message: isAdmin 
+          ? `رصيد العميل ${mobile} غير كافٍ. الرصيد: ${clientBalance} ر.ي، والمطلوب: ${payAmount} ر.ي${loanInfoMsg}.`
+          : `رصيد حسابك غير كافٍ لتنفيذ هذه العملية${loanInfoMsg}. الرصيد: ${clientBalance} ر.ي، والمطلوب: ${payAmount} ر.ي.`,
+        transactionId: null,
+        data: {
+          currentBalance: clientBalance,
+          requiredCost: payAmount,
+          loanAmount: detectedLoanAmount
+        },
+        timestamp
+      }, { status: 400, headers: corsHeaders });
+    }
+
     // 4. استخراج مسمى الخدمة واسم الباقة بالعربي بدقة وبدون أي ذكر لـ API
     const telecomDetails = resolveTelecomDetails({
       ...body,
@@ -226,7 +259,8 @@ export async function POST(req: Request) {
       action: effectiveAction,
       amount: payAmount,
       mobile: mobile,
-      recipientPhoneNumber: mobile
+      recipientPhoneNumber: mobile,
+      loanAmount: detectedLoanAmount
     });
 
     const transactionId = body.transid || generateTransId();
@@ -257,7 +291,8 @@ export async function POST(req: Request) {
       readiness: 'قيد الانتظار',
       refunded: false,
       serviceCategory: telecomDetails.serviceName,
-      clientBackUrl: clientBackUrl
+      clientBackUrl: clientBackUrl,
+      loanAmount: detectedLoanAmount
     };
 
     initBatch.set(txRef, txRecord);
@@ -282,7 +317,9 @@ export async function POST(req: Request) {
           action: effectiveAction,
           amount: body.amount || payAmount,
           transid: transactionId,
-          backpass: backpass
+          backpass: backpass,
+          solfa: body.solfa || (detectedLoanAmount > 0 ? 'Y' : undefined),
+          loanAmount: detectedLoanAmount
         })
       });
 
@@ -307,9 +344,19 @@ export async function POST(req: Request) {
 
     const rawResultMsg = String(result.resultDesc || result.message || '').trim();
     const normResultMsg = rawResultMsg.toLowerCase();
-    // 1. الكشف الصارم عن مؤشرات الفشل أولاً
+
+    // فحص استثنائي حاسم: إذا سدد المزود الرصيد في هاتف المشترك بدلاً من الباقة فالعملية ناجحة ومخصومة 100%
+    const isBalanceRechargedInstead =
+      rawResultMsg.includes('تم تسديد الرقم بمبلغ الرصيد') ||
+      rawResultMsg.includes('تم تسديد الرصيد') ||
+      rawResultMsg.includes('تم شحن الرصيد') ||
+      rawResultMsg.includes('تسديد المبلغ كرصيد') ||
+      rawResultMsg.includes('تحويل المبلغ لرصيد');
+
+    // 1. الكشف الصارم عن مؤشرات الفشل أولاً (مع استبعاد حالة تسديد الرصيد البديل للباقة)
     const isFailure =
-      result.resultCode === "-1" ||
+      !isBalanceRechargedInstead &&
+      (result.resultCode === "-1" ||
       result.resultCode === -1 ||
       result.status === 'failed' ||
       result.status === 'ban' ||
@@ -330,11 +377,12 @@ export async function POST(req: Request) {
       normResultMsg.includes('fail') ||
       normResultMsg.includes('error') ||
       normResultMsg.includes('invalid') ||
-      normResultMsg.includes('reject');
+      normResultMsg.includes('reject'));
 
-    // 2. الكشف عن النجاح المؤكد فقط إذا لم تكن هناك أي مؤشرات فشل
+    // 2. الكشف عن النجاح المؤكد (يشمل حالة تسديد الرصيد البديل للباقة)
     const isExplicitDone =
-      !isFailure &&
+      isBalanceRechargedInstead ||
+      (!isFailure &&
       (result.status === 'success' ||
       result.status === 'done' ||
       result.action === 'done' ||
@@ -345,7 +393,7 @@ export async function POST(req: Request) {
       rawResultMsg.includes('تم التنفيذ') ||
       rawResultMsg.includes('تم السداد') ||
       rawResultMsg.includes('تم الشحن') ||
-      rawResultMsg.includes('تمت العملية بنجاح'));
+      rawResultMsg.includes('تمت العملية بنجاح')));
 
     // 3. حالة قيد الانتظار والمعالجة لدى المزود:
     const isPending =
@@ -385,11 +433,15 @@ export async function POST(req: Request) {
         result.status !== 'failed'));
 
     if (isSuccess) {
+      const finalSuccessMsg = isBalanceRechargedInstead
+        ? 'تم تسديد الرقم بمبلغ الرصيد المطلوب لتعذر تفعيل الباقة مباشرة'
+        : (result.resultDesc || result.message || 'تم تنفيذ العملية بنجاح');
+
       // نجاح العملية -> تحديث الحالة إلى جاهزة
       const successPayload = {
         status: 'success',
         readiness: 'جاهزة',
-        providerMessage: result.resultDesc || result.message || 'تم تنفيذ العملية بنجاح',
+        providerMessage: finalSuccessMsg,
         completedAt: new Date().toISOString()
       };
 
@@ -403,11 +455,12 @@ export async function POST(req: Request) {
         code: 'SM_SUCCESS',
         status: 'success',
         readiness: 'جاهزة',
-        message: 'تم تنفيذ العملية بنجاح',
+        message: finalSuccessMsg,
         transactionId: transactionId,
         data: {
           mobile: telecomDetails.recipientPhoneNumber || mobile,
           amount: payAmount,
+          loanAmount: detectedLoanAmount,
           service: telecomDetails.transactionType,
           clientName: effectiveUserData.displayName,
           newBalance: clientBalance - payAmount
@@ -427,6 +480,7 @@ export async function POST(req: Request) {
         data: {
           mobile: telecomDetails.recipientPhoneNumber || mobile,
           amount: payAmount,
+          loanAmount: detectedLoanAmount,
           service: telecomDetails.transactionType,
           status: 'pending',
           readiness: 'قيد الانتظار'

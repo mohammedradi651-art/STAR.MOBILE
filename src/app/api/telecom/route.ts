@@ -15,7 +15,8 @@ import {
   generateBackpass, 
   validateTelecomRequest, 
   resolveTelecomDetails,
-  formatProviderErrorMessage
+  formatProviderErrorMessage,
+  fetchYemenMobileSolfa
 } from '@/lib/telecom-order';
 
 export const runtime = 'nodejs';
@@ -204,8 +205,16 @@ export async function POST(request: Request) {
             payload.mobile = tx.recipientPhoneNumber || tx.phoneNumber;
           }
           const rawLocalMsg = String(tx.providerMessage || tx.notes || '').toLowerCase();
+          const isLocalBalanceRecharged =
+            rawLocalMsg.includes('تم تسديد الرقم بمبلغ الرصيد') ||
+            rawLocalMsg.includes('تم تسديد الرصيد') ||
+            rawLocalMsg.includes('تم شحن الرصيد') ||
+            rawLocalMsg.includes('تسديد المبلغ كرصيد') ||
+            rawLocalMsg.includes('تحويل المبلغ لرصيد');
+
           const isLocalFailure =
-            tx.status === 'failed' ||
+            !isLocalBalanceRecharged &&
+            (tx.status === 'failed' ||
             tx.readiness === 'فاشلة' ||
             Boolean(tx.refunded) ||
             rawLocalMsg.includes('لم تتم') ||
@@ -214,17 +223,18 @@ export async function POST(request: Request) {
             rawLocalMsg.includes('فشلت') ||
             rawLocalMsg.includes('رفض') ||
             rawLocalMsg.includes('خطأ') ||
-            rawLocalMsg.includes('غير صحيح');
+            rawLocalMsg.includes('غير صحيح'));
 
           const isLocalExplicitDone =
-            !isLocalFailure &&
+            isLocalBalanceRecharged ||
+            (!isLocalFailure &&
             (tx.status === 'success' ||
             tx.readiness === 'جاهزة' ||
             rawLocalMsg.includes('تم تنفيذ') ||
             rawLocalMsg.includes('تم التنفيذ') ||
             rawLocalMsg.includes('تم السداد') ||
             rawLocalMsg.includes('تم الشحن') ||
-            rawLocalMsg.includes('تمت العملية بنجاح'));
+            rawLocalMsg.includes('تمت العملية بنجاح')));
 
           const isLocalPending =
             !isLocalFailure &&
@@ -327,6 +337,31 @@ export async function POST(request: Request) {
     }
 
     if (shouldPerformImmediateDeduction && clientUserId) {
+      // فحص ومعالجة السلفة التلقائية لعملاء الـ API عند طلب باقات يمن موبايل
+      const isYemenMobileService = !service || sLower === 'yemen' || sLower === 'yem' || sLower === 'offeryem';
+      const isYemenPackage = isYemenMobileService && (action === 'billoffer' || isBillingAction);
+
+      const isSolfaExplicitlyDisabled = payload.solfa === 'N' || payload.solfa === 'n' || payload.solfa === '0' || payload.solfa === 0 || payload.solfa === false || payload.solfa === 'no';
+
+      let detectedLoanAmount = parseFloat(String(payload.loanAmount ?? payload.loan_amount ?? payload.solfaAmount ?? payload.solfa_amount ?? 0)) || 0;
+
+      if (isYemenPackage && !isSolfaExplicitlyDisabled) {
+        if (detectedLoanAmount <= 0) {
+          const creds = { apiBaseUrl, userId, password };
+          const solfaResult = await fetchYemenMobileSolfa(targetMobile, creds);
+          if (solfaResult.isLoan && solfaResult.loanAmount > 0) {
+            detectedLoanAmount = solfaResult.loanAmount;
+            payload.solfa = 'Y';
+            payload.loanAmount = detectedLoanAmount;
+          } else if (solfaResult.isLoan) {
+            payload.solfa = 'Y';
+          }
+        } else {
+          payload.solfa = 'Y';
+          payload.loanAmount = detectedLoanAmount;
+        }
+      }
+
       requiredCost = calculateApiTransactionCost({
         ...payload,
         service,
@@ -336,17 +371,20 @@ export async function POST(request: Request) {
         category: payload.category,
         packageid: payload.packageid || payload.packageId,
         offerid: payload.offerid || payload.offerId,
-        israsid: payload.israsid
+        israsid: payload.israsid,
+        loanAmount: detectedLoanAmount
       }, systemConfig, clientUserData);
 
       // الشرط الحاسم: منع أي سداد بدون رصيد كافٍ
       if (initialBalance < requiredCost) {
+        const loanMsg = detectedLoanAmount > 0 ? ` (شامل السلفة: ${detectedLoanAmount} ر.ي)` : '';
         return NextResponse.json({
           resultCode: "-402",
           status: "failed",
-          message: `عذراً، رصيدك غير كافٍ لتنفيذ هذه العملية. الرصيد المتاح: ${initialBalance} ر.ي، التكلفة المطلوبة: ${requiredCost} ر.ي. يرجى شحن الحساب والمحاولة مجدداً.`,
+          message: `عذراً، رصيدك غير كافٍ لتنفيذ هذه العملية${loanMsg}. الرصيد المتاح: ${initialBalance} ر.ي، التكلفة المطلوبة: ${requiredCost} ر.ي. يرجى شحن الحساب والمحاولة مجدداً.`,
           currentBalance: initialBalance,
-          requiredCost: requiredCost
+          requiredCost: requiredCost,
+          loanAmount: detectedLoanAmount
         }, { status: 400 });
       }
 
@@ -361,7 +399,7 @@ export async function POST(request: Request) {
 
         batch.update(userRef, { balance: increment(-requiredCost) });
 
-        const telecomDetails = resolveTelecomDetails({ ...body, amount: requiredCost });
+        const telecomDetails = resolveTelecomDetails({ ...body, amount: requiredCost, loanAmount: detectedLoanAmount });
         const finalRecipientPhone = telecomDetails.recipientPhoneNumber || targetMobile;
 
         const clientBackUrl = payload.backurl ? String(payload.backurl).trim() : null;
@@ -382,7 +420,8 @@ export async function POST(request: Request) {
           readiness: 'قيد الانتظار',
           refunded: false,
           serviceCategory: telecomDetails.serviceName || service || 'اتصالات',
-          clientBackUrl: clientBackUrl
+          clientBackUrl: clientBackUrl,
+          loanAmount: detectedLoanAmount
         };
 
         batch.set(clientTxRef, txRecord);
@@ -661,6 +700,9 @@ export async function POST(request: Request) {
           apiRequestParams.offerkey = apiRequestParams.offerid;
           delete apiRequestParams.offerid;
         }
+        if (payload.solfa === 'Y' || payload.solfa === 'y' || (payload.loanAmount && Number(payload.loanAmount) > 0)) {
+          apiRequestParams.solfa = 'Y';
+        }
       } else {
         endpoint = 'yem';
         apiRequestParams.action = action || 'bill';
@@ -672,6 +714,10 @@ export async function POST(request: Request) {
 
     delete apiRequestParams.service;
     delete apiRequestParams.apiKey;
+    delete apiRequestParams.loanAmount;
+    delete apiRequestParams.loan_amount;
+    delete apiRequestParams.solfaAmount;
+    delete apiRequestParams.solfa_amount;
     const params = new URLSearchParams();
     Object.keys(apiRequestParams).forEach(key => {
       if (apiRequestParams[key] !== undefined && apiRequestParams[key] !== null) {
@@ -806,8 +852,17 @@ export async function POST(request: Request) {
         const rawStatusDesc = String(data?.resultDesc || data?.message || data?.reason || '').trim();
         const normStatusDesc = rawStatusDesc.toLowerCase();
 
+        // فحص استثنائي حاسم: إذا سدد المزود الرصيد في هاتف المشترك بدلاً من الباقة فالعملية ناجحة ومخصومة 100%
+        const isStatusBalanceRecharged =
+          rawStatusDesc.includes('تم تسديد الرقم بمبلغ الرصيد') ||
+          rawStatusDesc.includes('تم تسديد الرصيد') ||
+          rawStatusDesc.includes('تم شحن الرصيد') ||
+          rawStatusDesc.includes('تسديد المبلغ كرصيد') ||
+          rawStatusDesc.includes('تحويل المبلغ لرصيد');
+
         const isStatusFailure =
-          data?.isBan === 1 ||
+          !isStatusBalanceRecharged &&
+          (data?.isBan === 1 ||
           data?.isBan === '1' ||
           data?.action === 'ban' ||
           data?.status === 'ban' ||
@@ -827,10 +882,11 @@ export async function POST(request: Request) {
           normStatusDesc.includes('fail') ||
           normStatusDesc.includes('error') ||
           normStatusDesc.includes('invalid') ||
-          normStatusDesc.includes('reject');
+          normStatusDesc.includes('reject'));
 
         const isExplicitDone =
-          !isStatusFailure &&
+          isStatusBalanceRecharged ||
+          (!isStatusFailure &&
           (data?.isDone === 1 ||
           data?.isDone === '1' ||
           data?.action === 'done' ||
@@ -841,7 +897,7 @@ export async function POST(request: Request) {
           rawStatusDesc.includes('تم التنفيذ') ||
           rawStatusDesc.includes('تم السداد') ||
           rawStatusDesc.includes('تم الشحن') ||
-          rawStatusDesc.includes('تمت العملية بنجاح'));
+          rawStatusDesc.includes('تمت العملية بنجاح')));
 
         const isStatusPending =
           !isStatusFailure &&
@@ -905,8 +961,11 @@ export async function POST(request: Request) {
         }
 
         if (isProviderDone) {
+          const finalSuccessMsg = isStatusBalanceRecharged
+            ? 'تم تسديد الرقم بمبلغ الرصيد المطلوب لتعذر تفعيل الباقة مباشرة'
+            : (data.resultDesc || data.message || 'تم تأكيد نجاح العملية من المزود');
           if (targetUserId) {
-            await markSuccessInDb(firestore, targetUserId, transid, data.resultDesc || data.message || 'تم تأكيد نجاح العملية من المزود');
+            await markSuccessInDb(firestore, targetUserId, transid, finalSuccessMsg);
           }
           return NextResponse.json({
             ...data,
@@ -914,8 +973,8 @@ export async function POST(request: Request) {
             status: "success",
             readiness: "جاهزة",
             transid: transid,
-            message: data.resultDesc || data.message || "تم تنفيذ العملية بنجاح من المزود",
-            resultDesc: data.resultDesc || data.message || "تم تنفيذ العملية بنجاح من المزود"
+            message: finalSuccessMsg,
+            resultDesc: finalSuccessMsg
           });
         } else if (isProviderBan) {
           const banReason = data.reason || data.resultDesc || data.message || 'تم إلغاء العملية من المزود';
@@ -949,9 +1008,18 @@ export async function POST(request: Request) {
       const rawDesc = String(data?.resultDesc || data?.message || data?.reason || '').trim();
       const normDesc = rawDesc.toLowerCase();
 
-      // 1. الكشف الصارم عن مؤشرات الفشل والرفض أولاً لحمايتها من الكلمات الإيجابية مثل "لم تتم بنجاح"
+      // فحص استثنائي حاسم: إذا سدد المزود الرصيد في هاتف المشترك بدلاً من الباقة فالعملية ناجحة ومخصومة 100%
+      const isBalanceRechargedInstead =
+        rawDesc.includes('تم تسديد الرقم بمبلغ الرصيد') ||
+        rawDesc.includes('تم تسديد الرصيد') ||
+        rawDesc.includes('تم شحن الرصيد') ||
+        rawDesc.includes('تسديد المبلغ كرصيد') ||
+        rawDesc.includes('تحويل المبلغ لرصيد');
+
+      // 1. الكشف الصارم عن مؤشرات الفشل والرفض أولاً (مع استبعاد حالة تسديد الرصيد البديل للباقة)
       const isFailure =
-        data?.resultCode === "-1" ||
+        !isBalanceRechargedInstead &&
+        (data?.resultCode === "-1" ||
         data?.resultCode === -1 ||
         data?.status === 'failed' ||
         data?.status === 'ban' ||
@@ -972,11 +1040,12 @@ export async function POST(request: Request) {
         normDesc.includes('fail') ||
         normDesc.includes('error') ||
         normDesc.includes('invalid') ||
-        normDesc.includes('reject');
+        normDesc.includes('reject'));
 
-      // 2. الكشف عن النجاح المؤكد فقط إذا لم تكن هناك أي مؤشرات فشل
+      // 2. الكشف عن النجاح المؤكد (يشمل حالة تسديد الرصيد البديل للباقة)
       const isExplicitDone =
-        !isFailure &&
+        isBalanceRechargedInstead ||
+        (!isFailure &&
         (data?.isDone === 1 ||
         data?.isDone === '1' ||
         data?.action === 'done' ||
@@ -987,7 +1056,7 @@ export async function POST(request: Request) {
         rawDesc.includes('تم التنفيذ') ||
         rawDesc.includes('تم السداد') ||
         rawDesc.includes('تم الشحن') ||
-        rawDesc.includes('تمت العملية بنجاح'));
+        rawDesc.includes('تمت العملية بنجاح')));
 
       // 3. حالة قيد الانتظار والمعالجة لدى المزود:
       const isPending =
@@ -1065,8 +1134,12 @@ export async function POST(request: Request) {
 
       } else if (isSuccess) {
         // نجاح مؤكد من المزود -> تحديث المعاملة إلى جاهزة
+        const finalSuccessMsg = isBalanceRechargedInstead
+          ? 'تم تسديد الرقم بمبلغ الرصيد المطلوب لتعذر تفعيل الباقة مباشرة'
+          : (data.resultDesc || data.message || 'تم تنفيذ العملية بنجاح');
+
         if (shouldPerformImmediateDeduction && clientUserId) {
-          await markSuccessInDb(firestore, clientUserId, transid, data.resultDesc || data.message || 'تم السداد بنجاح');
+          await markSuccessInDb(firestore, clientUserId, transid, finalSuccessMsg);
         }
 
         return NextResponse.json({
@@ -1077,8 +1150,8 @@ export async function POST(request: Request) {
           transid: transid,
           chargedCost: requiredCost,
           remainingBalance: initialBalance,
-          message: data.resultDesc || data.message || "تم تنفيذ العملية بنجاح",
-          resultDesc: data.resultDesc || data.message || "تم تنفيذ العملية بنجاح"
+          message: finalSuccessMsg,
+          resultDesc: finalSuccessMsg
         });
 
       } else {
@@ -1224,6 +1297,19 @@ async function markSuccessInDb(firestore: any, userId: string, transid: string, 
  */
 async function refundUser(firestore: any, userId: string, transid: string, amount: number, reason: string) {
   try {
+    const rawReason = String(reason || '');
+    if (
+      rawReason.includes('تم تسديد الرقم بمبلغ الرصيد') ||
+      rawReason.includes('تم تسديد الرصيد') ||
+      rawReason.includes('تم شحن الرصيد') ||
+      rawReason.includes('تسديد المبلغ كرصيد') ||
+      rawReason.includes('تحويل المبلغ لرصيد')
+    ) {
+      // حماية صارمة: منع إرجاع المبلغ إذا تم تسديد الرصيد في هاتف المشترك، واعتمادها فوراً كعملية ناجحة ومكتملة
+      await markSuccessInDb(firestore, userId, transid, 'تم تسديد الرقم بمبلغ الرصيد المطلوب لتعذر تفعيل الباقة مباشرة');
+      return;
+    }
+
     const userRef = doc(firestore, 'users', userId);
     const userTxRef = doc(firestore, `users/${userId}/transactions`, transid);
     const globalTxRef = doc(firestore, 'paymentTransactions', transid);

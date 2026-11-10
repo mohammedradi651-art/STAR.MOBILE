@@ -75,14 +75,23 @@ export async function POST(request: Request) {
       });
     }
 
+    const isBalanceRecharged = 
+      rawMsg.includes('تم تسديد الرقم بمبلغ الرصيد') || 
+      rawMsg.includes('تم تسديد الرصيد') || 
+      rawMsg.includes('تم شحن الرصيد') ||
+      rawMsg.includes('تسديد المبلغ كرصيد') ||
+      rawMsg.includes('تحويل المبلغ لرصيد');
+
     const isBan =
-      data.isBan === 1 ||
+      !isBalanceRecharged &&
+      (data.isBan === 1 ||
       data.isBan === '1' ||
       data.action === 'ban' ||
       data.status === 'ban' ||
-      (data.status === 'failed' && data.refunded);
+      (data.status === 'failed' && data.refunded));
 
     const isDone =
+      isBalanceRecharged ||
       data.isDone === 1 ||
       data.isDone === '1' ||
       data.action === 'done' ||

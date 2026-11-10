@@ -286,6 +286,19 @@ export async function markPaymentFailedAndRefund(
   reason: string
 ) {
   try {
+    const rawReason = String(reason || '');
+    if (
+      rawReason.includes('تم تسديد الرقم بمبلغ الرصيد') ||
+      rawReason.includes('تم تسديد الرصيد') ||
+      rawReason.includes('تم شحن الرصيد') ||
+      rawReason.includes('تسديد المبلغ كرصيد') ||
+      rawReason.includes('تحويل المبلغ لرصيد')
+    ) {
+      // حماية استثنائية: إذا قام المزود بتسديد الرصيد في هاتف العميل، فالعملية ناجحة ومخصومة 100% ويمنع إرجاع أي مبلغ
+      await markPaymentSuccess(firestore, userId, transid, 'تم تسديد الرقم بمبلغ الرصيد المطلوب لتعذر تفعيل الباقة مباشرة');
+      return;
+    }
+
     const userDocRef = doc(firestore, 'users', userId);
     const userTxRef = doc(firestore, `users/${userId}/transactions`, transid);
     const globalTxRef = doc(firestore, 'paymentTransactions', transid);
@@ -385,9 +398,18 @@ export async function executeTelecomRequestWithTimeout({
   const rawDesc = String(data?.resultDesc || data?.message || '');
   const normDesc = rawDesc.toLowerCase();
 
-  // 1. الكشف الصارم عن مؤشرات الفشل أولاً
+  // فحص استثنائي حاسم: إذا سدد المزود الرصيد في هاتف المشترك بدلاً من الباقة فالعملية ناجحة ومخصومة 100%
+  const isBalanceRechargedInstead =
+    rawDesc.includes('تم تسديد الرقم بمبلغ الرصيد') ||
+    rawDesc.includes('تم تسديد الرصيد') ||
+    rawDesc.includes('تم شحن الرصيد') ||
+    rawDesc.includes('تسديد المبلغ كرصيد') ||
+    rawDesc.includes('تحويل المبلغ لرصيد');
+
+  // 1. الكشف الصارم عن مؤشرات الفشل أولاً (مع استبعاد حالة تسديد الرصيد البديل للباقة)
   const isFailure =
-    !ok ||
+    !isBalanceRechargedInstead &&
+    (!ok ||
     data?.resultCode === "-1" ||
     data?.resultCode === -1 ||
     data?.status === 'failed' ||
@@ -409,11 +431,12 @@ export async function executeTelecomRequestWithTimeout({
     normDesc.includes('fail') ||
     normDesc.includes('error') ||
     normDesc.includes('invalid') ||
-    normDesc.includes('reject');
+    normDesc.includes('reject'));
 
-  // 2. الكشف عن النجاح المؤكد فقط إذا لم تكن هناك أي مؤشرات فشل
+  // 2. الكشف عن النجاح المؤكد (تشمل حالة تسديد الرصيد البديل للباقة)
   const isExplicitDone =
-    !isFailure &&
+    isBalanceRechargedInstead ||
+    (!isFailure &&
     (data?.status === 'success' ||
     data?.status === 'done' ||
     data?.action === 'done' ||
@@ -424,7 +447,7 @@ export async function executeTelecomRequestWithTimeout({
     rawDesc.includes('تم التنفيذ') ||
     rawDesc.includes('تم السداد') ||
     rawDesc.includes('تم الشحن') ||
-    rawDesc.includes('تمت العملية بنجاح'));
+    rawDesc.includes('تمت العملية بنجاح')));
 
   // 3. حالة قيد الانتظار والمعالجة لدى المزود:
   const isPending =
@@ -469,13 +492,137 @@ export async function executeTelecomRequestWithTimeout({
        data?.status !== 'failed'));
 
   if (isSuccess) {
-    await markPaymentSuccess(firestore, userId, transid, data?.resultDesc || data?.message);
-    return { isDelayed: false, providerResult: data };
+    const finalNote = isBalanceRechargedInstead
+      ? 'تم تسديد الرقم بمبلغ الرصيد المطلوب لتعذر تفعيل الباقة مباشرة'
+      : (data?.resultDesc || data?.message || 'تم تنفيذ العملية بنجاح');
+    await markPaymentSuccess(firestore, userId, transid, finalNote);
+    return { isDelayed: false, providerResult: { ...data, resultDesc: finalNote, message: finalNote } };
   } else {
     // فشل من المزود خلال الـ 10 ثوانٍ -> إرجاع الفلوس وتحديث الملاحظات
     const providerError = formatProviderErrorMessage(data?.resultDesc || data?.message || 'تم رفض العملية من قبل مزود الخدمة.');
     await markPaymentFailedAndRefund(firestore, userId, transid, amount, providerError);
     throw new Error(providerError || 'فشلت العملية من المزود');
+  }
+}
+
+/**
+ * فحص سلفة يمن موبايل تلقائياً لمعرفة هل الرقم متسلف وكم قيمة السلفة بدقة
+ */
+export async function fetchYemenMobileSolfa(
+  mobile: string,
+  creds?: { apiBaseUrl?: string; userId?: string; password?: string }
+): Promise<{ isLoan: boolean; loanAmount: number; message: string }> {
+  const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-9);
+  if (!cleanMobile || !cleanMobile.startsWith('77')) {
+    return { isLoan: false, loanAmount: 0, message: 'رقم غير تابع ليمن موبايل' };
+  }
+
+  const userId = (creds?.userId || process.env.TELECOM_USERID || '').trim();
+  const password = (creds?.password || process.env.TELECOM_PASSWORD || '').trim();
+  let apiBaseUrl = (creds?.apiBaseUrl || 'http://echehanly.yrbso.net/api/yr/').trim();
+  if (!apiBaseUrl.endsWith('/')) apiBaseUrl += '/';
+
+  // إذا كانت البيانات المباشرة غير متوفرة بالسيرفر نحاول عبر مسار التيليكوم الإنتاجي
+  if (!userId || !password) {
+    try {
+      const res = await fetch('https://star26.vercel.app/api/telecom', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mobile: cleanMobile, action: 'solfa' }),
+        signal: AbortSignal.timeout(5000),
+        cache: 'no-store'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const loanAmt = parseFloat(String(data.loanAmount ?? data.loan_amount ?? 0)) || 0;
+        return {
+          isLoan: Boolean(data.isLoan || loanAmt > 0),
+          loanAmount: loanAmt,
+          message: data.message || (data.isLoan ? `المشترك متسلف بمبلغ ${loanAmt} ريال` : 'المشترك غير متسلف')
+        };
+      }
+    } catch {}
+    return { isLoan: false, loanAmount: 0, message: 'تعذر الاتصال بالمزود لفحص السلفة' };
+  }
+
+  const tempTransId = 'SLF' + Date.now().toString().slice(-8);
+  const solfaUrl = `${apiBaseUrl}yem?userid=${encodeURIComponent(userId)}&token=${encodeURIComponent(password)}&transid=${tempTransId}&mobile=${cleanMobile}&action=solfa`;
+
+  try {
+    const res = await fetch(solfaUrl, {
+      signal: AbortSignal.timeout(5000),
+      headers: {
+        'Accept': 'application/json, text/plain, */*',
+        'Cache-Control': 'no-cache',
+        'User-Agent': 'Mozilla/5.0 (StarMobile)',
+      },
+      cache: 'no-store'
+    });
+
+    const responseText = (await res.text()).trim();
+    if (!responseText) return { isLoan: false, loanAmount: 0, message: 'رد فارغ من المزود' };
+
+    let data: any = {};
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      data = { message: responseText };
+    }
+
+    const rawText = String(data.resultDesc || data.message || responseText || '').trim();
+    const rawStatus = data.status !== undefined ? String(data.status).trim() : '';
+
+    const extractedAmount = data.loan_amount ?? data.loanAmount ?? data.amount ?? data.solfa_amount;
+    let numericAmount = parseFloat(String(extractedAmount || '0'));
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      const match = rawText.match(/(?:سلفة|مبلغ)?\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(?:ريال)?/i);
+      if (match && match[1]) {
+        numericAmount = parseFloat(match[1]);
+      }
+    }
+
+    const hasNegation = rawText.includes('غير متسلف') || 
+                        rawText.includes('لا توجد سلفة') || 
+                        rawText.includes('ليس متسلف') || 
+                        rawText.includes('غير مشترك') ||
+                        rawStatus === '0';
+
+    const hasLoanIndicator = rawStatus === '1' || 
+                             rawStatus.toLowerCase() === 'true' || 
+                             numericAmount > 0 || 
+                             ((rawText.includes('متسلف') || rawText.includes('سلفة')) && !hasNegation);
+
+    const isLoan = Boolean(hasLoanIndicator && !hasNegation);
+    const finalLoanAmount = isLoan ? (numericAmount > 0 ? numericAmount : 0) : 0;
+
+    return {
+      isLoan,
+      loanAmount: finalLoanAmount,
+      message: isLoan 
+        ? (finalLoanAmount > 0 ? `المشترك متسلف بمبلغ ${finalLoanAmount} ريال` : 'المشترك متسلف')
+        : 'المشترك غير متسلف'
+    };
+  } catch (err: any) {
+    try {
+      const res = await fetch('https://star26.vercel.app/api/telecom', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mobile: cleanMobile, action: 'solfa' }),
+        signal: AbortSignal.timeout(5000),
+        cache: 'no-store'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const loanAmt = parseFloat(String(data.loanAmount ?? data.loan_amount ?? 0)) || 0;
+        return {
+          isLoan: Boolean(data.isLoan || loanAmt > 0),
+          loanAmount: loanAmt,
+          message: data.message || (data.isLoan ? `المشترك متسلف بمبلغ ${loanAmt} ريال` : 'المشترك غير متسلف')
+        };
+      }
+    } catch {}
+
+    return { isLoan: false, loanAmount: 0, message: err?.message || 'خطأ أثناء فحص السلفة' };
   }
 }
 
@@ -790,6 +937,10 @@ export interface TelecomDetailsInput {
   mobile?: string;
   phone?: string;
   recipientPhoneNumber?: string;
+  loanAmount?: number | string;
+  loan_amount?: number | string;
+  solfaAmount?: number | string;
+  solfa_amount?: number | string;
 }
 
 /**
@@ -814,11 +965,13 @@ export function resolveTelecomDetails(input: TelecomDetailsInput): {
     const isOffer = act === 'billoffer' || Boolean(knownPkg) || Boolean(input.offerid);
     if (isOffer) {
       const pkgName = knownPkg || `باقة (${pkgKey})`;
+      const loanAmt = parseFloat(String(input.loanAmount ?? input.loan_amount ?? input.solfaAmount ?? input.solfa_amount ?? 0)) || 0;
+      const loanText = loanAmt > 0 ? ` (شامل سلفة ${loanAmt} ر.ي)` : '';
       return {
         serviceName: 'يمن موبايل',
         packageName: pkgName,
         transactionType: `يمن موبايل - ${pkgName}`,
-        notes: `تفعيل ${pkgName} للرقم: ${cleanPhone}`,
+        notes: `تفعيل ${pkgName} للرقم: ${cleanPhone}${loanText}`,
         recipientPhoneNumber: cleanPhone
       };
     }

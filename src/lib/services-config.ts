@@ -625,6 +625,10 @@ export function calculateApiTransactionCost(
     unit?: string | number;
     quantity?: string | number;
     category?: string | number;
+    loanAmount?: string | number;
+    loan_amount?: string | number;
+    solfaAmount?: string | number;
+    solfa_amount?: string | number;
   },
   config: SystemServicesConfig = DEFAULT_SERVICES_CONFIG,
   _userDiscounts?: any // تم إلغاء الاعتماد على الخصومات الفردية بناء على طلب الإدارة
@@ -645,11 +649,21 @@ export function calculateApiTransactionCost(
     ''
   ).trim();
 
+  // استخراج مبلغ السلفة المضاف إن وجد
+  const extraLoanAmount = parseFloat(String(
+    payload.loanAmount ?? 
+    payload.loan_amount ?? 
+    payload.solfaAmount ?? 
+    payload.solfa_amount ?? 
+    0
+  )) || 0;
+
   // 1. يمن موبايل
   if (service === 'yemen' || service === 'yem') {
     if (action === 'billoffer') {
       const basePackagePrice = (KNOWN_PACKAGE_PRICES[packageKey] || 0) || rawAmount;
-      return calculateFinalServicePrice(basePackagePrice, config.yemen_mobile);
+      const finalPkgPrice = calculateFinalServicePrice(basePackagePrice, config.yemen_mobile);
+      return roundCurrency(finalPkgPrice + (extraLoanAmount > 0 ? extraLoanAmount : 0));
     }
     return calculateFinalServicePrice(rawAmount, config.yemen_mobile);
   }

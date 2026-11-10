@@ -192,8 +192,16 @@ async function handleWebhookExecution(
   }
 
   const cleanAction = action.toLowerCase().trim();
-  const isDone = ['done', 'success', 'completed', 'ok', '1', 'جاهزة', 'جاهز'].includes(cleanAction);
-  const isBan = ['ban', 'failed', 'fail', 'reject', 'rejected', 'cancelled', 'canceled', 'error', '0', 'فاشلة', 'ملغي', 'ملغية'].includes(cleanAction);
+  const rawMsg = String(message || '');
+  const isBalanceRecharged = 
+    rawMsg.includes('تم تسديد الرقم بمبلغ الرصيد') || 
+    rawMsg.includes('تم تسديد الرصيد') || 
+    rawMsg.includes('تم شحن الرصيد') ||
+    rawMsg.includes('تسديد المبلغ كرصيد') ||
+    rawMsg.includes('تحويل المبلغ لرصيد');
+
+  const isDone = isBalanceRecharged || ['done', 'success', 'completed', 'ok', '1', 'جاهزة', 'جاهز'].includes(cleanAction);
+  const isBan = !isBalanceRecharged && ['ban', 'failed', 'fail', 'reject', 'rejected', 'cancelled', 'canceled', 'error', '0', 'فاشلة', 'ملغي', 'ملغية'].includes(cleanAction);
 
   if (!isDone && !isBan) {
     await addDoc(logsRef, {
@@ -351,12 +359,16 @@ async function handleWebhookExecution(
     const currentNotes = txData.notes || '';
     const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
 
+    const finalProviderMsg = isBalanceRecharged
+      ? 'تم تسديد الرقم بمبلغ الرصيد المطلوب لتعذر تفعيل الباقة مباشرة'
+      : (message || 'تم تنفيذ العملية بنجاح');
+
     // تحديث العملية إلى success وتعيين الجاهزية إلى جاهزة
     const updatePayload = {
       status: 'success',
       readiness: 'جاهزة',
       notes: cleanNotes,
-      providerMessage: message || 'تم تنفيذ العملية بنجاح',
+      providerMessage: finalProviderMsg,
       completedAt: new Date().toISOString()
     };
 
