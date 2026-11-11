@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
-import { collection, query, where, getDocs, doc, writeBatch, increment, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, writeBatch, increment, getDoc, runTransaction } from 'firebase/firestore';
 import { DEFAULT_SERVICES_CONFIG, SystemServicesConfig, calculateApiTransactionCost } from '@/lib/services-config';
 import { 
   validateTelecomRequest, 
@@ -279,13 +279,10 @@ export async function POST(req: Request) {
     const transactionId = body.transid || generateTransId();
     const backpass = body.backpass || generateBackpass();
 
-    // 5. خصم الرصيد أولاً وتسجيل المعاملة كـ "قيد الانتظار"
+    // 5. خصم الرصيد أولاً وتسجيل المعاملة كـ "قيد الانتظار" عبر runTransaction لمنع الرصيد السالب نهائياً
     const userRef = doc(firestore, 'users', effectiveUserId);
     const txRef = doc(firestore, `users/${effectiveUserId}/transactions`, transactionId);
     const globalTxRef = doc(firestore, 'paymentTransactions', transactionId);
-
-    const initBatch = writeBatch(firestore);
-    initBatch.update(userRef, { balance: increment(-payAmount) });
 
     const clientBackUrl = body.backurl || body.backUrl || body.callbackUrl || body.callback_url || null;
 
@@ -308,9 +305,42 @@ export async function POST(req: Request) {
       loanAmount: detectedLoanAmount
     };
 
-    initBatch.set(txRef, txRecord);
-    initBatch.set(globalTxRef, txRecord);
-    await initBatch.commit();
+    try {
+      await runTransaction(firestore, async (transaction) => {
+        const userSnap = await transaction.get(userRef);
+        if (!userSnap.exists()) {
+          throw new Error('USER_NOT_FOUND');
+        }
+        const currentLiveBal = Number(userSnap.data().balance || 0);
+        if (currentLiveBal < payAmount) {
+          throw new Error(`INSUFFICIENT_BALANCE:${currentLiveBal}`);
+        }
+        transaction.update(userRef, { balance: increment(-payAmount) });
+        transaction.set(txRef, txRecord);
+        transaction.set(globalTxRef, txRecord);
+      });
+    } catch (txnErr: any) {
+      const errMsg = txnErr?.message || '';
+      if (errMsg.startsWith('INSUFFICIENT_BALANCE:')) {
+        const liveBal = Number(errMsg.split(':')[1]) || 0;
+        const loanInfoMsg = detectedLoanAmount > 0 ? ` (شامل السلفة: ${detectedLoanAmount} ر.ي)` : '';
+        return NextResponse.json({
+          success: false,
+          code: 'SM_INSUFFICIENT_BALANCE',
+          message: isAdmin 
+            ? `رصيد العميل ${mobile} غير كافٍ. الرصيد: ${liveBal} ر.ي، والمطلوب: ${payAmount} ر.ي${loanInfoMsg}.`
+            : `رصيد حسابك غير كافٍ لتنفيذ هذه العملية${loanInfoMsg}. الرصيد: ${liveBal} ر.ي، والمطلوب: ${payAmount} ر.ي.`,
+          transactionId: null,
+          data: {
+            currentBalance: liveBal,
+            requiredCost: payAmount,
+            loanAmount: detectedLoanAmount
+          },
+          timestamp
+        }, { status: 400, headers: corsHeaders });
+      }
+      throw txnErr;
+    }
 
     // 6. استدعاء محرك السداد الداخلي
     const origin = new URL(req.url).origin;

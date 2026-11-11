@@ -1,4 +1,4 @@
-import { doc, getDoc, updateDoc, increment, setDoc, writeBatch, type Firestore } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, increment, setDoc, writeBatch, runTransaction, type Firestore } from 'firebase/firestore';
 
 /**
  * الخدمات الثمان المعتمدة التي تظهر لها الجاهزية ونظام الـ Webhook:
@@ -198,12 +198,22 @@ export async function initiateTelecomPayment({
     serviceCategory: serviceCategory
   };
 
-  const batch = writeBatch(firestore);
-  batch.update(userDocRef, { balance: increment(-amount) });
-  batch.set(userTxRef, txData);
-  batch.set(globalTxRef, txData);
+  // حماية صارمة لمنع الرصيد السالب نهائياً باستخدام runTransaction
+  // يتم قراءة الرصيد لحظياً وقفل المستند لضمان عدم حدوث خصم مكرر أو نزول الرصيد تحت الصفر
+  await runTransaction(firestore, async (transaction) => {
+    const userSnap = await transaction.get(userDocRef);
+    if (!userSnap.exists()) {
+      throw new Error('حساب المستخدم غير موجود.');
+    }
+    const currentBalance = Number(userSnap.data().balance || 0);
+    if (currentBalance < amount) {
+      throw new Error(`رصيد حسابك غير كافٍ لتنفيذ العملية. رصيدك الحالي: ${currentBalance} ر.ي والمطلوب: ${amount} ر.ي.`);
+    }
 
-  await batch.commit();
+    transaction.update(userDocRef, { balance: increment(-amount) });
+    transaction.set(userTxRef, txData);
+    transaction.set(globalTxRef, txData);
+  });
 
   return { transid, backpass, txId: transid };
 }

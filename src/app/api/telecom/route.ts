@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import CryptoJS from 'crypto-js';
 import { initializeServerFirebase } from '@/firebase/server-init';
-import { doc, getDoc, collection, query, where, getDocs, writeBatch, increment } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, writeBatch, increment, runTransaction } from 'firebase/firestore';
 import { 
   DEFAULT_SERVICES_CONFIG, 
   SystemServicesConfig, 
@@ -397,20 +397,15 @@ export async function POST(request: Request) {
         }, { status: 400 });
       }
 
-      // الخصم المباشر والفوري من الرصيد مع تسجيل المعاملة بحالة "قيد الانتظار"
+      // الخصم المباشر والفوري من الرصيد مع تسجيل المعاملة بحالة "قيد الانتظار" عبر runTransaction لمنع الرصيد السالب نهائياً
       try {
-        const batch = writeBatch(firestore);
         const userRef = doc(firestore, 'users', clientUserId);
         const clientTxRef = doc(firestore, `users/${clientUserId}/transactions`, transid);
         const globalTxRef = doc(firestore, 'paymentTransactions', transid);
 
         const timestamp = new Date().toISOString();
-
-        batch.update(userRef, { balance: increment(-requiredCost) });
-
         const telecomDetails = resolveTelecomDetails({ ...body, amount: requiredCost, loanAmount: detectedLoanAmount });
         const finalRecipientPhone = telecomDetails.recipientPhoneNumber || targetMobile;
-
         const clientBackUrl = payload.backurl ? String(payload.backurl).trim() : null;
 
         const txRecord = {
@@ -433,12 +428,35 @@ export async function POST(request: Request) {
           loanAmount: detectedLoanAmount
         };
 
-        batch.set(clientTxRef, txRecord);
-        batch.set(globalTxRef, txRecord);
+        await runTransaction(firestore, async (transaction) => {
+          const userSnap = await transaction.get(userRef);
+          if (!userSnap.exists()) {
+            throw new Error('USER_NOT_FOUND');
+          }
+          const liveBal = Number(userSnap.data().balance || 0);
+          if (liveBal < requiredCost) {
+            throw new Error(`INSUFFICIENT_BALANCE:${liveBal}`);
+          }
+          transaction.update(userRef, { balance: increment(-requiredCost) });
+          transaction.set(clientTxRef, txRecord);
+          transaction.set(globalTxRef, txRecord);
+        });
 
-        await batch.commit();
         initialBalance -= requiredCost;
       } catch (deductErr: any) {
+        const errMsg = deductErr?.message || '';
+        if (errMsg.startsWith('INSUFFICIENT_BALANCE:')) {
+          const liveBal = Number(errMsg.split(':')[1]) || 0;
+          const loanMsg = detectedLoanAmount > 0 ? ` (شامل السلفة: ${detectedLoanAmount} ر.ي)` : '';
+          return NextResponse.json({
+            resultCode: "-402",
+            status: "failed",
+            message: `عذراً، رصيدك غير كافٍ لتنفيذ هذه العملية${loanMsg}. الرصيد المتاح: ${liveBal} ر.ي، التكلفة المطلوبة: ${requiredCost} ر.ي. يرجى شحن الحساب والمحاولة مجدداً.`,
+            currentBalance: liveBal,
+            requiredCost: requiredCost,
+            loanAmount: detectedLoanAmount
+          }, { status: 400 });
+        }
         console.error("Failed immediate deduction:", deductErr);
         return NextResponse.json({
           resultCode: "-500",
