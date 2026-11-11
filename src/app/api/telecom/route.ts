@@ -375,6 +375,15 @@ export async function POST(request: Request) {
         loanAmount: detectedLoanAmount
       }, systemConfig, clientUserData);
 
+      // صمام أمان حاسم: منع أي عملية بسعر 0 ريال عند طلب باقة أو عملية سداد
+      if (requiredCost <= 0) {
+        return NextResponse.json({
+          resultCode: "-400",
+          status: "failed",
+          message: "تعذر تحديد سعر الباقة من الرمز المدخل. يرجى التأكد من كود الباقة أو إرسال مبلغ الباقة في حقل amount."
+        }, { status: 400 });
+      }
+
       // الشرط الحاسم: منع أي سداد بدون رصيد كافٍ
       if (initialBalance < requiredCost) {
         const loanMsg = detectedLoanAmount > 0 ? ` (شامل السلفة: ${detectedLoanAmount} ر.ي)` : '';

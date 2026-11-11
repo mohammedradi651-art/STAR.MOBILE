@@ -232,6 +232,19 @@ export async function POST(req: Request) {
 
     // احتساب السعر الدقيق من الربط البرمجي (شامل الباقة والسلفة إن وجدت)
     const payAmount = calculateApiTransactionCost(body, systemConfig, effectiveUserData);
+
+    // صمام أمان حاسم: منع أي عملية بسعر 0 ريال عند طلب باقة أو عملية سداد
+    if (payAmount <= 0) {
+      return NextResponse.json({
+        success: false,
+        code: 'SM_INVALID_AMOUNT',
+        message: 'تعذر تحديد سعر الباقة من الرمز المدخل. يرجى التأكد من كود الباقة (packageid أو offerid) أو إرسال مبلغ الباقة في حقل amount.',
+        transactionId: null,
+        data: null,
+        timestamp
+      }, { status: 400, headers: corsHeaders });
+    }
+
     const clientBalance = Number(effectiveUserData.balance || 0);
 
     if (clientBalance < payAmount) {
