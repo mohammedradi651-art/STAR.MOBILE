@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc } from '@/firebase';
-import { collection, doc, query, where, getDocs, limit, writeBatch, increment } from 'firebase/firestore';
+import { useOrderDocArray } from '@/lib/order-unified';
+import { collection, doc, query, where, getDocs, limit, writeBatch, increment, arrayUnion } from 'firebase/firestore';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
@@ -108,11 +109,7 @@ export default function TopUpPage() {
     );
     const { data: userProfile } = useDoc<UserProfile>(userDocRef);
     
-    const methodsCollection = useMemoFirebase(
-        () => (firestore ? collection(firestore, 'paymentMethods') : null),
-        [firestore]
-    );
-    const { data: paymentMethods, isLoading: isLoadingMethods } = useCollection<PaymentMethod>(methodsCollection);
+    const { data: paymentMethods, isLoading: isLoadingMethods } = useOrderDocArray<PaymentMethod>('paymentMethods', 'methods');
 
     useEffect(() => {
         if (!selectedMethod && paymentMethods && paymentMethods.length > 0) {
@@ -177,13 +174,13 @@ export default function TopUpPage() {
                 const bankNameArabic = bankType === 'alomqy' ? 'العمقي (المشقاص)' : bankType === 'kuraimi' ? 'الكريمي' : 'بنك أمجاد';
                 const refOrAccount = bankType === 'alomqy' ? alomqyAccount.trim() : bankType === 'kuraimi' ? kuraimiReference.trim() : (userProfile.displayName || 'مطابقة بالاسم');
 
-                const depositReqRef = doc(collection(firestore, 'depositRequests'));
+                const depositReqId = `dep_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
                 const txRef = doc(collection(firestore, `users/${userProfile.id}/transactions`));
 
                 const pendingTxNotes = `طلب تغذية حساب قيد المراجعة. ${bankType === 'alomqy' ? `رقم الحساب: ${alomqyAccount.trim()}` : bankType === 'kuraimi' ? `رقم المرجع: ${kuraimiReference.trim()}` : `المودع: ${userProfile.displayName}`}`;
 
                 const depositReqData = {
-                    id: depositReqRef.id,
+                    id: depositReqId,
                     transactionId: txRef.id,
                     userId: userProfile.id,
                     userName: userProfile.displayName || '',
@@ -203,7 +200,7 @@ export default function TopUpPage() {
 
                 const txData = {
                     id: txRef.id,
-                    depositRequestId: depositReqRef.id,
+                    depositRequestId: depositReqId,
                     userId: userProfile.id,
                     transactionDate: now,
                     createdAt: now,
@@ -217,7 +214,11 @@ export default function TopUpPage() {
                 };
 
                 const pendingBatch = writeBatch(firestore);
-                pendingBatch.set(depositReqRef, depositReqData);
+                const orderDepositRef = doc(firestore, 'Order', 'depositRequests');
+                pendingBatch.update(orderDepositRef, {
+                    requests: arrayUnion(depositReqData),
+                    updatedAt: now
+                });
                 pendingBatch.set(txRef, txData);
                 await pendingBatch.commit();
 

@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
-import { doc, writeBatch, increment, collection as firestoreCollection } from 'firebase/firestore';
+import { doc, writeBatch, increment, collection as firestoreCollection, arrayUnion } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { useRouter } from 'next/navigation';
@@ -176,20 +176,23 @@ export default function WaterPage() {
             recipientPhoneNumber: result.subscriberNumber
         });
 
-        const requestRef = doc(firestoreCollection(firestore, 'waterRequests'));
-        batch.set(requestRef, {
-            id: requestId,
-            userId: user.uid,
-            userName: userProfile.displayName || 'مشترك',
-            userPhone: userProfile.phoneNumber || '',
-            city: cityName,
-            subscriberNumber: result.subscriberNumber,
-            subscriberName: result.name,
-            billAmount: billAmount,
-            commission: COMMISSION,
-            totalAmount: totalToDeduct,
-            status: 'pending',
-            timestamp: now
+        const orderWaterRef = doc(firestore, 'Order', 'waterRequests');
+        batch.update(orderWaterRef, {
+            requests: arrayUnion({
+                id: requestId,
+                userId: user.uid,
+                userName: userProfile.displayName || 'مشترك',
+                userPhone: userProfile.phoneNumber || '',
+                city: cityName,
+                subscriberNumber: result.subscriberNumber,
+                subscriberName: result.name,
+                billAmount: billAmount,
+                commission: COMMISSION,
+                totalAmount: totalToDeduct,
+                status: 'pending',
+                timestamp: now
+            }),
+            updatedAt: now
         });
 
         await batch.commit();

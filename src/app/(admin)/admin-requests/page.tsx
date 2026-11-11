@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { collection, doc, query, orderBy, updateDoc, increment, writeBatch, getDocs, getDoc, where, limit } from 'firebase/firestore';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { useOrderDocArray } from '@/lib/order-unified';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -152,11 +153,7 @@ export default function AdminRequestsPage() {
   const [activeMainTab, setActiveMainTab] = useState<'electricity' | 'water' | 'withdrawals' | 'deposits'>('electricity');
 
   // --- 1. ELECTRICITY DATA ---
-  const electQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'electricityRequests'), orderBy('timestamp', 'desc'), limit(100)) : null),
-    [firestore]
-  );
-  const { data: electRequests, isLoading: isLoadingElect } = useCollection<ElectricityRequest>(electQuery);
+  const { data: electRequests, isLoading: isLoadingElect } = useOrderDocArray<ElectricityRequest>('electricityRequests', 'requests');
   const [selectedElect, setSelectedElect] = useState<ElectricityRequest | null>(null);
   const [isElectCancelOpen, setIsElectCancelOpen] = useState(false);
   const [electCancelNote, setElectCancelNote] = useState('');
@@ -169,11 +166,7 @@ export default function AdminRequestsPage() {
   }, [electRequests]);
 
   // --- 2. WATER DATA ---
-  const waterQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'waterRequests'), orderBy('timestamp', 'desc'), limit(100)) : null),
-    [firestore]
-  );
-  const { data: waterRequests, isLoading: isLoadingWater } = useCollection<WaterRequest>(waterQuery);
+  const { data: waterRequests, isLoading: isLoadingWater } = useOrderDocArray<WaterRequest>('waterRequests', 'requests');
   const [selectedWater, setSelectedWater] = useState<WaterRequest | null>(null);
   const [isWaterCancelOpen, setIsWaterCancelOpen] = useState(false);
   const [waterCancelNote, setWaterCancelNote] = useState('');
@@ -186,11 +179,7 @@ export default function AdminRequestsPage() {
   }, [waterRequests]);
 
   // --- 3. WITHDRAWALS DATA ---
-  const withQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'withdrawalRequests'), orderBy('requestTimestamp', 'desc'), limit(100)) : null),
-    [firestore]
-  );
-  const { data: withRequests, isLoading: isLoadingWith } = useCollection<WithdrawalRequest>(withQuery);
+  const { data: withRequests, isLoading: isLoadingWith } = useOrderDocArray<WithdrawalRequest>('withdrawalRequests', 'requests');
   const [selectedWith, setSelectedWith] = useState<WithdrawalRequest | null>(null);
   const [withAction, setWithAction] = useState<'approve' | 'reject' | null>(null);
   const [withRejectNote, setWithRejectNote] = useState('');
@@ -203,11 +192,7 @@ export default function AdminRequestsPage() {
   }, [withRequests]);
 
   // --- 4. DEPOSITS DATA ---
-  const depQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'depositRequests'), orderBy('createdAt', 'desc'), limit(100)) : null),
-    [firestore]
-  );
-  const { data: depRequests, isLoading: isLoadingDep } = useCollection<DepositRequest>(depQuery);
+  const { data: depRequests, isLoading: isLoadingDep } = useOrderDocArray<DepositRequest>('depositRequests', 'requests');
   const [selectedDep, setSelectedDep] = useState<DepositRequest | null>(null);
   const [depAction, setDepAction] = useState<'approve' | 'reject' | null>(null);
   const [depRejectNote, setDepRejectNote] = useState('');

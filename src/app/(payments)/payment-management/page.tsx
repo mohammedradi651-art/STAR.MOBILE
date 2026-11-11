@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PlusCircle, Trash2, Edit, Save, X, Image as ImageIcon, Banknote, User } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
-import { collection, doc } from 'firebase/firestore';
+import { useOrderDocArray } from '@/lib/order-unified';
+import { collection, doc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -33,11 +34,7 @@ export default function PaymentManagementPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  const methodsCollection = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'paymentMethods') : null),
-    [firestore]
-  );
-  const { data: paymentMethods, isLoading } = useCollection<PaymentMethod>(methodsCollection);
+  const { data: paymentMethods, isLoading } = useOrderDocArray<PaymentMethod>('paymentMethods', 'methods');
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -72,8 +69,12 @@ export default function PaymentManagementPage() {
       return;
     }
 
-    const docRef = doc(firestore, 'paymentMethods', id);
-    updateDocumentNonBlocking(docRef, editedData);
+    const orderDocRef = doc(firestore, 'Order', 'paymentMethods');
+    const updatedList = (paymentMethods || []).map(m => m.id === id ? { ...m, ...editedData } : m);
+    updateDoc(orderDocRef, {
+      methods: updatedList,
+      updatedAt: new Date().toISOString()
+    });
     setEditingId(null);
     toast({ title: "تم الحفظ", description: "تم تحديث طريقة الدفع بنجاح." });
   };
@@ -90,14 +91,26 @@ export default function PaymentManagementPage() {
 
   const handleDelete = (id: string) => {
     if (!firestore) return;
-    const docRef = doc(firestore, 'paymentMethods', id);
-    deleteDocumentNonBlocking(docRef);
+    const orderDocRef = doc(firestore, 'Order', 'paymentMethods');
+    const updatedList = (paymentMethods || []).filter(m => m.id !== id);
+    updateDoc(orderDocRef, {
+      methods: updatedList,
+      updatedAt: new Date().toISOString()
+    });
     toast({ title: "تم الحذف", description: "تم حذف طريقة الدفع بنجاح.", variant: "destructive" });
   };
   
   const handleAddNew = () => {
-    if (newMethod.name && newMethod.accountNumber && newMethod.accountHolderName && firestore && methodsCollection) {
-      addDocumentNonBlocking(methodsCollection, newMethod);
+    if (newMethod.name && newMethod.accountNumber && newMethod.accountHolderName && firestore) {
+      const orderDocRef = doc(firestore, 'Order', 'paymentMethods');
+      const newEntry = {
+        id: `method_${Date.now()}`,
+        ...newMethod
+      };
+      updateDoc(orderDocRef, {
+        methods: [...(paymentMethods || []), newEntry],
+        updatedAt: new Date().toISOString()
+      });
       setNewMethod(initialNewMethodState);
       setIsAdding(false);
       toast({ title: "تمت الإضافة", description: "تمت إضافة طريقة دفع جديدة بنجاح." });

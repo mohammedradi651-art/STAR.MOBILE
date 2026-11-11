@@ -21,7 +21,8 @@ import {
     Smartphone
 } from 'lucide-react';
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection, addDocumentNonBlocking } from '@/firebase';
-import { doc, collection, writeBatch, query, where, increment } from 'firebase/firestore';
+import { useOrderDocArray } from '@/lib/order-unified';
+import { doc, collection, writeBatch, query, where, increment, arrayUnion } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
@@ -85,11 +86,7 @@ export default function WithdrawPage() {
     );
     const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
 
-    const methodsCollection = useMemoFirebase(
-        () => (firestore ? collection(firestore, 'paymentMethods') : null),
-        [firestore]
-    );
-    const { data: withdrawalMethods, isLoading: isLoadingMethods } = useCollection<PaymentMethod>(methodsCollection);
+    const { data: withdrawalMethods, isLoading: isLoadingMethods } = useOrderDocArray<PaymentMethod>('paymentMethods', 'methods');
     
     useEffect(() => {
         if (!selectedMethod && withdrawalMethods && withdrawalMethods.length > 0) {
@@ -122,13 +119,13 @@ export default function WithdrawPage() {
         setIsProcessing(true);
 
         const now = new Date().toISOString();
-        const requestDocRef = doc(collection(firestore, 'withdrawalRequests'));
+        const requestId = `wth_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         const txDocRef = doc(collection(firestore, `users/${user.uid}/transactions`));
 
         const txNotes = `سحب إلى: ${selectedMethod.name} | رقم الحساب: ${accountNumber} | المستلم: ${recipientName}`;
 
         const requestData = {
-            id: requestDocRef.id,
+            id: requestId,
             transactionId: txDocRef.id,
             ownerId: user.uid,
             ownerName: userProfile.displayName,
@@ -147,7 +144,7 @@ export default function WithdrawPage() {
 
         const txData = {
             id: txDocRef.id,
-            requestId: requestDocRef.id,
+            requestId: requestId,
             userId: user.uid,
             transactionDate: now,
             createdAt: now,
@@ -168,8 +165,12 @@ export default function WithdrawPage() {
             batch.update(userDocRef, { balance: increment(-numericAmount) });
             // 2. تسجيل المعاملة في كشف حسابه بحالة قيد الانتظار
             batch.set(txDocRef, txData);
-            // 3. إرسال طلب السحب للإدارة مع ربطه بالمعاملة
-            batch.set(requestDocRef, requestData);
+            // 3. إرسال طلب السحب للإدارة داخل Order/withdrawalRequests
+            const orderWithRef = doc(firestore, 'Order', 'withdrawalRequests');
+            batch.update(orderWithRef, {
+                requests: arrayUnion(requestData),
+                updatedAt: now
+            });
 
             await batch.commit();
 

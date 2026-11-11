@@ -26,6 +26,7 @@ import {
     AlertCircle
 } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, useUser, useDoc } from '@/firebase';
+import { useOrderDocArray } from '@/lib/order-unified';
 import { collection, doc, query, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -80,11 +81,7 @@ export default function StorePage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
-  const productsQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'products'), orderBy('name')) : null),
-    [firestore]
-  );
-  const { data: products, isLoading: isLoadingProducts } = useCollection<Product>(productsQuery);
+  const { data: products, isLoading: isLoadingProducts } = useOrderDocArray<Product>('products', 'items');
 
   const userDocRef = useMemoFirebase(
     () => (user ? doc(firestore, 'users', user.uid) : null),

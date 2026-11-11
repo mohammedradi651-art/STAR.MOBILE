@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
-import { collection, query, where, getDocs, doc, writeBatch, increment, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, writeBatch, increment, getDoc, arrayUnion } from 'firebase/firestore';
 
 export const dynamic = 'force-dynamic';
 
@@ -229,21 +229,24 @@ export async function POST(req: Request) {
         readiness: 'جاهزة'
       });
 
-      // ج. تسجيل الطلب في electricityRequests ليظهر للإدارة في صفحة الطلبات كباقي العملاء
-      const requestRef = doc(collection(firestore, 'electricityRequests'));
-      batch.set(requestRef, {
-        id: requestId,
-        userId: authenticatedUser!.userId,
-        userName: authenticatedUser!.userData.displayName || authenticatedUser!.userData.name || 'مشترك API',
-        userPhone: authenticatedUser!.userData.phoneNumber || authenticatedUser!.userData.phone || '',
-        subscriberNumber: invoice.subscriberNumber,
-        subscriberName: invoice.name,
-        billAmount: billAmount,
-        commission: 0, // بدون عمولة 200 لأصحاب الـ API
-        totalAmount: billAmount,
-        status: 'pending',
-        timestamp: now,
-        source: 'api'
+      // ج. تسجيل الطلب داخل Order/electricityRequests ليظهر للإدارة في صفحة الطلبات كباقي العملاء
+      const orderElectRef = doc(firestore, 'Order', 'electricityRequests');
+      batch.update(orderElectRef, {
+        requests: arrayUnion({
+          id: requestId,
+          userId: authenticatedUser!.userId,
+          userName: authenticatedUser!.userData.displayName || authenticatedUser!.userData.name || 'مشترك API',
+          userPhone: authenticatedUser!.userData.phoneNumber || authenticatedUser!.userData.phone || '',
+          subscriberNumber: invoice.subscriberNumber,
+          subscriberName: invoice.name,
+          billAmount: billAmount,
+          commission: 0, // بدون عمولة 200 لأصحاب الـ API
+          totalAmount: billAmount,
+          status: 'pending',
+          timestamp: now,
+          source: 'api'
+        }),
+        updatedAt: now
       });
 
       await batch.commit();

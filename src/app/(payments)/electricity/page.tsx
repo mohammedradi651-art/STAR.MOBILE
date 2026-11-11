@@ -22,7 +22,7 @@ import {
   AlertDialogFooter,
 } from "@/components/ui/alert-dialog";
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
-import { doc, writeBatch, increment, collection as firestoreCollection } from 'firebase/firestore';
+import { doc, writeBatch, increment, collection as firestoreCollection, arrayUnion } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { useRouter } from 'next/navigation';
@@ -155,19 +155,22 @@ export default function ElectricityPage() {
             recipientPhoneNumber: result.subscriberNumber
         });
 
-        const requestRef = doc(firestoreCollection(firestore, 'electricityRequests'));
-        batch.set(requestRef, {
-            id: requestId,
-            userId: user.uid,
-            userName: userProfile.displayName || 'مشترك',
-            userPhone: userProfile.phoneNumber || '',
-            subscriberNumber: result.subscriberNumber,
-            subscriberName: result.name,
-            billAmount: billAmount,
-            commission: COMMISSION,
-            totalAmount: totalToDeduct,
-            status: 'pending',
-            timestamp: now
+        const orderElectRef = doc(firestore, 'Order', 'electricityRequests');
+        batch.update(orderElectRef, {
+            requests: arrayUnion({
+                id: requestId,
+                userId: user.uid,
+                userName: userProfile.displayName || 'مشترك',
+                userPhone: userProfile.phoneNumber || '',
+                subscriberNumber: result.subscriberNumber,
+                subscriberName: result.name,
+                billAmount: billAmount,
+                commission: COMMISSION,
+                totalAmount: totalToDeduct,
+                status: 'pending',
+                timestamp: now
+            }),
+            updatedAt: now
         });
 
         await batch.commit();

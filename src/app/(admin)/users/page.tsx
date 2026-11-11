@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { collection, doc, updateDoc, increment, query, orderBy, writeBatch, setDoc, getDocs, where, limit, getDoc, getCountFromServer, getAggregateFromServer, sum, count } from 'firebase/firestore';
 import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking, useDoc, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
+import { useOrderDocArray } from '@/lib/order-unified';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -383,11 +384,7 @@ export default function UsersPage() {
     }
   };
 
-  const debtsCollection = useMemoFirebase(
-    () => (firestore && isDebtsListOpen ? query(collection(firestore, 'clientDebts'), orderBy('timestamp', 'desc')) : null),
-    [firestore, isDebtsListOpen]
-  );
-  const { data: clientDebts, isLoading: isLoadingDebts } = useCollection<ClientDebt>(debtsCollection);
+  const { data: clientDebts, isLoading: isLoadingDebts } = useOrderDocArray<ClientDebt>('clientDebts', 'debts');
 
   const settingsDocRef = useMemoFirebase(
     () => (firestore ? doc(firestore, 'appSettings', 'global') : null),

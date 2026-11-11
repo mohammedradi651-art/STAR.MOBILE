@@ -29,6 +29,7 @@ import {
     RefreshCw
 } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
+import { useOrderDocArray } from '@/lib/order-unified';
 import { collection, query, orderBy, doc, updateDoc, increment, writeBatch, limit } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -144,11 +145,7 @@ export default function DepositManagementPage() {
     const { data: notifications, isLoading } = useCollection<BankNotif>(bankQuery);
 
     // Fetch Deposit Requests from clients
-    const depReqsQuery = useMemoFirebase(
-        () => (firestore ? query(collection(firestore, 'depositRequests'), orderBy('createdAt', 'desc'), limit(100)) : null),
-        [firestore]
-    );
-    const { data: depositRequests, isLoading: isLoadingDepReqs } = useCollection<DepositRequest>(depReqsQuery);
+    const { data: depositRequests, isLoading: isLoadingDepReqs } = useOrderDocArray<DepositRequest>('depositRequests', 'requests');
 
     const { pendingRequests, archivedRequests } = useMemo(() => {
         const pending: DepositRequest[] = [];
