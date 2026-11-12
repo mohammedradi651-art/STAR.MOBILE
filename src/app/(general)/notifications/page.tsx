@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { SimpleHeader } from '@/components/layout/simple-header';
-import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from '@/firebase';
 import { collection, query, orderBy, writeBatch, doc, limit } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Bell, BellOff, Trash2, Calendar, Clock } from 'lucide-react';
@@ -41,31 +41,29 @@ export default function NotificationsPage() {
   const [monthToDelete, setMonthToDelete] = useState<string | null>(null);
   const [notifsLimit, setNotifsLimit] = useState<number>(30);
 
-  // 1. جلب الإشعارات الشخصية
-  const personalNotificationsQuery = useMemoFirebase(
-    () => user && firestore
-        ? query(
-            collection(firestore, 'users', user.uid, 'notifications'),
-            orderBy('timestamp', 'desc'),
-            limit(notifsLimit)
-          )
-        : null,
-    [firestore, user, notifsLimit]
+  // 1. جلب الإشعارات الشخصية من المستند الموحد notifications/{uid}
+  const personalNotifDocRef = useMemoFirebase(
+    () => (user && firestore ? doc(firestore, `users/${user.uid}/notifications`, user.uid) : null),
+    [firestore, user]
   );
-  const { data: personalNotifications, isLoading: isLoadingPersonal } = useCollection<Notification>(personalNotificationsQuery);
+  const { data: personalDocData, isLoading: isLoadingPersonal } = useDoc<any>(personalNotifDocRef);
+
+  const personalNotifications: Notification[] = React.useMemo(() => {
+    if (!personalDocData || !Array.isArray(personalDocData.notifications)) return [];
+    return personalDocData.notifications.map((n: any) => ({
+      id: n.id,
+      title: n.title,
+      body: n.body,
+      timestamp: n.createdAt || n.timestamp || new Date().toISOString(),
+      type: n.type || 'personal',
+      read: n.isRead === true || n.read === true,
+      data: n.data
+    }));
+  }, [personalDocData]);
   
-  // 2. جلب الإشعارات العامة
-  const globalNotificationsQuery = useMemoFirebase(
-    () => firestore
-        ? query(
-            collection(firestore, 'notifications'),
-            orderBy('timestamp', 'desc'),
-            limit(notifsLimit)
-          )
-        : null,
-    [firestore, notifsLimit]
-  );
-  const { data: globalNotifications, isLoading: isLoadingGlobal } = useCollection<Notification>(globalNotificationsQuery);
+  // 2. الإشعارات العامة
+  const globalNotifications: Notification[] = [];
+  const isLoadingGlobal = false;
 
   // 3. دمج وترتيب الإشعارات
   const allNotifications = React.useMemo(() => {

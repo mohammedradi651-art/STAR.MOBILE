@@ -7,8 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PlusCircle, Trash2, Edit, Save, X, Tag, CreditCard, FileUp, Loader2, List, FileText, Database, Calendar } from 'lucide-react';
-import { useCollection, useFirestore, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
-import { collection, doc, writeBatch } from 'firebase/firestore';
+import { useCollection, useFirestore, useMemoFirebase, useDoc, setDocumentNonBlocking, deleteDocumentNonBlocking, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
+import { collection, doc, writeBatch, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -44,13 +44,34 @@ export default function NetworkDetailPage({ params }: { params: { networkId: str
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  // Categories
-  const categoriesCollection = useMemoFirebase(() => (firestore ? collection(firestore, `networks/${networkId}/cardCategories`) : null), [firestore, networkId]);
-  const { data: categories, isLoading: isLoadingCategories } = useCollection<CardCategory>(categoriesCollection);
+  // جلب الفئات والكروت مباشرة من الفرع الجديد local_networks/{networkId}
+  const localNetDocRef = useMemoFirebase(
+    () => (firestore && networkId ? doc(firestore, `users/${networkId}/local_networks`, networkId) : null),
+    [firestore, networkId]
+  );
+  const { data: localNetDoc, isLoading: isLoadingCategories } = useDoc<any>(localNetDocRef);
 
-  // Cards
-  const cardsCollection = useMemoFirebase(() => (firestore ? collection(firestore, `networks/${networkId}/cards`) : null), [firestore, networkId]);
-  const { data: cards, isLoading: isLoadingCards } = useCollection<NetworkCard>(cardsCollection);
+  const categories: CardCategory[] = useMemo(() => {
+    if (!localNetDoc || !Array.isArray(localNetDoc.categories)) return [];
+    return localNetDoc.categories;
+  }, [localNetDoc]);
+
+  // جلب الكروت من cards_data/cards
+  const cardsDocRef = useMemoFirebase(
+    () => (firestore && networkId ? doc(firestore, `users/${networkId}/local_networks/${networkId}/cards_data`, 'cards') : null),
+    [firestore, networkId]
+  );
+  const { data: cardsDocData, isLoading: isLoadingCards } = useDoc<any>(cardsDocRef);
+
+  const cards: NetworkCard[] = useMemo(() => {
+    if (!cardsDocData || !Array.isArray(cardsDocData.cards)) return [];
+    return cardsDocData.cards.map((c: any, index: number) => ({
+      id: c.c || String(index),
+      cardNumber: c.c,
+      status: (c.isUsed === true || c.u === true) ? 'sold' : 'available',
+      categoryId: c.cat
+    }));
+  }, [cardsDocData]);
 
   const [isAddingCategory, setIsAddingCategory] = React.useState(false);
   const [newCategory, setNewCategory] = React.useState({ name: '', price: '', capacity: '', validity: '' });

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PlusCircle, Trash2, Edit, Save, X, Wifi, MapPin, Phone, Search, Settings } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
-import { collection, doc } from 'firebase/firestore';
+import { collection, doc, getDocs, getDoc, query, where, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -37,11 +37,38 @@ export default function NetworksManagementPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  const networksCollection = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'networks') : null),
-    [firestore]
-  );
-  const { data: networks, isLoading } = useCollection<Network>(networksCollection);
+  const [networks, setNetworks] = useState<Network[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // جلب الشبكات من حسابات المستخدمين local_networks
+  useEffect(() => {
+    if (!firestore) return;
+    const fetchNetworks = async () => {
+      try {
+        const uSnap = await getDocs(query(collection(firestore, 'users'), where('networkName', '!=', '')));
+        const list: Network[] = [];
+        for (const u of uSnap.docs) {
+          const lRef = doc(firestore, `users/${u.id}/local_networks`, u.id);
+          const lSnap = await getDoc(lRef);
+          if (lSnap.exists()) {
+            const data = lSnap.data();
+            list.push({
+              id: u.id,
+              name: data.name || data.networkName || u.data().networkName,
+              location: data.location || data.city || u.data().networkLocation || 'حضرموت',
+              phoneNumber: data.ownerPhone || u.data().phoneNumber || ''
+            });
+          }
+        }
+        setNetworks(list);
+      } catch (e) {
+        console.error('Error fetching networks:', e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchNetworks();
+  }, [firestore]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
