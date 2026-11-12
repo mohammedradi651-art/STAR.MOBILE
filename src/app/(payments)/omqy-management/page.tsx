@@ -29,7 +29,7 @@ import {
     RefreshCw
 } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
-import { useOrderDocArray } from '@/lib/order-unified';
+import { useOrderDocArray, updateOrderItemInDoc } from '@/lib/order-unified';
 import { collection, query, orderBy, doc, updateDoc, increment, writeBatch, limit } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
@@ -266,9 +266,8 @@ export default function DepositManagementPage() {
             const userRef = doc(firestore, 'users', req.userId);
             batch.update(userRef, { balance: increment(req.amount) });
 
-            // 2. تحديث حالة طلب الإيداع
-            const depositRef = doc(firestore, 'depositRequests', req.id);
-            batch.update(depositRef, {
+            // 2. تحديث حالة طلب الإيداع داخل Order/depositRequests
+            await updateOrderItemInDoc(firestore, 'depositRequests', req.id, {
                 status: 'approved',
                 readiness: 'جاهزة',
                 approvedAt: now
@@ -327,9 +326,8 @@ export default function DepositManagementPage() {
             const now = new Date().toISOString();
             const batch = writeBatch(firestore);
 
-            // 1. تحديث طلب الإيداع إلى مرفوض
-            const depositRef = doc(firestore, 'depositRequests', req.id);
-            batch.update(depositRef, {
+            // 1. تحديث طلب الإيداع إلى مرفوض داخل Order/depositRequests
+            await updateOrderItemInDoc(firestore, 'depositRequests', req.id, {
                 status: 'rejected',
                 readiness: 'فاشلة',
                 rejectReason: reason,

@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { collection, doc, query, orderBy, updateDoc, increment, writeBatch, getDocs, getDoc, where, limit } from 'firebase/firestore';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { useOrderDocArray } from '@/lib/order-unified';
+import { useOrderDocArray, updateOrderItemInDoc } from '@/lib/order-unified';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -209,7 +209,7 @@ export default function AdminRequestsPage() {
   const handleElectComplete = async (reqId: string) => {
     if (!firestore) return;
     try {
-      await updateDoc(doc(firestore, 'electricityRequests', reqId), { status: 'completed' });
+      await updateOrderItemInDoc(firestore, 'electricityRequests', reqId, { status: 'completed' });
       toast({ title: 'تم السداد', description: 'تم وضع علامة تم السداد بنجاح.' });
       setSelectedElect(null);
     } catch {
@@ -221,7 +221,7 @@ export default function AdminRequestsPage() {
     if (!selectedElect || !firestore) return;
     const batch = writeBatch(firestore);
     try {
-      batch.update(doc(firestore, 'electricityRequests', selectedElect.id), { status: 'cancelled' });
+      await updateOrderItemInDoc(firestore, 'electricityRequests', selectedElect.id, { status: 'cancelled' });
       batch.update(doc(firestore, 'users', selectedElect.userId), { balance: increment(selectedElect.totalAmount) });
       batch.set(doc(collection(firestore, `users/${selectedElect.userId}/transactions`)), {
         userId: selectedElect.userId,
@@ -244,7 +244,7 @@ export default function AdminRequestsPage() {
   const handleWaterComplete = async (reqId: string) => {
     if (!firestore) return;
     try {
-      await updateDoc(doc(firestore, 'waterRequests', reqId), { status: 'completed' });
+      await updateOrderItemInDoc(firestore, 'waterRequests', reqId, { status: 'completed' });
       toast({ title: 'تم السداد', description: 'تم وضع علامة تم السداد بنجاح.' });
       setSelectedWater(null);
     } catch {
@@ -257,7 +257,7 @@ export default function AdminRequestsPage() {
     const batch = writeBatch(firestore);
     const refundAmount = Number(selectedWater.totalAmount || 0);
     try {
-      batch.update(doc(firestore, 'waterRequests', selectedWater.id), { status: 'cancelled' });
+      await updateOrderItemInDoc(firestore, 'waterRequests', selectedWater.id, { status: 'cancelled' });
       batch.update(doc(firestore, 'users', selectedWater.userId), { balance: increment(refundAmount) });
       batch.set(doc(collection(firestore, `users/${selectedWater.userId}/transactions`)), {
         userId: selectedWater.userId,
@@ -336,7 +336,7 @@ export default function AdminRequestsPage() {
           timestamp: now,
         });
 
-        batch.update(doc(firestore, 'withdrawalRequests', selectedWith.id), { 
+        await updateOrderItemInDoc(firestore, 'withdrawalRequests', selectedWith.id, { 
           status: 'approved',
           readiness: 'جاهزة',
           completedAt: now
@@ -372,7 +372,7 @@ export default function AdminRequestsPage() {
           timestamp: now,
         });
 
-        batch.update(doc(firestore, 'withdrawalRequests', selectedWith.id), { 
+        await updateOrderItemInDoc(firestore, 'withdrawalRequests', selectedWith.id, { 
           status: 'rejected',
           readiness: 'فاشلة',
           rejectReason: failReason,
@@ -402,8 +402,7 @@ export default function AdminRequestsPage() {
         const userRef = doc(firestore, 'users', selectedDep.userId);
         batch.update(userRef, { balance: increment(selectedDep.amount) });
 
-        const depRef = doc(firestore, 'depositRequests', selectedDep.id);
-        batch.update(depRef, {
+        await updateOrderItemInDoc(firestore, 'depositRequests', selectedDep.id, {
           status: 'approved',
           readiness: 'جاهزة',
           approvedAt: now
@@ -431,8 +430,7 @@ export default function AdminRequestsPage() {
         });
       } else {
         const failReason = depRejectNote.trim() || 'لم يتم العثور على إيداع مطابق في البنك';
-        const depRef = doc(firestore, 'depositRequests', selectedDep.id);
-        batch.update(depRef, {
+        await updateOrderItemInDoc(firestore, 'depositRequests', selectedDep.id, {
           status: 'rejected',
           readiness: 'فاشلة',
           rejectReason: failReason,

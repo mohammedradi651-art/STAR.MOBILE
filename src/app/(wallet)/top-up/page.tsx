@@ -219,6 +219,25 @@ export default function TopUpPage() {
                     requests: arrayUnion(depositReqData),
                     updatedAt: now
                 });
+                // حفظ أيضاً في فرع المستخدم الموحد deposit_requests/requests
+                const userDepDocRef = doc(firestore, `users/${userProfile.id}/deposit_requests`, 'requests');
+                pendingBatch.set(userDepDocRef, {
+                    lastUpdated: now,
+                    requests: arrayUnion({
+                        id: depositReqId,
+                        bankName: bankNameArabic,
+                        amount: amt,
+                        referenceNumber: refOrAccount,
+                        identifierCode: refOrAccount,
+                        operationId: txRef.id,
+                        status: 'pending',
+                        createdAt: now,
+                        userName: userProfile.displayName || '',
+                        userPhone: userProfile.phoneNumber || '',
+                        userId: userProfile.id
+                    })
+                }, { merge: true });
+
                 pendingBatch.set(txRef, txData);
                 await pendingBatch.commit();
 

@@ -34,6 +34,7 @@ import {
     useCollection, 
     useFirestore, 
     useMemoFirebase, 
+    useDoc,
     deleteDocumentNonBlocking, 
     addDocumentNonBlocking, 
     updateDocumentNonBlocking, 
@@ -113,25 +114,60 @@ export default function OwnerNetworkManagePage() {
   ), [user, firestore]);
   
   const { data: networks, isLoading: isNetworksLoading } = useCollection<Network>(networkQuery);
+
+  // الفحص المباشر في الفرع الجديد local_networks الخاص بالمستخدم
+  const localNetDocRef = useMemoFirebase(() => (
+    user && firestore ? doc(firestore, `users/${user.uid}/local_networks`, user.uid) : null
+  ), [user, firestore]);
+  const { data: localNetDoc } = useDoc<any>(localNetDocRef);
   
   useEffect(() => {
-    if (networks && networks.length > 0) {
+    if (localNetDoc && localNetDoc.name) {
+      setNetwork({
+        id: user!.uid,
+        name: localNetDoc.name,
+        location: localNetDoc.city || localNetDoc.location || '',
+        ownerId: user!.uid,
+        phoneNumber: user!.phoneNumber || '',
+        city: localNetDoc.city,
+        district: localNetDoc.district
+      });
+      setIsLoadingNetwork(false);
+    } else if (networks && networks.length > 0) {
       setNetwork(networks[0]);
+      setIsLoadingNetwork(false);
+    } else if (!isNetworksLoading) {
+      setIsLoadingNetwork(false);
     }
-    if (!isNetworksLoading) {
-        setIsLoadingNetwork(false);
-    }
-  }, [networks, isNetworksLoading]);
+  }, [networks, isNetworksLoading, localNetDoc, user]);
 
   const networkId = network?.id;
 
-  // Categories
-  const categoriesCollection = useMemoFirebase(() => (firestore && networkId ? collection(firestore, `networks/${networkId}/cardCategories`) : null), [firestore, networkId]);
-  const { data: categories, isLoading: isLoadingCategories } = useCollection<CardCategory>(categoriesCollection);
+  // جلب الفئات مباشرة من المستند الموحد local_networks
+  const categories: CardCategory[] = useMemo(() => {
+    if (!localNetDoc || !Array.isArray(localNetDoc.categories)) return [];
+    return localNetDoc.categories;
+  }, [localNetDoc]);
+  const isLoadingCategories = isNetworksLoading;
 
-  // Cards
-  const cardsCollection = useMemoFirebase(() => (firestore && networkId ? collection(firestore, `networks/${networkId}/cards`) : null), [firestore, networkId]);
-  const { data: cards, isLoading: isLoadingCards } = useCollection<NetworkCard>(cardsCollection);
+  // جلب الكروت مباشرة من المستند الموحد cards_data/cards
+  const cardsDocRef = useMemoFirebase(() => (
+    user && firestore ? doc(firestore, `users/${user.uid}/local_networks/${user.uid}/cards_data`, 'cards') : null
+  ), [user, firestore]);
+  const { data: cardsDocData, isLoading: isLoadingCards } = useDoc<any>(cardsDocRef);
+
+  const cards: NetworkCard[] = useMemo(() => {
+    if (!cardsDocData || !Array.isArray(cardsDocData.cards)) return [];
+    return cardsDocData.cards.map((c: any, index: number) => ({
+      id: c.c || String(index),
+      cardNumber: c.c,
+      categoryId: c.cat,
+      categoryName: c.categoryName,
+      price: c.p,
+      isUsed: c.isUsed === true || c.u === true,
+      soldAt: c.soldAt
+    }));
+  }, [cardsDocData]);
 
   const [isAddingCategory, setIsAddingCategory] = React.useState(false);
   const [newCategory, setNewCategory] = React.useState({ name: '', price: '', capacity: '', validity: '' });

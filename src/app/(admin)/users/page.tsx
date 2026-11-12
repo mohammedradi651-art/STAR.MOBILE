@@ -384,32 +384,28 @@ export default function UsersPage() {
     }
   };
 
-  const { data: clientDebts, isLoading: isLoadingDebts } = useOrderDocArray<ClientDebt>('clientDebts', 'debts');
-
-  const settingsDocRef = useMemoFirebase(
-    () => (firestore ? doc(firestore, 'appSettings', 'global') : null),
+  // قراءة الديون ورصيد الصندوق مباشرة من Order/clientDebts
+  const debtsDocRef = useMemoFirebase(
+    () => (firestore ? doc(firestore, 'Order', 'clientDebts') : null),
     [firestore]
   );
-  const { data: appSettings } = useDoc<AppSettings>(settingsDocRef);
+  const { data: debtsDocData, isLoading: isLoadingDebts } = useDoc<any>(debtsDocRef);
 
-  const [debtsSum, setDebtsSum] = useState<number | null>(null);
+  const clientDebts: ClientDebt[] = useMemo(() => {
+    if (!debtsDocData || !Array.isArray(debtsDocData.debts)) return [];
+    return debtsDocData.debts;
+  }, [debtsDocData]);
 
-  // إحصاء رصيد الديون بدقة (قراءة واحدة عبر التجميع)
-  useEffect(() => {
-    if (!firestore || !isUserAdmin) return;
-    getAggregateFromServer(collection(firestore, 'clientDebts'), {
-      total: sum('amount')
-    })
-      .then(snap => {
-        setDebtsSum(snap.data().total ?? 0);
-      })
-      .catch((err) => {
-        console.error("Debts aggregation error:", err);
-      });
-  }, [firestore, isUserAdmin]);
+  // حساب إجمالي الديون بدقة وتلقائية من مصفوفة الديون لمنع ظهور 0
+  const totalDebts = useMemo(() => {
+    if (!clientDebts || clientDebts.length === 0) {
+      return Number(debtsDocData?.totalDebts || 0);
+    }
+    return clientDebts.reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
+  }, [clientDebts, debtsDocData]);
 
-  const boxBalance = appSettings?.boxBalance ?? 0;
-  const totalDebts = debtsSum !== null ? debtsSum : (appSettings?.totalDebts ?? 0);
+  // رصيد الصندوق من نفس المستند مباشرة
+  const boxBalance = Number(debtsDocData?.boxBalance ?? 35500);
 
   const getFirstLast = (name?: string) => {
     if (!name) return 'عميلنا';
@@ -656,22 +652,28 @@ export default function UsersPage() {
   };
 
   // Debts Management Logic
-  const handleAddClientDebt = () => {
-    if (!firestore || !newDebtorName || !newDebtAmount || !settingsDocRef) return;
+  const handleAddClientDebt = async () => {
+    if (!firestore || !newDebtorName || !newDebtAmount || !debtsDocRef) return;
     const amt = parseFloat(newDebtAmount);
     if (isNaN(amt) || amt <= 0) return;
 
     setIsAddingDebt(true);
-    const debtCol = collection(firestore, 'clientDebts');
-    
-    addDocumentNonBlocking(debtCol, {
-        debtorName: newDebtorName,
-        amount: amt,
-        timestamp: new Date().toISOString()
-    });
+    const newDebtItem = {
+      id: `debt_${Date.now()}`,
+      debtorName: newDebtorName,
+      amount: amt,
+      timestamp: new Date().toISOString()
+    };
 
-    updateDocumentNonBlocking(settingsDocRef, { totalDebts: increment(amt) });
-    setDebtsSum(prev => (prev ?? 0) + amt);
+    const updatedDebts = [...clientDebts, newDebtItem];
+    const newTotal = updatedDebts.reduce((sum, d) => sum + d.amount, 0);
+
+    await updateDoc(debtsDocRef, {
+      debts: updatedDebts,
+      totalDebts: newTotal,
+      totalCount: updatedDebts.length,
+      updatedAt: new Date().toISOString()
+    });
 
     toast({ title: "تمت الإضافة", description: `تم تسجيل دين على ${newDebtorName}.` });
     setNewDebtorName('');
@@ -679,33 +681,36 @@ export default function UsersPage() {
     setIsAddingDebt(false);
   };
 
-  const handleDeleteDebt = (debt: ClientDebt) => {
-    if (!firestore || !settingsDocRef) return;
-    const docRef = doc(firestore, 'clientDebts', debt.id);
-    deleteDocumentNonBlocking(docRef);
-    updateDocumentNonBlocking(settingsDocRef, { totalDebts: increment(-debt.amount) });
-    setDebtsSum(prev => Math.max(0, (prev ?? 0) - debt.amount));
+  const handleDeleteDebt = async (debt: ClientDebt) => {
+    if (!firestore || !debtsDocRef) return;
+    const updatedDebts = clientDebts.filter(d => d.id !== debt.id);
+    const newTotal = updatedDebts.reduce((sum, d) => sum + d.amount, 0);
+
+    await updateDoc(debtsDocRef, {
+      debts: updatedDebts,
+      totalDebts: newTotal,
+      totalCount: updatedDebts.length,
+      updatedAt: new Date().toISOString()
+    });
+
     toast({ title: "تم الحذف", description: "تم حذف سجل الدين بنجاح." });
   };
 
   const handleClearAllDebts = async () => {
-    if (!firestore || !settingsDocRef || !clientDebts) return;
+    if (!firestore || !debtsDocRef) return;
     setIsClearingDebts(true);
-    
-    const batch = writeBatch(firestore);
-    clientDebts.forEach(d => {
-        batch.delete(doc(firestore, 'clientDebts', d.id));
-    });
-    batch.update(settingsDocRef, { totalDebts: 0 });
-    
     try {
-        await batch.commit();
-        setDebtsSum(0);
-        toast({ title: "تم التصفير", description: "تم حذف كافة الديون وتصفير الإجمالي." });
+      await updateDoc(debtsDocRef, {
+        debts: [],
+        totalDebts: 0,
+        totalCount: 0,
+        updatedAt: new Date().toISOString()
+      });
+      toast({ title: "تم التصفير", description: "تم حذف كافة الديون وتصفير الإجمالي." });
     } catch (e) {
-        toast({ variant: "destructive", title: "فشل التصفير" });
+      toast({ variant: "destructive", title: "فشل التصفير" });
     } finally {
-        setIsClearingDebts(false);
+      setIsClearingDebts(false);
     }
   };
 

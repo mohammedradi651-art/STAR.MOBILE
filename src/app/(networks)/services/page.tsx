@@ -42,8 +42,10 @@ import {
   writeBatch, 
   increment, 
   getDocs, 
+  getDoc,
   limit as firestoreLimit,
   updateDoc,
+  arrayUnion,
   onSnapshot
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -144,11 +146,41 @@ export default function CombinedNetworksPage() {
     return `${parts[0]} ${parts[parts.length - 1]}`;
   };
 
-  const localNetworksQuery = useMemoFirebase(
-    () => (firestore ? collection(firestore, 'networks') : null),
-    [firestore]
-  );
-  const { data: localNetworks, isLoading: isLoadingLocal } = useCollection<any>(localNetworksQuery);
+  // جلب الشبكات المحلية من المستخدمين الذين يملكون local_networks
+  const [localNetworks, setLocalNetworks] = useState<any[]>([]);
+  const [isLoadingLocal, setIsLoadingLocal] = useState(true);
+
+  useEffect(() => {
+    if (!firestore) return;
+    const fetchLocal = async () => {
+      try {
+        const uSnap = await getDocs(query(collection(firestore, 'users'), where('networkName', '!=', '')));
+        const nets: any[] = [];
+        for (const u of uSnap.docs) {
+          const lRef = doc(firestore, `users/${u.id}/local_networks`, u.id);
+          const lSnap = await getDoc(lRef);
+          if (lSnap.exists()) {
+            const data = lSnap.data();
+            nets.push({
+              id: u.id,
+              name: data.name || data.networkName,
+              location: data.location || data.city || 'حضرموت',
+              ownerId: u.id,
+              ownerName: data.ownerName || u.data().fullName,
+              ownerPhone: data.ownerPhone || u.data().phoneNumber,
+              categories: data.categories || []
+            });
+          }
+        }
+        setLocalNetworks(nets);
+      } catch (e) {
+        console.error('Error fetching local networks:', e);
+      } finally {
+        setIsLoadingLocal(false);
+      }
+    };
+    fetchLocal();
+  }, [firestore]);
 
   useEffect(() => {
     const fetchApiNetworks = async () => {
@@ -265,16 +297,12 @@ export default function CombinedNetworksPage() {
 
     try {
       if (network.isLocal && firestore) {
-        const catsRef = collection(firestore, `networks/${network.id}/cardCategories`);
-        const snapshot = await getDocs(catsRef).catch(async (err) => {
-            const contextualError = new FirestorePermissionError({
-                path: `networks/${network.id}/cardCategories`,
-                operation: 'list',
-            });
-            errorEmitter.emit('permission-error', contextualError);
-            throw err;
-        });
-        const catsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as CardCategory));
+        const ownerId = network.ownerId || network.id;
+        const localNetRef = doc(firestore, `users/${ownerId}/local_networks`, ownerId);
+        const snap = await getDoc(localNetRef);
+        const catsData: CardCategory[] = (snap.exists() && Array.isArray(snap.data()?.categories))
+          ? snap.data()?.categories
+          : [];
         setCategories(catsData);
         localStorage.setItem(catCacheKey, JSON.stringify(catsData));
       } else {
@@ -365,74 +393,87 @@ export default function CombinedNetworksPage() {
         let finalCardID = '';
 
         if (selectedNetwork.isLocal) {
-            // 1. الشبكات المحلية: التحقق من توفر الكروت أولاً قبل أي خصم
-            const cardsRef = collection(firestore, `networks/${selectedNetwork.id}/cards`);
-            const q = query(cardsRef, where('categoryId', '==', selectedCategory.id), where('status', '==', 'available'), firestoreLimit(1));
-            const availableCardsSnapshot = await getDocs(q);
+            // 1. الشبكات المحلية: جلب الكرت المتاح من الفرع الجديد cards_data/cards
+            const ownerId = selectedNetwork.ownerId || selectedNetwork.id;
+            const cardsDocRef = doc(firestore, `users/${ownerId}/local_networks/${ownerId}/cards_data`, 'cards');
+            const cardsSnap = await getDoc(cardsDocRef);
 
-            if (availableCardsSnapshot.empty) {
-                throw new Error('لا توجد كروت متاحة حالياً في هذه الفئة.');
+            if (!cardsSnap.exists()) {
+                throw new Error('لا توجد كروت متاحة حالياً في هذه الشبكة.');
             }
-            
-            const cardToPurchaseDoc = availableCardsSnapshot.docs[0];
-            const cardData = cardToPurchaseDoc.data();
-            finalCardID = cardData.cardNumber;
-            
+
+            const allCards: any[] = cardsSnap.data()?.cards || [];
+            const cardIndex = allCards.findIndex((c: any) => 
+                (c.cat === selectedCategory.id || c.categoryId === selectedCategory.id) && 
+                c.isUsed !== true && c.u !== true
+            );
+
+            if (cardIndex === -1) {
+                throw new Error('نفدت الكروت المتاحة حالياً لهذه الفئة.');
+            }
+
+            const cardData = allCards[cardIndex];
+            finalCardID = cardData.c || cardData.cardNumber;
+
+            // تحديث حالة الكرت إلى مباع بدلاً من حذفه
+            allCards[cardIndex] = {
+                ...cardData,
+                isUsed: true,
+                u: true,
+                soldAt: now
+            };
+
             const commission = Math.ceil(selectedCategory.price * 0.10);
             const payoutAmount = selectedCategory.price - commission;
-            const ownerId = selectedNetwork.ownerId || 'admin';
 
-            // دمج خصم الرصيد مع حذف الكرت من المخزون في معاملة ذرية واحدة (Batch)
             const batch = writeBatch(firestore);
             batch.update(userDocRef, { balance: increment(-effectivePrice) });
-            batch.delete(cardToPurchaseDoc.ref); // حذف الكرت فوراً من مخزون صاحب الشبكة بمجرد شرائه
-            batch.set(doc(collection(firestore, `users/${user.uid}/transactions`)), {
+            // تحديث مصفوفة الكروت كاملة
+            batch.update(cardsDocRef, { cards: allCards, updatedAt: now });
+
+            // تسجيل المعاملة في المستند الموحد للمشتري
+            const userHistoryRef = doc(firestore, `users/${user.uid}/transactions`, 'history');
+            const buyerTx = {
+                id: `card_${Date.now()}`,
                 userId: user.uid, 
                 transactionDate: now, 
                 amount: effectivePrice,
                 transactionType: `شراء كرت ${selectedCategory.name}`, 
                 notes: `شبكة: ${selectedNetwork.name}`,
-                cardNumber: cardData.cardNumber,
+                cardNumber: finalCardID,
                 status: 'completed',
-            });
+                readiness: 'جاهزة'
+            };
+            batch.set(userHistoryRef, {
+                transactions: arrayUnion(buyerTx),
+                lastUpdated: now
+            }, { merge: true });
 
-            const soldCardRef = doc(collection(firestore, 'soldCards'));
-            batch.set(soldCardRef, {
-                networkId: selectedNetwork.id,
-                ownerId: ownerId,
-                networkName: selectedNetwork.name,
-                categoryId: selectedCategory.id,
-                categoryName: selectedCategory.name,
-                cardId: cardToPurchaseDoc.id,
-                cardNumber: cardData.cardNumber,
-                price: selectedCategory.price,
-                commissionAmount: commission,
-                payoutAmount: payoutAmount,
-                buyerId: user.uid,
-                buyerName: userProfile.displayName || 'مشترك',
-                buyerPhoneNumber: userProfile.phoneNumber || '',
-                soldTimestamp: now,
-                payoutStatus: 'completed'
-            });
-
-            // تحويل أرباح الكرت تلقائياً لمالك الشبكة بعد خصم 10%
+            // تحويل أرباح الكرت لمالك الشبكة وتسجيلها في حسابه الموحد
             if (ownerId && ownerId !== 'admin') {
                 const ownerRef = doc(firestore, 'users', ownerId);
                 batch.update(ownerRef, { balance: increment(payoutAmount) });
 
-                const ownerTxRef = doc(collection(firestore, `users/${ownerId}/transactions`));
-                batch.set(ownerTxRef, {
+                const ownerHistoryRef = doc(firestore, `users/${ownerId}/transactions`, 'history');
+                const ownerTx = {
+                    id: `payout_${Date.now()}`,
                     userId: ownerId,
                     transactionDate: now,
                     amount: payoutAmount,
                     transactionType: 'أرباح مبيعات الكروت',
-                    notes: `أرباح كرت ${selectedCategory.name} - شبكة: ${selectedNetwork.name} (صافي بعد خصم 10% عمولة)`
-                });
+                    notes: `أرباح كرت ${selectedCategory.name} - شبكة: ${selectedNetwork.name} (صافي بعد خصم 10% عمولة)`,
+                    status: 'completed',
+                    readiness: 'جاهزة'
+                };
+                batch.set(ownerHistoryRef, {
+                    transactions: arrayUnion(ownerTx),
+                    lastUpdated: now
+                }, { merge: true });
             }
 
             await batch.commit();
             purchaseSuccessfullyCommitted = true;
-            setPurchasedCard({ cardID: cardData.cardNumber });
+            setPurchasedCard({ cardID: finalCardID });
             setShowConfirmPurchase(null);
             setSelectedNetwork(null);
             audioRef.current?.play().catch(() => {});

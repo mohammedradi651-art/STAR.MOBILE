@@ -68,15 +68,23 @@ export async function POST(req: Request) {
         }
     }
 
-    // 1. جلب كافة الشبكات (محلية + بيتي)
+    // 1. جلب كافة الشبكات (محلية من local_networks + بيتي)
     if (action === 'list_networks') {
-        const localSnap = await getDocs(collection(firestore, 'networks'));
-        const localNets = localSnap.docs.map(d => ({
-            id: d.id,
-            name: d.data().name,
-            location: d.data().location,
-            type: 'local'
-        }));
+        const usersWithNets = await getDocs(query(collection(firestore, 'users'), where('networkName', '!=', '')));
+        const localNets: any[] = [];
+        for (const u of usersWithNets.docs) {
+            const lRef = doc(firestore, `users/${u.id}/local_networks`, u.id);
+            const lSnap = await getDoc(lRef);
+            if (lSnap.exists()) {
+                const data = lSnap.data();
+                localNets.push({
+                    id: u.id,
+                    name: data.name || data.networkName,
+                    location: data.location || data.city || 'حضرموت',
+                    type: 'local'
+                });
+            }
+        }
 
         let externalNets = [];
         try {
@@ -106,17 +114,17 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: false, code: 'SM_VALIDATION_ERROR', message: 'networkId is required' }, { status: 400, headers: corsHeaders });
         }
 
-        const localDocRef = doc(firestore, 'networks', networkId);
+        const localDocRef = doc(firestore, `users/${networkId}/local_networks`, networkId);
         const localSnap = await getDoc(localDocRef);
         
         if (localSnap.exists()) {
-            const catsSnap = await getDocs(collection(firestore, `networks/${networkId}/cardCategories`));
-            const cats = catsSnap.docs.map(d => ({
-                id: d.id,
-                name: d.data().name,
-                price: d.data().price,
-                dataLimit: d.data().capacity || '',
-                validity: d.data().validity || ''
+            const categories = localSnap.data()?.categories || [];
+            const cats = categories.map((c: any) => ({
+                id: c.id,
+                name: c.name,
+                price: c.price,
+                dataLimit: c.notes || c.capacity || '',
+                validity: c.validity || ''
             }));
             return NextResponse.json({ success: true, code: 'SM_SUCCESS', data: cats, timestamp }, { headers: corsHeaders });
         } else {

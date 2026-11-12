@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { SimpleHeader } from '@/components/layout/simple-header';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, query, orderBy, doc, writeBatch, limit } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -72,7 +72,8 @@ type Transaction = {
   readiness?: string;
 };
 
-const getTransactionIcon = (type: string) => {
+const getTransactionIcon = (type?: string) => {
+    if (!type || typeof type !== 'string') return '/icons/rsed.png';
     const t = type.toLowerCase();
     if (t.includes('تغذية') || t.includes('إيداع') || t.includes('استلام')) return '/icons/tadia.png';
     if (t.includes('تحويل')) return '/icons/tahwel.png';
@@ -112,19 +113,16 @@ export default function TransactionsPage() {
   const [appliedTo, setAppliedTo] = useState<string>('');
   const [displayLimit, setDisplayLimit] = useState<number>(50);
 
-  const transactionsQuery = useMemoFirebase(
-    () =>
-      user && firestore
-        ? query(
-            collection(firestore, 'users', user.uid, 'transactions'),
-            orderBy('transactionDate', 'desc'),
-            limit(displayLimit)
-          )
-        : null,
-    [user, firestore, displayLimit]
+  const historyDocRef = useMemoFirebase(
+    () => (user && firestore ? doc(firestore, `users/${user.uid}/transactions`, 'history') : null),
+    [user, firestore]
   );
+  const { data: historyData, isLoading } = useDoc<any>(historyDocRef);
 
-  const { data: transactions, isLoading } = useCollection<Transaction>(transactionsQuery);
+  const transactions: Transaction[] = useMemo(() => {
+    if (!historyData || !Array.isArray(historyData.transactions)) return [];
+    return historyData.transactions;
+  }, [historyData]);
 
   const safeFormatDate = (dateInput: any, formatStr: string) => {
     if (!dateInput) return '...';
@@ -318,8 +316,9 @@ export default function TransactionsPage() {
                         </div>
                     ) : (
                         filteredTransactions.map(tx => {
-                            const isCredit = tx.transactionType.includes('تغذية') || tx.transactionType.includes('إيداع') || tx.transactionType.includes('استلام') || tx.transactionType.includes('أرباح') || tx.transactionType.includes('استرجاع');
-                            const iconSrc = getTransactionIcon(tx.transactionType);
+                            const txType = tx.transactionType || '';
+                            const isCredit = txType.includes('تغذية') || txType.includes('إيداع') || txType.includes('استلام') || txType.includes('أرباح') || txType.includes('استرجاع');
+                            const iconSrc = getTransactionIcon(txType);
                             
                             return (
                                 <Card key={tx.id} className="overflow-hidden cursor-pointer hover:bg-muted/50 transition-colors border-none shadow-sm rounded-2xl bg-card mb-3" onClick={() => handleCardClick(tx)}>
@@ -332,7 +331,7 @@ export default function TransactionsPage() {
                                             </div>
                                             <div className='text-right'>
                                                 <p className="font-bold text-sm text-foreground">
-                                                    {tx.transactionType.replace(/\s*\(?api\)?/gi, '').replace(/\s*-\s*api/gi, '').trim()}
+                                                    {txType.replace(/\s*\(?api\)?/gi, '').replace(/\s*-\s*api/gi, '').trim() || 'عملية مالية'}
                                                 </p>
                                                 <div className="flex items-center gap-2 mt-0.5">
                                                     <p className="text-[10px] text-muted-foreground">{safeFormatDate(tx.transactionDate, 'd MMMM yyyy')}</p>

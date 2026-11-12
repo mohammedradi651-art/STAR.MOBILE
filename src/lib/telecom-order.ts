@@ -1,4 +1,4 @@
-import { doc, getDoc, updateDoc, increment, setDoc, writeBatch, runTransaction, type Firestore } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, increment, setDoc, writeBatch, runTransaction, arrayUnion, type Firestore } from 'firebase/firestore';
 
 /**
  * الخدمات الثمان المعتمدة التي تظهر لها الجاهزية ونظام الـ Webhook:
@@ -213,6 +213,12 @@ export async function initiateTelecomPayment({
     transaction.update(userDocRef, { balance: increment(-amount) });
     transaction.set(userTxRef, txData);
     transaction.set(globalTxRef, txData);
+    // حفظ نسخة أيضاً في المستند الموحد history
+    const userHistoryRef = doc(firestore, `users/${userId}/transactions`, 'history');
+    transaction.set(userHistoryRef, {
+      transactions: arrayUnion(txData),
+      lastUpdated: createdAt
+    }, { merge: true });
   });
 
   return { transid, backpass, txId: transid };

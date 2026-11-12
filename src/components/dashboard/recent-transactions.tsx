@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, limit } from 'firebase/firestore';
+import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
+import { collection, query, orderBy, limit, doc } from 'firebase/firestore';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { 
@@ -52,7 +52,8 @@ type Transaction = {
   readiness?: string;
 };
 
-const getTransactionIcon = (type: string) => {
+const getTransactionIcon = (type?: string) => {
+    if (!type || typeof type !== 'string') return '/icons/rsed.png';
     const t = type.toLowerCase();
     if (t.includes('تغذية') || t.includes('إيداع') || t.includes('استلام')) return '/icons/tadia.png';
     if (t.includes('تحويل')) return '/icons/tahwel.png';
@@ -118,19 +119,16 @@ export function RecentTransactions() {
     }
   };
 
-  const transactionsQuery = useMemoFirebase(
-    () =>
-      user && firestore
-        ? query(
-            collection(firestore, 'users', user.uid, 'transactions'),
-            orderBy('transactionDate', 'desc'),
-            limit(2)
-          )
-        : null,
+  const historyDocRef = useMemoFirebase(
+    () => (user && firestore ? doc(firestore, `users/${user.uid}/transactions`, 'history') : null),
     [user, firestore]
   );
+  const { data: historyData, isLoading } = useDoc<any>(historyDocRef);
 
-  const { data: transactions, isLoading } = useCollection<Transaction>(transactionsQuery);
+  const transactions: Transaction[] = React.useMemo(() => {
+    if (!historyData || !Array.isArray(historyData.transactions)) return [];
+    return historyData.transactions.slice(0, 2);
+  }, [historyData]);
 
   // تحديث تلقائي صامت بمجرد تحميل القائمة إذا وُجدت أي عملية معلقة (دون تدخل العميل ودون قراءات متكررة)
   React.useEffect(() => {
@@ -167,13 +165,14 @@ export function RecentTransactions() {
                 [1, 2].map(i => <Skeleton key={i} className="h-20 w-full rounded-3xl" />)
             ) : transactions && transactions.length > 0 ? (
                 transactions.map((tx) => {
-                    const isCredit = tx.transactionType.includes('تغذية') || 
-                                   tx.transactionType.includes('استلام') || 
-                                   tx.transactionType.includes('أرباح') || 
-                                   tx.transactionType.includes('استرجاع') || 
-                                   tx.transactionType.includes('إيداع');
+                    const txType = tx.transactionType || '';
+                    const isCredit = txType.includes('تغذية') || 
+                                   txType.includes('استلام') || 
+                                   txType.includes('أرباح') || 
+                                   txType.includes('استرجاع') || 
+                                   txType.includes('إيداع');
                     
-                    const iconSrc = getTransactionIcon(tx.transactionType);
+                    const iconSrc = getTransactionIcon(txType);
                     const phone = extractRecipientPhone(tx);
                     
                     return (
@@ -182,7 +181,7 @@ export function RecentTransactions() {
                             onClick={() => {
                                 setSelectedTx(tx);
                                 setIsDialogOpen(true);
-                                if (isTelecomService(tx.transactionType) && (tx.status === 'pending' || tx.readiness === 'قيد الانتظار')) {
+                                if (isTelecomService(txType) && (tx.status === 'pending' || tx.readiness === 'قيد الانتظار')) {
                                     handleSyncStatus(tx.id);
                                 }
                             }}
@@ -197,7 +196,7 @@ export function RecentTransactions() {
 
                                 <div className="flex-1 text-right mx-4 overflow-hidden">
                                     <p className="font-bold text-primary text-sm truncate">
-                                        {tx.transactionType.replace(/\s*\(?api\)?/gi, '').replace(/\s*-\s*api/gi, '').trim()}
+                                        {txType.replace(/\s*\(?api\)?/gi, '').replace(/\s*-\s*api/gi, '').trim() || 'عملية مالية'}
                                     </p>
                                     <div className="flex items-center gap-2 mt-0.5">
                                         <p className="text-[10px] text-primary/70 font-semibold">

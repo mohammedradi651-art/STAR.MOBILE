@@ -2,12 +2,10 @@
 
 import { useDoc } from '@/firebase/firestore/use-doc';
 import { useFirestore, useMemoFirebase } from '@/firebase';
-import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
 
 /**
  * خطاف مخصص لقراءة مستند موحد من مجموعة Order بدون استهلاك قراءات متعددة
- * @param docName اسم المستند داخل Order مثل: 'depositRequests', 'electricityRequests', 'waterRequests', 'paymentMethods', 'products', 'clientDebts'
- * @param arrayField الحقل الذي يحتوي على المصفوفة داخل المستند (افتراضياً: 'requests')
  */
 export function useOrderDocArray<T = any>(
   docName: string,
@@ -54,3 +52,31 @@ export async function addOrderRequest(firestore: any, docName: string, newItem: 
   return itemWithId;
 }
 
+/**
+ * دالة لتحديث عنصر محدد داخل مصفوفة مستند في Order (مثل تحديث حالة طلب كهرباء، ماء، سحب، إيداع)
+ */
+export async function updateOrderItemInDoc(
+  firestore: any,
+  docName: string,
+  itemId: string,
+  updates: Record<string, any>,
+  arrayField: string = 'requests'
+) {
+  if (!firestore) return;
+  const orderDocRef = doc(firestore, 'Order', docName);
+  const snap = await getDoc(orderDocRef);
+  if (!snap.exists()) return;
+
+  const currentList = snap.data()[arrayField] || [];
+  const updatedList = currentList.map((item: any) => {
+    if (item.id === itemId) {
+      return { ...item, ...updates, updatedAt: new Date().toISOString() };
+    }
+    return item;
+  });
+
+  await updateDoc(orderDocRef, {
+    [arrayField]: updatedList,
+    updatedAt: new Date().toISOString()
+  });
+}
