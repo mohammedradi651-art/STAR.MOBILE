@@ -152,6 +152,10 @@ export function RecentTransactions() {
         recipientPhoneNumber: ph,
         notes,
       } as Transaction;
+    }).sort((a, b) => {
+      const timeA = new Date(a.transactionDate || 0).getTime();
+      const timeB = new Date(b.transactionDate || 0).getTime();
+      return timeB - timeA;
     }).slice(0, 2);
   }, [historyData]);
 

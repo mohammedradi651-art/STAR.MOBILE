@@ -123,6 +123,11 @@ export function getAlwadiSubscriberInfo(tx?: TransactionModalData | null): { nam
 
 export const generateNumericId = (id: string): string => {
   if (!id) return '000000';
+  // إذا كان المعرف رقمياً بالفعل (مثل أرقام العمليات 31250729)، نعرضه كما هو تماماً ليتطابق مع التطبيق
+  const digits = id.replace(/\D/g, '');
+  if (digits.length >= 6) return digits;
+  if (digits.length > 0) return digits;
+  
   let hash = 0;
   for (let i = 0; i < id.length; i++) {
     const char = id.charCodeAt(i);
