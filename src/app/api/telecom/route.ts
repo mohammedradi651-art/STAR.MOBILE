@@ -887,8 +887,11 @@ export async function POST(request: Request) {
           rawStatusDesc.includes('تسديد المبلغ كرصيد') ||
           rawStatusDesc.includes('تحويل المبلغ لرصيد');
 
+        const isNotExistsYet = normStatusDesc.includes('not exists') || normStatusDesc.includes('not exist') || rawStatusDesc.includes('غير موجودة');
+
         const isStatusFailure =
           !isStatusBalanceRecharged &&
+          !isNotExistsYet &&
           (data?.isBan === 1 ||
           data?.isBan === '1' ||
           data?.action === 'ban' ||
@@ -947,6 +950,7 @@ export async function POST(request: Request) {
           rawStatusDesc.includes('جاري المعالجة') ||
           rawStatusDesc.includes('قبول') ||
           rawStatusDesc.includes('معلق') ||
+          isNotExistsYet ||
           normStatusDesc.includes('proc') ||
           normStatusDesc.includes('pend') ||
           normStatusDesc.includes('wait') ||
