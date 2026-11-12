@@ -127,9 +127,9 @@ export function RecentTransactions() {
 
   const transactions: Transaction[] = React.useMemo(() => {
     if (!historyData) return [];
-    const arr = Array.isArray(historyData.transactions) && historyData.transactions.length > 0
-      ? historyData.transactions
-      : (Array.isArray(historyData.list) ? historyData.list : []);
+    const arr = Array.isArray(historyData.list) && historyData.list.length > 0
+      ? historyData.list
+      : (Array.isArray(historyData.transactions) ? historyData.transactions : []);
 
     return arr.map((item: any) => {
       const id = String(item.id || item.transid || item.operationId || '');
