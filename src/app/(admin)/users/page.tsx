@@ -642,11 +642,11 @@ export default function UsersPage() {
   };
 
   const handleSaveBoxBalance = () => {
-    if (!firestore || !settingsDocRef) return;
+    if (!firestore || !debtsDocRef) return;
     const val = parseFloat(newBoxValue);
     if (isNaN(val)) return;
 
-    setDocumentNonBlocking(settingsDocRef, { boxBalance: val }, { merge: true });
+    setDocumentNonBlocking(debtsDocRef, { boxBalance: val }, { merge: true });
     toast({ title: "تم التحديث", description: "تم تحديث مبلغ الصندوق بنجاح." });
     setIsBoxEditingOpen(false);
   };
