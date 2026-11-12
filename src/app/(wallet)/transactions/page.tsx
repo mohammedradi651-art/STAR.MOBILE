@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, query, orderBy, doc, writeBatch, limit } from 'firebase/firestore';
+import { collection, query, orderBy, doc, writeBatch, limit, setDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { 
@@ -120,8 +120,39 @@ export default function TransactionsPage() {
   const { data: historyData, isLoading } = useDoc<any>(historyDocRef);
 
   const transactions: Transaction[] = useMemo(() => {
-    if (!historyData || !Array.isArray(historyData.transactions)) return [];
-    return historyData.transactions;
+    if (!historyData) return [];
+    const arr = Array.isArray(historyData.transactions) && historyData.transactions.length > 0 
+      ? historyData.transactions 
+      : (Array.isArray(historyData.list) ? historyData.list : []);
+    
+    return arr.map((item: any) => {
+      const id = String(item.id || item.transid || item.operationId || '');
+      const t = String(item.transactionType || item.t || item.operationType || item.notes || 'عملية مالية');
+      const a = Number(item.amount ?? item.a ?? 0) || 0;
+      const d = item.transactionDate || item.d || item.createdAt || item.date || new Date().toISOString();
+      const s = String(item.status || item.s || 'success');
+      const r = String(item.readiness || item.r || (s === 'completed' || s === 'جاهز' ? 'جاهز' : (s === 'pending' ? 'قيد الانتظار' : 'غير جاهز')));
+      const ph = String(item.recipientPhoneNumber || item.ph || item.phone || item.mobile || item.targetPhone || '');
+      const notes = String(item.notes || item.note || '');
+      const subscriberName = String(item.subscriberName || item.recipientName || '');
+      const cardNumber = String(item.cardNumber || item.card || '');
+      const cardPassword = String(item.cardPassword || item.pwd || '');
+
+      return {
+        ...item,
+        id,
+        transactionType: t,
+        amount: a,
+        transactionDate: d,
+        status: s,
+        readiness: r,
+        recipientPhoneNumber: ph,
+        notes,
+        subscriberName,
+        cardNumber,
+        cardPassword,
+      } as Transaction;
+    });
   }, [historyData]);
 
   const safeFormatDate = (dateInput: any, formatStr: string) => {
@@ -185,11 +216,20 @@ export default function TransactionsPage() {
     setAppliedTo('');
   };
 
-  const handleDeleteAll = () => {
-    if (!firestore || !user || !transactions || transactions.length === 0) return;
-    const batch = writeBatch(firestore);
-    transactions.forEach(tx => batch.delete(doc(firestore, `users/${user.uid}/transactions`, tx.id)));
-    batch.commit().then(() => toast({ title: 'نجاح', description: 'تمت الأرشفة بنجاح.' }));
+  const handleDeleteAll = async () => {
+    if (!firestore || !user) return;
+    try {
+      const historyRef = doc(firestore, `users/${user.uid}/transactions`, 'history');
+      await setDoc(historyRef, {
+        transactions: [],
+        list: [],
+        count: 0,
+        lastUpdated: new Date().toISOString()
+      }, { merge: true });
+      toast({ title: 'نجاح', description: 'تمت أرشفة وإخفاء جميع العمليات السابقة بنجاح.' });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'خطأ', description: 'تعذر أرشفة العمليات: ' + err.message });
+    }
   };
   
   const handleCopy = (text: string, label: string) => {
@@ -348,7 +388,7 @@ export default function TransactionsPage() {
                                             </div>
                                         </div>
                                         <div className="text-left">
-                                            <p className={cn("font-black text-sm", isCredit ? 'text-green-600' : 'text-destructive')}>{tx.amount.toLocaleString()} ر.ي</p>
+                                            <p className={cn("font-black text-sm", isCredit ? 'text-green-600' : 'text-destructive')}>{(Number(tx.amount) || 0).toLocaleString()} ر.ي</p>
                                             {(isTelecomService(tx.transactionType) || tx.transactionType.includes('شراء كرت') || tx.status) && (() => {
                                                 const readiness = getReadinessDetails(tx);
                                                 return (

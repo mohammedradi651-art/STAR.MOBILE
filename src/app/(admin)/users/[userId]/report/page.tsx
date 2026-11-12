@@ -188,11 +188,11 @@ function generateStatementHtml(
   const waUrl = rawPhone ? `https://wa.me/967${rawPhone}?text=${waMsg}` : `https://web.whatsapp.com/send?text=${waMsg}`;
 
   const rowsHtml = txs.map((tx, idx) => {
-    const isCredit = tx.transactionType.includes('تغذية') || 
-                     tx.transactionType.includes('إيداع') || 
-                     tx.transactionType.includes('استلام') || 
-                     tx.transactionType.includes('أرباح') || 
-                     tx.transactionType.includes('استرجاع');
+    const isCredit = (tx.transactionType || '').includes('تغذية') || 
+                     (tx.transactionType || '').includes('إيداع') || 
+                     (tx.transactionType || '').includes('استلام') || 
+                     (tx.transactionType || '').includes('أرباح') || 
+                     (tx.transactionType || '').includes('استرجاع');
 
     const cleanTitle = (tx.transactionType || '')
       .replace(/\s*\(?api\)?/gi, '')
@@ -766,12 +766,48 @@ function UserReportPage() {
   );
   const { data: userProfile, isLoading: isLoadingProfile } = useDoc<UserProfile>(userDocRef);
 
-  // جلب العمليات
-  const transactionsQuery = useMemoFirebase(
-    () => (firestore && userId ? query(collection(firestore, 'users', userId, 'transactions'), orderBy('transactionDate', 'desc')) : null),
+  // جلب العمليات من المستند الموحد history
+  const historyDocRef = useMemoFirebase(
+    () => (firestore && userId ? doc(firestore, `users/${userId}/transactions`, 'history') : null),
     [firestore, userId]
   );
-  const { data: transactions, isLoading: isLoadingTransactions } = useCollection<Transaction>(transactionsQuery);
+  const { data: historyData, isLoading: isLoadingTransactions } = useDoc<any>(historyDocRef);
+
+  const transactions: Transaction[] = useMemo(() => {
+    if (!historyData) return [];
+    const arr = Array.isArray(historyData.transactions) && historyData.transactions.length > 0 
+      ? historyData.transactions 
+      : (Array.isArray(historyData.list) ? historyData.list : []);
+    
+    return arr.map((item: any) => {
+      const id = String(item.id || item.transid || item.operationId || '');
+      const t = String(item.transactionType || item.t || item.operationType || item.notes || 'عملية مالية');
+      const a = Number(item.amount ?? item.a ?? 0) || 0;
+      const d = item.transactionDate || item.d || item.createdAt || item.date || new Date().toISOString();
+      const s = String(item.status || item.s || 'success');
+      const r = String(item.readiness || item.r || (s === 'completed' || s === 'جاهز' ? 'جاهز' : (s === 'pending' ? 'قيد الانتظار' : 'غير جاهز')));
+      const ph = String(item.recipientPhoneNumber || item.ph || item.phone || item.mobile || item.targetPhone || '');
+      const notes = String(item.notes || item.note || '');
+      const subscriberName = String(item.subscriberName || item.recipientName || '');
+      const cardNumber = String(item.cardNumber || item.card || '');
+      const cardPassword = String(item.cardPassword || item.pwd || '');
+
+      return {
+        ...item,
+        id,
+        transactionType: t,
+        amount: a,
+        transactionDate: d,
+        status: s,
+        readiness: r,
+        recipientPhoneNumber: ph,
+        notes,
+        subscriberName,
+        cardNumber,
+        cardPassword,
+      } as Transaction;
+    });
+  }, [historyData]);
 
   const isLoading = isLoadingProfile || isLoadingTransactions;
 
@@ -955,11 +991,11 @@ function UserReportPage() {
     return (
       <div className="space-y-3">
         {filteredTransactions.map((tx) => {
-          const isCredit = tx.transactionType.includes('تغذية') || 
-                           tx.transactionType.includes('إيداع') || 
-                           tx.transactionType.includes('استلام') || 
-                           tx.transactionType.includes('أرباح') || 
-                           tx.transactionType.includes('استرجاع');
+          const isCredit = (tx.transactionType || '').includes('تغذية') || 
+                           (tx.transactionType || '').includes('إيداع') || 
+                           (tx.transactionType || '').includes('استلام') || 
+                           (tx.transactionType || '').includes('أرباح') || 
+                           (tx.transactionType || '').includes('استرجاع');
 
           const iconSrc = getTransactionIcon(tx.transactionType);
           const phone = extractRecipientPhone(tx);

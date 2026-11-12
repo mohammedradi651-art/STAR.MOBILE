@@ -126,8 +126,33 @@ export function RecentTransactions() {
   const { data: historyData, isLoading } = useDoc<any>(historyDocRef);
 
   const transactions: Transaction[] = React.useMemo(() => {
-    if (!historyData || !Array.isArray(historyData.transactions)) return [];
-    return historyData.transactions.slice(0, 2);
+    if (!historyData) return [];
+    const arr = Array.isArray(historyData.transactions) && historyData.transactions.length > 0
+      ? historyData.transactions
+      : (Array.isArray(historyData.list) ? historyData.list : []);
+
+    return arr.map((item: any) => {
+      const id = String(item.id || item.transid || item.operationId || '');
+      const t = String(item.transactionType || item.t || item.operationType || item.notes || 'عملية مالية');
+      const a = Number(item.amount ?? item.a ?? 0) || 0;
+      const d = item.transactionDate || item.d || item.createdAt || item.date || new Date().toISOString();
+      const s = String(item.status || item.s || 'success');
+      const r = String(item.readiness || item.r || (s === 'completed' || s === 'جاهز' ? 'جاهز' : (s === 'pending' ? 'قيد الانتظار' : 'غير جاهز')));
+      const ph = String(item.recipientPhoneNumber || item.ph || item.phone || item.mobile || item.targetPhone || '');
+      const notes = String(item.notes || item.note || '');
+
+      return {
+        ...item,
+        id,
+        transactionType: t,
+        amount: a,
+        transactionDate: d,
+        status: s,
+        readiness: r,
+        recipientPhoneNumber: ph,
+        notes,
+      } as Transaction;
+    }).slice(0, 2);
   }, [historyData]);
 
   // تحديث تلقائي صامت بمجرد تحميل القائمة إذا وُجدت أي عملية معلقة (دون تدخل العميل ودون قراءات متكررة)
