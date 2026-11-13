@@ -12,6 +12,7 @@ import {
   where,
   getDocs
 } from 'firebase/firestore';
+import { sendPushNotificationToUser } from '@/lib/push-notification';
 
 /**
  * @fileOverview Webhook / BackURL Endpoint لاستقبال تحديثات المزود الرسمية
@@ -375,7 +376,47 @@ async function handleWebhookExecution(
     const batch = writeBatch(firestore);
     if (txDocRef) batch.set(txDocRef, updatePayload, { merge: true });
     if (userTxRef) batch.set(userTxRef, updatePayload, { merge: true });
+
+    // تحديث مستند history لكشف الحساب
+    if (userId) {
+      try {
+        const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
+        const hSnap = await getDoc(historyRef);
+        if (hSnap.exists()) {
+          const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+          const updatedList = rawList.map((item: any) => {
+            if (item.id === cleanTransId || item.transid === cleanTransId) {
+              return {
+                ...item,
+                s: 'completed',
+                r: 'جاهز',
+                note: finalProviderMsg || item.note || 'تم التنفيذ بنجاح'
+              };
+            }
+            return item;
+          });
+          batch.update(historyRef, {
+            list: updatedList,
+            transactions: updatedList,
+            lastUpdated: new Date().toISOString()
+          });
+        }
+      } catch (_) {}
+    }
+
     await batch.commit();
+
+    // إرسال إشعار سحابي FCM فوري للعميل
+    if (userId) {
+      const finalService = txData.transactionType || 'سداد اتصالات';
+      sendPushNotificationToUser(firestore, userId, {
+        title: 'تم تنفيذ عمليتك بنجاح ✅',
+        body: `تم إكمال ${finalService} بمبلغ ${amount} ريال بنجاح.`,
+        transid: cleanTransId,
+        status: 'success',
+        amount: amount
+      }).catch(() => {});
+    }
 
     // إشعار نظام العميل عبر Webhook إذا قام بتمرير backurl
     if (txData.clientBackUrl) {
@@ -460,7 +501,47 @@ async function handleWebhookExecution(
     }
     if (txDocRef) batch.set(txDocRef, updatePayload, { merge: true });
     if (userTxRef) batch.set(userTxRef, updatePayload, { merge: true });
+
+    // تحديث مستند history لكشف الحساب
+    if (userId) {
+      try {
+        const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
+        const hSnap = await getDoc(historyRef);
+        if (hSnap.exists()) {
+          const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+          const updatedList = rawList.map((item: any) => {
+            if (item.id === cleanTransId || item.transid === cleanTransId) {
+              return {
+                ...item,
+                s: 'failed',
+                r: 'غير جاهز',
+                note: updatedNotes
+              };
+            }
+            return item;
+          });
+          batch.update(historyRef, {
+            list: updatedList,
+            transactions: updatedList,
+            lastUpdated: new Date().toISOString()
+          });
+        }
+      } catch (_) {}
+    }
+
     await batch.commit();
+
+    // إرسال إشعار سحابي FCM فوري للعميل بالفشل واسترجاع الرصيد
+    if (userId) {
+      const finalService = txData.transactionType || 'سداد اتصالات';
+      sendPushNotificationToUser(firestore, userId, {
+        title: 'تعذر تنفيذ العملية وتم إعادة الرصيد ⚠️',
+        body: `فشلت عملية ${finalService}: ${cancellationReason}. وتمت إعادة ${amount} ريال إلى حسابك.`,
+        transid: cleanTransId,
+        status: 'failed',
+        amount: amount
+      }).catch(() => {});
+    }
 
     // إشعار نظام العميل عبر Webhook إذا قام بتمرير backurl
     if (txData.clientBackUrl) {

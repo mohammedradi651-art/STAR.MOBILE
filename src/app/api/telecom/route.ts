@@ -18,6 +18,7 @@ import {
   formatProviderErrorMessage,
   fetchYemenMobileSolfa
 } from '@/lib/telecom-order';
+import { sendPushNotificationToUser } from '@/lib/push-notification';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -402,6 +403,7 @@ export async function POST(request: Request) {
         const userRef = doc(firestore, 'users', clientUserId);
         const clientTxRef = doc(firestore, `users/${clientUserId}/transactions`, transid);
         const globalTxRef = doc(firestore, 'paymentTransactions', transid);
+        const historyRef = doc(firestore, `users/${clientUserId}/transactions`, 'history');
 
         const timestamp = new Date().toISOString();
         const telecomDetails = resolveTelecomDetails({ ...body, amount: requiredCost, loanAmount: detectedLoanAmount });
@@ -428,6 +430,20 @@ export async function POST(request: Request) {
           loanAmount: detectedLoanAmount
         };
 
+        const compactTxItem = {
+          id: transid,
+          transid: transid,
+          op: telecomDetails.transactionType,
+          t: telecomDetails.transactionType,
+          a: requiredCost,
+          d: timestamp,
+          s: 'pending',
+          r: 'قيد الانتظار',
+          ph: finalRecipientPhone,
+          note: `${telecomDetails.notes} (قيد الانتظار)`,
+          net: telecomDetails.serviceName || service || 'اتصالات'
+        };
+
         await runTransaction(firestore, async (transaction) => {
           const userSnap = await transaction.get(userRef);
           if (!userSnap.exists()) {
@@ -437,9 +453,24 @@ export async function POST(request: Request) {
           if (liveBal < requiredCost) {
             throw new Error(`INSUFFICIENT_BALANCE:${liveBal}`);
           }
+
+          // قراءة مصفوفة history لإدراج المعاملة في حسابه كشف الحساب مباشرة
+          const historySnap = await transaction.get(historyRef);
+          let historyList: any[] = [];
+          if (historySnap.exists()) {
+            historyList = historySnap.data()?.list || historySnap.data()?.transactions || [];
+          }
+          const updatedHistoryList = [compactTxItem, ...historyList.filter((x: any) => (x.id !== transid && x.transid !== transid))];
+
           transaction.update(userRef, { balance: increment(-requiredCost) });
           transaction.set(clientTxRef, txRecord);
           transaction.set(globalTxRef, txRecord);
+          transaction.set(historyRef, {
+            list: updatedHistoryList,
+            transactions: updatedHistoryList,
+            count: updatedHistoryList.length,
+            updatedAt: timestamp
+          }, { merge: true });
         });
 
         initialBalance -= requiredCost;
@@ -1286,6 +1317,8 @@ async function markSuccessInDb(firestore: any, userId: string, transid: string, 
   try {
     const userTxRef = doc(firestore, `users/${userId}/transactions`, transid);
     const globalTxRef = doc(firestore, 'paymentTransactions', transid);
+    const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
+
     const snap = await getDoc(userTxRef);
     const clientBackUrl = snap.exists() ? (snap.data()?.clientBackUrl || null) : null;
     const txData = snap.exists() ? snap.data() : null;
@@ -1299,7 +1332,43 @@ async function markSuccessInDb(firestore: any, userId: string, transid: string, 
     const batch = writeBatch(firestore);
     batch.update(userTxRef, updateData);
     batch.update(globalTxRef, updateData);
+
+    // تحديث مصفوفة history
+    try {
+      const hSnap = await getDoc(historyRef);
+      if (hSnap.exists()) {
+        const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+        const updatedList = rawList.map((item: any) => {
+          if (item.id === transid || item.transid === transid) {
+            return {
+              ...item,
+              s: 'completed',
+              r: 'جاهز',
+              note: message || item.note || 'تم التنفيذ بنجاح'
+            };
+          }
+          return item;
+        });
+        batch.update(historyRef, {
+          list: updatedList,
+          transactions: updatedList,
+          lastUpdated: new Date().toISOString()
+        });
+      }
+    } catch (_) {}
+
     await batch.commit();
+
+    // إرسال إشعار سحابي FCM فوري للعميل
+    const finalAmount = txData?.amount || 0;
+    const finalService = txData?.transactionType || 'سداد اتصالات';
+    sendPushNotificationToUser(firestore, userId, {
+      title: 'تم تنفيذ عمليتك بنجاح ✅',
+      body: `تم إكمال ${finalService} بمبلغ ${finalAmount} ريال بنجاح.`,
+      transid: transid,
+      status: 'success',
+      amount: finalAmount
+    }).catch(() => {});
 
     if (clientBackUrl) {
       try {
@@ -1336,7 +1405,6 @@ async function refundUser(firestore: any, userId: string, transid: string, amoun
       rawReason.includes('تسديد المبلغ كرصيد') ||
       rawReason.includes('تحويل المبلغ لرصيد')
     ) {
-      // حماية صارمة: منع إرجاع المبلغ إذا تم تسديد الرصيد في هاتف المشترك، واعتمادها فوراً كعملية ناجحة ومكتملة
       await markSuccessInDb(firestore, userId, transid, 'تم تسديد الرقم بمبلغ الرصيد المطلوب لتعذر تفعيل الباقة مباشرة');
       return;
     }
@@ -1344,8 +1412,8 @@ async function refundUser(firestore: any, userId: string, transid: string, amoun
     const userRef = doc(firestore, 'users', userId);
     const userTxRef = doc(firestore, `users/${userId}/transactions`, transid);
     const globalTxRef = doc(firestore, 'paymentTransactions', transid);
+    const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
 
-    // التأكد من عدم تكرار الاسترجاع
     const snap = await getDoc(userTxRef);
     if (snap.exists() && snap.data()?.refunded) {
       return;
@@ -1373,7 +1441,43 @@ async function refundUser(firestore: any, userId: string, transid: string, amoun
     batch.update(userRef, { balance: increment(amount) });
     batch.update(userTxRef, updateData);
     batch.update(globalTxRef, updateData);
+
+    // تحديث مصفوفة history
+    try {
+      const hSnap = await getDoc(historyRef);
+      if (hSnap.exists()) {
+        const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+        const updatedList = rawList.map((item: any) => {
+          if (item.id === transid || item.transid === transid) {
+            return {
+              ...item,
+              s: 'failed',
+              r: 'غير جاهز',
+              note: updatedNotes
+            };
+          }
+          return item;
+        });
+        batch.update(historyRef, {
+          list: updatedList,
+          transactions: updatedList,
+          lastUpdated: new Date().toISOString()
+        });
+      }
+    } catch (_) {}
+
     await batch.commit();
+
+    // إرسال إشعار سحابي FCM فوري للعميل بالفشل واسترجاع الرصيد
+    const finalAmount = txData?.amount || amount;
+    const finalService = txData?.transactionType || 'سداد اتصالات';
+    sendPushNotificationToUser(firestore, userId, {
+      title: 'تعذر تنفيذ العملية وتم إعادة الرصيد ⚠️',
+      body: `فشلت عملية ${finalService}: ${reason}. وتمت إعادة ${finalAmount} ريال إلى حسابك.`,
+      transid: transid,
+      status: 'failed',
+      amount: finalAmount
+    }).catch(() => {});
 
     if (clientBackUrl) {
       try {
