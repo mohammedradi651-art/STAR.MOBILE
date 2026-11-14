@@ -114,18 +114,30 @@ export default function VerifyOtpPage() {
                 const batch = writeBatch(firestore!);
                 const userRef = doc(firestore!, 'users', user.uid);
                 const nameParts = fullName.trim().split(/\s+/);
+                const randomAcc = '15' + Math.floor(1000000 + Math.random() * 9000000).toString();
+                const nowIso = new Date().toISOString();
 
                 batch.set(userRef, {
                     id: user.uid,
+                    uid: user.uid,
+                    accountNumber: randomAcc,
+                    clientNumber: randomAcc,
+                    name: fullName.trim(),
+                    fullName: fullName.trim(),
                     displayName: fullName.trim(),
-                    firstName: nameParts[0],
+                    firstName: nameParts[0] || fullName.trim(),
                     lastName: nameParts.slice(1).join(' '),
                     phoneNumber: phoneNumber.trim(),
                     email: user.email,
                     location: location,
-                    registrationDate: new Date().toISOString(),
+                    city: location,
+                    governorate: 'حضرموت',
+                    registrationDate: nowIso,
+                    createdAt: nowIso,
                     balance: 0,
                     accountType: accountType,
+                    networkName: networkName || '',
+                    networkLocation: networkLocation || '',
                     photoURL: `https://i.postimg.cc/SNgTrrW2/default-avatar.jpg`
                 });
                 
