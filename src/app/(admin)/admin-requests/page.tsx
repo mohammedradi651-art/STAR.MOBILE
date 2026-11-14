@@ -330,6 +330,36 @@ export default function AdminRequestsPage() {
           });
         }
 
+        // تحديث مصفوفة history للعمليات حتى تظهر فوراً "جاهزة" في التطبيق
+        try {
+          const historyRef = doc(firestore, `users/${selectedWith.ownerId}/transactions`, 'history');
+          const historySnap = await getDoc(historyRef);
+          if (historySnap.exists()) {
+            const list = historySnap.data()?.list || [];
+            let updated = false;
+            const targetId = selectedWith.transactionId || selectedWith.id;
+            const newList = list.map((item: any) => {
+              if (item.id === targetId || item.transactionId === targetId || item.id === selectedWith.id) {
+                updated = true;
+                return {
+                  ...item,
+                  s: 'completed',
+                  r: 'جاهزة',
+                  readiness: 'جاهزة',
+                  status: 'completed',
+                  completedAt: now,
+                };
+              }
+              return item;
+            });
+            if (updated) {
+              batch.update(historyRef, { list: newList, lastUpdated: now });
+            }
+          }
+        } catch (e) {
+          console.error("Error updating history for withdrawal:", e);
+        }
+
         batch.set(doc(collection(firestore, `users/${selectedWith.ownerId}/notifications`)), {
           title: 'تمت الموافقة على طلب السحب 💸',
           body: `تمت الموافقة على طلب سحب مبلغ ${Number(selectedWith.amount).toLocaleString('en-US')} ريال بنجاح وتم التحويل لحسابك.`,
@@ -341,6 +371,20 @@ export default function AdminRequestsPage() {
           readiness: 'جاهزة',
           completedAt: now
         });
+
+        // إرسال إشعار سحابي FCM مباشر للعميل
+        fetch('/api/notifications/send-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: selectedWith.ownerId,
+            title: 'تمت الموافقة على طلب السحب 💸',
+            body: `تمت الموافقة على طلب سحب مبلغ ${Number(selectedWith.amount).toLocaleString('en-US')} ريال بنجاح وتم التحويل لحسابك.`,
+            transid: selectedWith.transactionId || selectedWith.id,
+            status: 'completed',
+            amount: selectedWith.amount,
+          }),
+        }).catch(err => console.error("Push notification error:", err));
       } else {
         // رفض طلب السحب:
         const failReason = withRejectNote?.trim() || 'تم رفض طلب السحب من قبل الإدارة';
@@ -366,6 +410,37 @@ export default function AdminRequestsPage() {
           });
         }
 
+        // تحديث مصفوفة history للعمليات إلى فاشلة
+        try {
+          const historyRef = doc(firestore, `users/${selectedWith.ownerId}/transactions`, 'history');
+          const historySnap = await getDoc(historyRef);
+          if (historySnap.exists()) {
+            const list = historySnap.data()?.list || [];
+            let updated = false;
+            const targetId = selectedWith.transactionId || selectedWith.id;
+            const newList = list.map((item: any) => {
+              if (item.id === targetId || item.transactionId === targetId || item.id === selectedWith.id) {
+                updated = true;
+                return {
+                  ...item,
+                  s: 'failed',
+                  r: 'فاشلة',
+                  readiness: 'فاشلة',
+                  status: 'failed',
+                  notes: finalNotes,
+                  failedAt: now,
+                };
+              }
+              return item;
+            });
+            if (updated) {
+              batch.update(historyRef, { list: newList, lastUpdated: now });
+            }
+          }
+        } catch (e) {
+          console.error("Error updating history for withdrawal rejection:", e);
+        }
+
         batch.set(doc(collection(firestore, `users/${selectedWith.ownerId}/notifications`)), {
           title: 'تم رفض طلب السحب ❌',
           body: `تم رفض طلب سحب مبلغ ${Number(selectedWith.amount).toLocaleString('en-US')} ريال وإعادة الرصيد لحسابك. السبب: ${failReason}`,
@@ -378,6 +453,20 @@ export default function AdminRequestsPage() {
           rejectReason: failReason,
           rejectedAt: now
         });
+
+        // إرسال إشعار سحابي FCM مباشر للعميل
+        fetch('/api/notifications/send-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: selectedWith.ownerId,
+            title: 'تم رفض طلب السحب ❌',
+            body: `تم رفض طلب سحب مبلغ ${Number(selectedWith.amount).toLocaleString('en-US')} ريال وإعادة الرصيد لحسابك. السبب: ${failReason}`,
+            transid: selectedWith.transactionId || selectedWith.id,
+            status: 'failed',
+            amount: selectedWith.amount,
+          }),
+        }).catch(err => console.error("Push notification error:", err));
       }
 
       await batch.commit();
@@ -418,6 +507,65 @@ export default function AdminRequestsPage() {
           });
         }
 
+        // تحديث مصفوفة history للعمليات حتى تظهر فوراً "جاهزة" في التطبيق
+        try {
+          const historyRef = doc(firestore, `users/${selectedDep.userId}/transactions`, 'history');
+          const historySnap = await getDoc(historyRef);
+          if (historySnap.exists()) {
+            const list = historySnap.data()?.list || [];
+            let updated = false;
+            const targetId = selectedDep.transactionId || selectedDep.id;
+            const newList = list.map((item: any) => {
+              if (item.id === targetId || item.transactionId === targetId || item.id === selectedDep.id) {
+                updated = true;
+                return {
+                  ...item,
+                  s: 'completed',
+                  r: 'جاهزة',
+                  readiness: 'جاهزة',
+                  status: 'completed',
+                  note: `تم تأكيد الإيداع وإضافة مبلغ ${selectedDep.amount.toLocaleString()} ر.ي إلى محفظتك بنجاح.`,
+                  completedAt: now,
+                };
+              }
+              return item;
+            });
+            if (updated) {
+              batch.update(historyRef, { list: newList, lastUpdated: now });
+            }
+          }
+        } catch (e) {
+          console.error("Error updating history for deposit:", e);
+        }
+
+        // تحديث فرع طلبات الإيداع للمستخدم users/{uid}/deposit_requests/requests
+        try {
+          const userDepRef = doc(firestore, `users/${selectedDep.userId}/deposit_requests`, 'requests');
+          const userDepSnap = await getDoc(userDepRef);
+          if (userDepSnap.exists()) {
+            const reqs = userDepSnap.data()?.requests || [];
+            let updated = false;
+            const targetId = selectedDep.transactionId || selectedDep.id;
+            const newReqs = reqs.map((r: any) => {
+              if (r.id === selectedDep.id || r.operationId === targetId || r.transactionId === targetId) {
+                updated = true;
+                return {
+                  ...r,
+                  status: 'approved',
+                  readiness: 'جاهزة',
+                  approvedAt: now,
+                };
+              }
+              return r;
+            });
+            if (updated) {
+              batch.update(userDepRef, { requests: newReqs, lastUpdated: now });
+            }
+          }
+        } catch (e) {
+          console.error("Error updating user deposit_requests:", e);
+        }
+
         const notifRef = doc(collection(firestore, `users/${selectedDep.userId}/notifications`));
         batch.set(notifRef, {
           id: notifRef.id,
@@ -428,6 +576,20 @@ export default function AdminRequestsPage() {
           createdAt: now,
           timestamp: now
         });
+
+        // إرسال إشعار سحابي FCM مباشر للعميل
+        fetch('/api/notifications/send-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: selectedDep.userId,
+            title: 'تم شحن رصيدك بنجاح ✅',
+            body: `تمت الموافقة على طلب إيداعك بمبلغ ${selectedDep.amount.toLocaleString()} ر.ي عبر ${selectedDep.bankName}. الرصيد متاح في محفظتك الآن.`,
+            transid: selectedDep.transactionId || selectedDep.id,
+            status: 'completed',
+            amount: selectedDep.amount,
+          }),
+        }).catch(err => console.error("Push notification error:", err));
       } else {
         const failReason = depRejectNote.trim() || 'لم يتم العثور على إيداع مطابق في البنك';
         await updateOrderItemInDoc(firestore, 'depositRequests', selectedDep.id, {
@@ -449,6 +611,66 @@ export default function AdminRequestsPage() {
           });
         }
 
+        // تحديث مصفوفة history للعمليات إلى فاشلة
+        try {
+          const historyRef = doc(firestore, `users/${selectedDep.userId}/transactions`, 'history');
+          const historySnap = await getDoc(historyRef);
+          if (historySnap.exists()) {
+            const list = historySnap.data()?.list || [];
+            let updated = false;
+            const targetId = selectedDep.transactionId || selectedDep.id;
+            const newList = list.map((item: any) => {
+              if (item.id === targetId || item.transactionId === targetId || item.id === selectedDep.id) {
+                updated = true;
+                return {
+                  ...item,
+                  s: 'failed',
+                  r: 'فاشلة',
+                  readiness: 'فاشلة',
+                  status: 'failed',
+                  note: `تم رفض طلب الإيداع. السبب: ${failReason}`,
+                  failedAt: now,
+                };
+              }
+              return item;
+            });
+            if (updated) {
+              batch.update(historyRef, { list: newList, lastUpdated: now });
+            }
+          }
+        } catch (e) {
+          console.error("Error updating history for deposit rejection:", e);
+        }
+
+        // تحديث فرع طلبات الإيداع للمستخدم users/{uid}/deposit_requests/requests
+        try {
+          const userDepRef = doc(firestore, `users/${selectedDep.userId}/deposit_requests`, 'requests');
+          const userDepSnap = await getDoc(userDepRef);
+          if (userDepSnap.exists()) {
+            const reqs = userDepSnap.data()?.requests || [];
+            let updated = false;
+            const targetId = selectedDep.transactionId || selectedDep.id;
+            const newReqs = reqs.map((r: any) => {
+              if (r.id === selectedDep.id || r.operationId === targetId || r.transactionId === targetId) {
+                updated = true;
+                return {
+                  ...r,
+                  status: 'rejected',
+                  readiness: 'فاشلة',
+                  rejectReason: failReason,
+                  rejectedAt: now,
+                };
+              }
+              return r;
+            });
+            if (updated) {
+              batch.update(userDepRef, { requests: newReqs, lastUpdated: now });
+            }
+          }
+        } catch (e) {
+          console.error("Error updating user deposit_requests rejection:", e);
+        }
+
         const notifRef = doc(collection(firestore, `users/${selectedDep.userId}/notifications`));
         batch.set(notifRef, {
           id: notifRef.id,
@@ -459,6 +681,20 @@ export default function AdminRequestsPage() {
           createdAt: now,
           timestamp: now
         });
+
+        // إرسال إشعار سحابي FCM مباشر للعميل
+        fetch('/api/notifications/send-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: selectedDep.userId,
+            title: 'تعذر قبول طلب التغذية ❌',
+            body: `تم رفض طلب تغذية رصيدك بمبلغ ${selectedDep.amount.toLocaleString()} ر.ي. السبب: ${failReason}`,
+            transid: selectedDep.transactionId || selectedDep.id,
+            status: 'failed',
+            amount: selectedDep.amount,
+          }),
+        }).catch(err => console.error("Push notification error:", err));
       }
 
       await batch.commit();
