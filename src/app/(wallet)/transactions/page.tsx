@@ -131,7 +131,31 @@ export default function TransactionsPage() {
       const a = Number(item.amount ?? item.a ?? 0) || 0;
       const d = item.transactionDate || item.d || item.createdAt || item.date || new Date().toISOString();
       const s = String(item.status || item.s || 'success');
-      const r = String(item.readiness || item.r || (s === 'completed' || s === 'جاهز' ? 'جاهز' : (s === 'pending' ? 'قيد الانتظار' : 'غير جاهز')));
+      const rawR = String(item.readiness || item.r || '');
+      let r = rawR;
+      const sLower = s.toLowerCase();
+      const rLower = rawR.toLowerCase();
+      if (
+        sLower === 'failed' ||
+        sLower === 'rejected' ||
+        sLower.includes('فشل') ||
+        sLower.includes('مرفوض') ||
+        rLower.includes('فشل') ||
+        rLower.includes('فاشلة') ||
+        rLower.includes('مرفوض') ||
+        rLower.includes('غير جاهز')
+      ) {
+        r = 'فاشلة';
+      } else if (
+        sLower === 'pending' ||
+        sLower.includes('انتظار') ||
+        rLower.includes('انتظار') ||
+        rLower.includes('معلق')
+      ) {
+        r = 'قيد الانتظار';
+      } else if (!r) {
+        r = 'جاهزة';
+      }
       const ph = String(item.recipientPhoneNumber || item.ph || item.phone || item.mobile || item.targetPhone || '');
       const notes = String(item.notes || item.note || '');
       const subscriberName = String(item.subscriberName || item.recipientName || '');

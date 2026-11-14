@@ -84,30 +84,27 @@ export interface ReadinessInfo {
  * - فاشلة -> أحمر
  */
 export function getReadinessDetails(tx: any): ReadinessInfo {
-  const status = (tx?.status || '').toString().toLowerCase().trim();
-  const readiness = (tx?.readiness || '').toString().trim();
+  const status = (tx?.status || tx?.s || '').toString().toLowerCase().trim();
+  const readiness = (tx?.readiness || tx?.r || '').toString().toLowerCase().trim();
 
-  if (status === 'success' || status === 'done' || status === 'completed' || readiness === 'جاهزة') {
-    return {
-      text: 'جاهزة',
-      status: 'success',
-      colorClass: 'text-green-600',
-      bgClass: 'bg-green-500/10 text-green-600 border-green-500/20',
-      borderClass: 'border-green-500'
-    };
-  }
-
-  if (status === 'pending' || readiness === 'قيد الانتظار') {
-    return {
-      text: 'قيد الانتظار',
-      status: 'pending',
-      colorClass: 'text-amber-500',
-      bgClass: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
-      borderClass: 'border-amber-500'
-    };
-  }
-
-  if (status === 'failed' || status === 'ban' || status === 'cancelled' || readiness === 'فاشلة' || tx?.refunded) {
+  // فحص الفشل أو الرفض أولاً
+  if (
+    status === 'failed' ||
+    status === 'rejected' ||
+    status === 'ban' ||
+    status === 'cancelled' ||
+    status.includes('fail') ||
+    status.includes('فشل') ||
+    status.includes('مرفوض') ||
+    status.includes('غير جاهز') ||
+    readiness.includes('فشل') ||
+    readiness.includes('فاشلة') ||
+    readiness.includes('مرفوض') ||
+    readiness.includes('غير جاهز') ||
+    readiness.includes('fail') ||
+    readiness.includes('reject') ||
+    tx?.refunded
+  ) {
     return {
       text: 'فاشلة',
       status: 'failed',
@@ -117,7 +114,26 @@ export function getReadinessDetails(tx: any): ReadinessInfo {
     };
   }
 
-  // في حال كانت عملية سابقة مكتملة لا تحتوي على حقل status
+  // فحص قيد الانتظار
+  if (
+    status === 'pending' ||
+    status.includes('pend') ||
+    status.includes('انتظار') ||
+    status.includes('معلق') ||
+    readiness.includes('انتظار') ||
+    readiness.includes('معلق') ||
+    readiness.includes('pend')
+  ) {
+    return {
+      text: 'قيد الانتظار',
+      status: 'pending',
+      colorClass: 'text-amber-500',
+      bgClass: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+      borderClass: 'border-amber-500'
+    };
+  }
+
+  // في حال كانت العملية ناجحة أو جاهزة
   return {
     text: 'جاهزة',
     status: 'success',
