@@ -128,7 +128,7 @@ export default function TopUpPage() {
         toast({ title: "تم النسخ", description: "تم نسخ رقم الحساب بنجاح." });
     };
 
-    const handleConfirmBankDeposit = async (bankType: 'alomqy' | 'kuraimi' | 'amjad') => {
+    const handleConfirmBankDeposit = async (bankType: 'alomqy' | 'kuraimi' | 'amjad' | 'bcash') => {
         if (!bankAmount || !firestore || !userProfile || !userDocRef) {
             toast({ variant: 'destructive', title: 'بيانات ناقصة', description: 'الرجاء إدخال كافة البيانات المطلوبة.' });
             return;
@@ -156,6 +156,14 @@ export default function TopUpPage() {
                     where('status', '==', 'unpaid'),
                     limit(1)
                 );
+            } else if (bankType === 'bcash') {
+                q = query(notifsRef,
+                    where('bank', '==', 'bcash'),
+                    where('amount', '==', amt),
+                    where('senderName', '==', userProfile.displayName?.trim()),
+                    where('status', '==', 'unpaid'),
+                    limit(1)
+                );
             } else {
                 q = query(notifsRef,
                     where('bank', '==', 'amjad'),
@@ -171,7 +179,7 @@ export default function TopUpPage() {
             if (querySnapshot.empty) {
                 // في حال لم يتوفر إشعار آلي فوري، يتم تحويل الطلب تلقائياً إلى "قيد الانتظار" للإدارة وعرض شاشة الإشعار للعميل
                 const now = new Date().toISOString();
-                const bankNameArabic = bankType === 'alomqy' ? 'العمقي (المشقاص)' : bankType === 'kuraimi' ? 'الكريمي' : 'بنك أمجاد';
+                const bankNameArabic = bankType === 'alomqy' ? 'العمقي (المشقاص)' : bankType === 'kuraimi' ? 'الكريمي' : bankType === 'bcash' ? 'بي كاش (البسيري)' : 'بنك أمجاد';
                 const refOrAccount = bankType === 'alomqy' ? alomqyAccount.trim() : bankType === 'kuraimi' ? kuraimiReference.trim() : (userProfile.displayName || 'مطابقة بالاسم');
 
                 const depositReqId = `dep_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -322,6 +330,9 @@ export default function TopUpPage() {
     const isAlOmqy = methodName.includes('العمقي') || methodName.includes('المشقاص');
     const isKuraimi = methodName.includes('الكريمي');
     const isAmjad = methodName.includes('امجاد') || methodName.includes('أمجاد');
+    const isBcash = methodName.includes('بي كاش') || methodName.includes('بسيري') || methodName.includes('bcash');
+    const isNameMatched = isAmjad || isBcash;
+    const isAutomatedBank = isAlOmqy || isKuraimi || isNameMatched;
 
     if (showSuccess && lastTxDetails) {
         const isPending = Boolean(lastTxDetails.isPending);
@@ -492,10 +503,10 @@ export default function TopUpPage() {
                             </div>
 
                             <div className="px-0">
-                                {(isAlOmqy || isKuraimi || isAmjad) && (
+                                {isAutomatedBank && (
                                     <div className="space-y-8 pt-4 animate-in fade-in duration-500">
                                         <div className="grid grid-cols-2 gap-5">
-                                            {!isAmjad && (
+                                            {!isNameMatched && (
                                                 <div className="space-y-2 text-right">
                                                     <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">
                                                         {isAlOmqy ? 'حسابك بالمشقاص' : 'رقم المرجع'}
@@ -512,7 +523,7 @@ export default function TopUpPage() {
                                                 </div>
                                             )}
 
-                                            <div className={cn("space-y-2 text-right", isAmjad ? "col-span-2" : "col-span-1")}>
+                                            <div className={cn("space-y-2 text-right", isNameMatched ? "col-span-2" : "col-span-1")}>
                                                 <Label className="text-[11px] font-black text-muted-foreground uppercase mr-1">المبلغ المودع</Label>
                                                 <div className="relative">
                                                   <Input 
@@ -527,7 +538,7 @@ export default function TopUpPage() {
                                         </div>
 
                                         <Button 
-                                            onClick={() => handleConfirmBankDeposit(isAlOmqy ? 'alomqy' : isKuraimi ? 'kuraimi' : 'amjad')} 
+                                            onClick={() => handleConfirmBankDeposit(isAlOmqy ? 'alomqy' : isKuraimi ? 'kuraimi' : isBcash ? 'bcash' : 'amjad')} 
                                             disabled={isVerifyingBank} 
                                             className="w-full h-14 rounded-3xl bg-[#0048ad] hover:bg-[#003a8c] text-white font-black text-lg shadow-xl shadow-primary/20 active:scale-95 transition-all border-none"
                                         >
@@ -540,7 +551,7 @@ export default function TopUpPage() {
                                     </div>
                                 )}
 
-                                {!isAlOmqy && !isKuraimi && !isAmjad && (
+                                {!isAutomatedBank && (
                                     <div className="pt-4">
                                         <Button 
                                             onClick={() => window.open(`https://api.whatsapp.com/send?phone=967770326828`, '_blank')} 
