@@ -491,6 +491,21 @@ export default function AdminRequestsPage() {
         const userRef = doc(firestore, 'users', selectedDep.userId);
         batch.update(userRef, { balance: increment(selectedDep.amount) });
 
+        let currentBal = 0;
+        try {
+          const userSnap = await getDoc(userRef);
+          const prevBal = Number(userSnap.data()?.balance || 0);
+          currentBal = prevBal + Number(selectedDep.amount || 0);
+        } catch (_) {}
+
+        const formattedAmt = Number(selectedDep.amount).toLocaleString('en-US');
+        const formattedBal = currentBal.toLocaleString('en-US');
+        const bankNameText = selectedDep.bankName || 'البنك';
+        const txIdText = selectedDep.transactionId || selectedDep.id || '';
+
+        const notifTitle = 'تم إيداع مبلغ في حسابك بنجاح';
+        const notifBody = `تم إيداع ${formattedAmt} ريال من ${bankNameText} | رقم العملية: ${txIdText} | رصيدك الحالي: ${formattedBal} ريال.`;
+
         await updateOrderItemInDoc(firestore, 'depositRequests', selectedDep.id, {
           status: 'approved',
           readiness: 'جاهزة',
@@ -503,7 +518,7 @@ export default function AdminRequestsPage() {
             status: 'success',
             readiness: 'جاهزة',
             completedAt: now,
-            notes: `تم تأكيد الإيداع وإضافة مبلغ ${selectedDep.amount.toLocaleString()} ر.ي إلى محفظتك بنجاح.`
+            notes: `تم تأكيد الإيداع وإضافة مبلغ ${formattedAmt} ر.ي إلى محفظتك بنجاح.`
           });
         }
 
@@ -524,7 +539,7 @@ export default function AdminRequestsPage() {
                   r: 'جاهزة',
                   readiness: 'جاهزة',
                   status: 'completed',
-                  note: `تم تأكيد الإيداع وإضافة مبلغ ${selectedDep.amount.toLocaleString()} ر.ي إلى محفظتك بنجاح.`,
+                  note: `تم تأكيد الإيداع وإضافة مبلغ ${formattedAmt} ر.ي إلى محفظتك بنجاح.`,
                   completedAt: now,
                 };
               }
@@ -569,8 +584,8 @@ export default function AdminRequestsPage() {
         const notifRef = doc(collection(firestore, `users/${selectedDep.userId}/notifications`));
         batch.set(notifRef, {
           id: notifRef.id,
-          title: 'تم شحن رصيدك بنجاح ✅',
-          body: `تمت الموافقة على طلب إيداعك بمبلغ ${selectedDep.amount.toLocaleString()} ر.ي عبر ${selectedDep.bankName}. الرصيد متاح في محفظتك الآن.`,
+          title: notifTitle,
+          body: notifBody,
           type: 'deposit_approved',
           read: false,
           createdAt: now,
@@ -578,18 +593,22 @@ export default function AdminRequestsPage() {
         });
 
         // إرسال إشعار سحابي FCM مباشر للعميل
-        fetch('/api/notifications/send-push', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: selectedDep.userId,
-            title: 'تم شحن رصيدك بنجاح ✅',
-            body: `تمت الموافقة على طلب إيداعك بمبلغ ${selectedDep.amount.toLocaleString()} ر.ي عبر ${selectedDep.bankName}. الرصيد متاح في محفظتك الآن.`,
-            transid: selectedDep.transactionId || selectedDep.id,
-            status: 'completed',
-            amount: selectedDep.amount,
-          }),
-        }).catch(err => console.error("Push notification error:", err));
+        try {
+          await fetch('/api/notifications/send-push', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: selectedDep.userId,
+              title: notifTitle,
+              body: notifBody,
+              transid: txIdText,
+              status: 'completed',
+              amount: selectedDep.amount,
+            }),
+          });
+        } catch (err) {
+          console.error("Push notification error:", err);
+        }
       } else {
         const failReason = depRejectNote.trim() || 'لم يتم العثور على إيداع مطابق في البنك';
         await updateOrderItemInDoc(firestore, 'depositRequests', selectedDep.id, {

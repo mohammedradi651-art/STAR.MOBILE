@@ -101,9 +101,12 @@ export async function sendPushNotificationToUser(
         notification: {
           channelId: 'starmobile_notifications_channel',
           icon: 'ic_notification',
-          color: '#0048AE',
+          color: '#014BB6',
+          sound: 'default',
           defaultSound: true,
           defaultVibrateTimings: true,
+          priority: 'max',
+          visibility: 'public',
         },
       },
     });
