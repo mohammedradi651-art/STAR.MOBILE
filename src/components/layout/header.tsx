@@ -1,6 +1,6 @@
 'use client';
 import { Bell, Download } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { collection, query, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
