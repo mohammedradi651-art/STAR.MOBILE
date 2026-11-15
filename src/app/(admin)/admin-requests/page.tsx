@@ -576,13 +576,20 @@ export default function AdminRequestsPage() {
         });
 
         if (selectedDep.transactionId) {
-          const txRef = doc(firestore, `users/${selectedDep.userId}/transactions`, selectedDep.transactionId);
-          batch.update(txRef, {
-            status: 'success',
-            readiness: 'جاهزة',
-            completedAt: now,
-            notes: `تم تأكيد الإيداع وإضافة مبلغ ${formattedAmt} ر.ي إلى محفظتك بنجاح.`
-          });
+          try {
+            const txRef = doc(firestore, `users/${selectedDep.userId}/transactions`, selectedDep.transactionId);
+            const txSnap = await getDoc(txRef);
+            if (txSnap.exists()) {
+              batch.update(txRef, {
+                status: 'success',
+                readiness: 'جاهزة',
+                completedAt: now,
+                notes: `تم تأكيد الإيداع وإضافة مبلغ ${formattedAmt} ر.ي إلى محفظتك بنجاح.`
+              });
+            }
+          } catch (e) {
+            console.error("Error checking txRef for deposit:", e);
+          }
         }
 
         // تحديث مصفوفة history للعمليات حتى تظهر فوراً "جاهزة" في التطبيق
@@ -682,15 +689,22 @@ export default function AdminRequestsPage() {
         });
 
         if (selectedDep.transactionId) {
-          const txRef = doc(firestore, `users/${selectedDep.userId}/transactions`, selectedDep.transactionId);
-          batch.update(txRef, {
-            status: 'failed',
-            readiness: 'فاشلة',
-            rejectReason: failReason,
-            providerMessage: failReason,
-            failedAt: now,
-            notes: `تم رفض طلب الإيداع. السبب: ${failReason}`
-          });
+          try {
+            const txRef = doc(firestore, `users/${selectedDep.userId}/transactions`, selectedDep.transactionId);
+            const txSnap = await getDoc(txRef);
+            if (txSnap.exists()) {
+              batch.update(txRef, {
+                status: 'failed',
+                readiness: 'فاشلة',
+                rejectReason: failReason,
+                providerMessage: failReason,
+                failedAt: now,
+                notes: `تم رفض طلب الإيداع. السبب: ${failReason}`
+              });
+            }
+          } catch (e) {
+            console.error("Error checking txRef for deposit reject:", e);
+          }
         }
 
         // تحديث مصفوفة history للعمليات إلى فاشلة
