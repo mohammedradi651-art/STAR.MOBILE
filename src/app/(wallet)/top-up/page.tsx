@@ -183,13 +183,13 @@ export default function TopUpPage() {
                 const refOrAccount = bankType === 'alomqy' ? alomqyAccount.trim() : bankType === 'kuraimi' ? kuraimiReference.trim() : (userProfile.displayName || 'مطابقة بالاسم');
 
                 const depositReqId = `dep_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-                const txRef = doc(collection(firestore, `users/${userProfile.id}/transactions`));
+                const txId = Date.now().toString().slice(-8);
 
                 const pendingTxNotes = `طلب تغذية حساب قيد المراجعة. ${bankType === 'alomqy' ? `رقم الحساب: ${alomqyAccount.trim()}` : bankType === 'kuraimi' ? `رقم المرجع: ${kuraimiReference.trim()}` : `المودع: ${userProfile.displayName}`}`;
 
                 const depositReqData = {
                     id: depositReqId,
-                    transactionId: txRef.id,
+                    transactionId: txId,
                     userId: userProfile.id,
                     userName: userProfile.displayName || '',
                     userPhone: userProfile.phoneNumber || '',
@@ -207,7 +207,7 @@ export default function TopUpPage() {
                 };
 
                 const txData = {
-                    id: txRef.id,
+                    id: txId,
                     depositRequestId: depositReqId,
                     userId: userProfile.id,
                     transactionDate: now,
@@ -237,7 +237,7 @@ export default function TopUpPage() {
                         amount: amt,
                         referenceNumber: refOrAccount,
                         identifierCode: refOrAccount,
-                        operationId: txRef.id,
+                        operationId: txId,
                         status: 'pending',
                         createdAt: now,
                         userName: userProfile.displayName || '',
@@ -249,7 +249,7 @@ export default function TopUpPage() {
                 // إضافة العملية إلى سجل العمليات المركزي history
                 const historyRef = doc(firestore, `users/${userProfile.id}/transactions`, 'history');
                 const historyEntry = {
-                    id: txRef.id,
+                    id: txId,
                     t: `تغذية حساب - ${bankNameArabic}`,
                     a: amt,
                     pb: userProfile.balance || 0,
@@ -268,10 +268,10 @@ export default function TopUpPage() {
                 pendingBatch.set(historyRef, {
                     lastUpdated: now,
                     schema: 'compact_v1',
-                    list: arrayUnion(historyEntry)
+                    list: arrayUnion(historyEntry),
+                    transactions: arrayUnion(historyEntry)
                 }, { merge: true });
 
-                pendingBatch.set(txRef, txData);
                 await pendingBatch.commit();
 
                 setLastTxDetails({
@@ -296,23 +296,14 @@ export default function TopUpPage() {
                 batch.update(userDocRef, { balance: increment(notifData.amount) });
                 batch.update(notifDoc.ref, { status: 'paid', paidTo: userProfile.id, paidAt: now });
 
-                const txRef = doc(collection(firestore, `users/${userProfile.id}/transactions`));
+                const autoTxId = Date.now().toString().slice(-8);
                 const autoTxTitle = `تغذية آلي - ${bankType === 'alomqy' ? 'المشقاص' : bankType === 'kuraimi' ? 'الكريمي' : 'بنك أمجاد'}`;
                 const autoTxNotes = `مطابقة آلية. الوسيلة: ${selectedMethod?.name || 'بنك'}`;
-                batch.set(txRef, {
-                    userId: userProfile.id,
-                    transactionDate: now,
-                    amount: notifData.amount,
-                    transactionType: autoTxTitle,
-                    notes: autoTxNotes,
-                    status: 'success',
-                    readiness: 'جاهزة'
-                });
 
                 // إضافة العملية إلى سجل العمليات المركزي history
                 const autoHistoryRef = doc(firestore, `users/${userProfile.id}/transactions`, 'history');
                 const autoHistoryEntry = {
-                    id: txRef.id,
+                    id: autoTxId,
                     t: autoTxTitle,
                     a: notifData.amount,
                     pb: userProfile.balance || 0,
@@ -331,7 +322,8 @@ export default function TopUpPage() {
                 batch.set(autoHistoryRef, {
                     lastUpdated: now,
                     schema: 'compact_v1',
-                    list: arrayUnion(autoHistoryEntry)
+                    list: arrayUnion(autoHistoryEntry),
+                    transactions: arrayUnion(autoHistoryEntry)
                 }, { merge: true });
 
                 await batch.commit();

@@ -145,15 +145,23 @@ export default function ElectricityPage() {
 
         batch.update(userDocRef, { balance: increment(-totalToDeduct) });
 
-        const txRef = doc(firestoreCollection(firestore, `users/${user.uid}/transactions`));
-        batch.set(txRef, {
+        const historyRef = doc(firestore, `users/${user.uid}/transactions`, 'history');
+        const electTx = {
+            id: requestId,
             userId: user.uid,
             transactionDate: now,
             amount: totalToDeduct,
             transactionType: 'سداد فاتورة كهرباء',
             notes: `رقم المشترك: ${result.subscriberNumber} - الاسم: ${result.name}`,
-            recipientPhoneNumber: result.subscriberNumber
-        });
+            recipientPhoneNumber: result.subscriberNumber,
+            status: 'pending',
+            readiness: 'قيد الانتظار'
+        };
+        batch.set(historyRef, {
+            transactions: arrayUnion(electTx),
+            list: arrayUnion(electTx),
+            lastUpdated: now
+        }, { merge: true });
 
         const orderElectRef = doc(firestore, 'Order', 'electricityRequests');
         batch.update(orderElectRef, {

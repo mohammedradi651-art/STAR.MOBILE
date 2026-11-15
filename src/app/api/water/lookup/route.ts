@@ -244,20 +244,34 @@ export async function POST(req: Request) {
       const userRef = doc(firestore, 'users', authenticatedUser!.userId);
       batch.update(userRef, { balance: increment(-billAmount) });
 
-      // ب. تسجيل العملية في سجل عمليات العميل بحالة ناجحة نفس العميل العادي
-      const txRef = doc(collection(firestore, `users/${authenticatedUser!.userId}/transactions`));
-      batch.set(txRef, {
+      // ب. تسجيل العملية في سجل عمليات العميل (كشف الحساب الموحد) بحالة ناجحة داخل history
+      const historyRef = doc(firestore, `users/${authenticatedUser!.userId}/transactions`, 'history');
+      const waterTx = {
+        id: 'water_' + Date.now(),
+        operationId: 'water_' + Date.now(),
+        transactionId: 'water_' + Date.now(),
         userId: authenticatedUser!.userId,
         transactionDate: now,
+        date: now,
+        d: now,
         amount: billAmount,
+        a: billAmount,
         transactionType: 'سداد فاتورة مياه',
+        t: 'سداد فاتورة مياه',
         notes: `المنطقة: ${invoice.cityName} - رقم المشترك: ${invoice.subscriberNumber} - الاسم: ${invoice.name}`,
         recipientPhoneNumber: invoice.subscriberNumber,
         subscriberName: invoice.name,
         accountNumber: invoice.subscriberNumber,
-        status: 'success', // ناجحة نفس العميل العادي
-        readiness: 'جاهزة'
-      });
+        status: 'success',
+        s: 'completed',
+        readiness: 'جاهز',
+        r: 'جاهز'
+      };
+      batch.set(historyRef, {
+        list: arrayUnion(waterTx),
+        transactions: arrayUnion(waterTx),
+        lastUpdated: now
+      }, { merge: true });
 
       // ج. تسجيل الطلب داخل Order/waterRequests ليظهر للإدارة في صفحة الطلبات كباقي العملاء
       const orderWaterRef = doc(firestore, 'Order', 'waterRequests');

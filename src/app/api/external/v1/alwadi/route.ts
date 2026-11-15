@@ -225,13 +225,20 @@ export async function POST(req: Request) {
         // هـ. تنفيذ وضع التجربة (Test Renew)
         if (action === 'test_renew') {
             const batch = writeBatch(firestore);
-            const txRef = doc(collection(firestore, `users/${userId}/transactions`));
-            
-            batch.set(txRef, {
-                userId, transactionDate: timestamp, amount: discountedPrice,
-                transactionType: 'تجديد تجريبي', notes: `تجربة كرت: ${number} - تم الاسترجاع فوراً`,
-                status: 'success'
-            });
+            const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
+            const testTx = {
+                id: `TEST-${Date.now()}`,
+                userId, transactionDate: timestamp, date: timestamp, d: timestamp,
+                amount: discountedPrice, a: discountedPrice,
+                transactionType: 'تجديد تجريبي', t: 'تجديد تجريبي',
+                notes: `تجربة كرت: ${number} - تم الاسترجاع فوراً`,
+                status: 'success', s: 'completed', readiness: 'جاهز', r: 'جاهز'
+            };
+            batch.set(historyRef, {
+                list: arrayUnion(testTx),
+                transactions: arrayUnion(testTx),
+                lastUpdated: timestamp
+            }, { merge: true });
 
             await batch.commit();
 
@@ -271,18 +278,34 @@ export async function POST(req: Request) {
             
             batch.update(userRef, { balance: increment(-discountedPrice) });
 
-            const txRef = doc(collection(firestore, `users/${userId}/transactions`));
-            batch.set(txRef, {
+            const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
+            const alwadiTx = {
+                id: `ALW-API-${Date.now()}`,
+                operationId: `ALW-API-${Date.now()}`,
+                transactionId: `ALW-API-${Date.now()}`,
                 userId,
                 transactionDate: timestamp,
+                date: timestamp,
+                d: timestamp,
                 amount: discountedPrice,
+                a: discountedPrice,
                 transactionType: `تجديد منظومة الوادي`,
+                t: `تجديد منظومة الوادي`,
                 subscriberName: resolvedSubscriberName,
                 cardNumber: number,
                 accountNumber: number,
                 recipientPhoneNumber: number,
                 notes: `المشترك: ${resolvedSubscriberName || 'مشترك'} - رقم الكرت: ${number} - باقة: ${officialPrice} ر.ي`,
-                status: 'success'
+                status: 'success',
+                s: 'completed',
+                readiness: 'جاهز',
+                r: 'جاهز'
+            };
+            batch.set(historyRef, {
+                list: arrayUnion(alwadiTx),
+                transactions: arrayUnion(alwadiTx),
+                lastUpdated: timestamp
+            }, { merge: true });
             });
 
             await batch.commit();

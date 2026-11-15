@@ -151,25 +151,41 @@ export default function TransferPage() {
       const recipientDocRef = doc(firestore, 'users', recipient.id);
       batch.update(recipientDocRef, { balance: increment(numericAmount) });
 
-      const senderTransactionRef = doc(collection(firestore, 'users', user.uid, 'transactions'));
-      batch.set(senderTransactionRef, {
+      const senderHistoryRef = doc(firestore, `users/${user.uid}/transactions`, 'history');
+      const senderTx = {
+        id: `tx_${Date.now()}_sender`,
         userId: user.uid,
         transactionDate: now,
         amount: totalToDeduct,
         transactionType: `تحويل إلى ${recipient.displayName}`,
         notes: `شامل عمولة خدمات ${commission} ريال`,
-        recipientPhoneNumber: recipient.phoneNumber
-      });
+        recipientPhoneNumber: recipient.phoneNumber,
+        status: 'completed',
+        readiness: 'جاهزة'
+      };
+      batch.set(senderHistoryRef, {
+        transactions: arrayUnion(senderTx),
+        list: arrayUnion(senderTx),
+        lastUpdated: now
+      }, { merge: true });
 
-      const recipientTransactionRef = doc(collection(firestore, 'users', recipient.id, 'transactions'));
-      batch.set(recipientTransactionRef, {
+      const recipientHistoryRef = doc(firestore, `users/${recipient.id}/transactions`, 'history');
+      const recipientTx = {
+        id: `tx_${Date.now()}_recipient`,
         userId: recipient.id,
         transactionDate: now,
         amount: numericAmount,
         transactionType: `استلام من ${senderProfile.displayName}`,
         notes: `من رقم: ${senderProfile.phoneNumber}`,
-        recipientPhoneNumber: senderProfile.phoneNumber
-      });
+        recipientPhoneNumber: senderProfile.phoneNumber,
+        status: 'completed',
+        readiness: 'جاهزة'
+      };
+      batch.set(recipientHistoryRef, {
+        transactions: arrayUnion(recipientTx),
+        list: arrayUnion(recipientTx),
+        lastUpdated: now
+      }, { merge: true });
 
       await batch.commit();
       setShowSuccess(true);

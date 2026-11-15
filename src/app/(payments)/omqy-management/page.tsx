@@ -276,12 +276,15 @@ export default function DepositManagementPage() {
             // 3. تحديث حركة المستخدم وسجل history
             if (req.transactionId) {
                 const txRef = doc(firestore, `users/${req.userId}/transactions`, req.transactionId);
-                batch.update(txRef, {
-                    status: 'success',
-                    readiness: 'جاهزة',
-                    completedAt: now,
-                    notes: `تم تأكيد الإيداع وإضافة مبلغ ${req.amount.toLocaleString()} ر.ي إلى محفظتك بنجاح.`
-                });
+                const txSnap = await getDoc(txRef);
+                if (txSnap.exists()) {
+                    batch.update(txRef, {
+                        status: 'success',
+                        readiness: 'جاهزة',
+                        completedAt: now,
+                        notes: `تم تأكيد الإيداع وإضافة مبلغ ${req.amount.toLocaleString()} ر.ي إلى محفظتك بنجاح.`
+                    });
+                }
             }
 
             // تحديث أو إدراج العملية في سجل العمليات المركزي history
@@ -386,14 +389,17 @@ export default function DepositManagementPage() {
             // 2. تحديث حركة المستخدم إلى فاشلة مع السبب
             if (req.transactionId) {
                 const txRef = doc(firestore, `users/${req.userId}/transactions`, req.transactionId);
-                batch.update(txRef, {
-                    status: 'failed',
-                    readiness: 'فاشلة',
-                    rejectReason: reason,
-                    providerMessage: reason,
-                    failedAt: now,
-                    notes: `تم رفض طلب الإيداع. السبب: ${reason}`
-                });
+                const txSnap = await getDoc(txRef);
+                if (txSnap.exists()) {
+                    batch.update(txRef, {
+                        status: 'failed',
+                        readiness: 'فاشلة',
+                        rejectReason: reason,
+                        providerMessage: reason,
+                        failedAt: now,
+                        notes: `تم رفض طلب الإيداع. السبب: ${reason}`
+                    });
+                }
             }
 
             // تحديث أو إدراج العملية في سجل العمليات المركزي history

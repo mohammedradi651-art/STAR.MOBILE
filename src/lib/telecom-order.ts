@@ -263,6 +263,30 @@ export async function markPaymentSuccess(
     // إلغاء التحديث على المستند المنفصل - التحديث في paymentTransactions و history
     // batch.update(userTxRef, updateData);
     batch.update(globalTxRef, updateData);
+
+    try {
+      const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
+      const hSnap = await getDoc(historyRef);
+      if (hSnap.exists()) {
+        const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+        const updatedList = rawList.map((item: any) => {
+          if (item.id === transid || item.transid === transid) {
+            return {
+              ...item,
+              status: 'success',
+              s: 'completed',
+              readiness: 'جاهزة',
+              r: 'جاهزة',
+              providerMessage: providerMessage || 'تم تنفيذ العملية بنجاح',
+              completedAt: new Date().toISOString()
+            };
+          }
+          return item;
+        });
+        batch.set(historyRef, { list: updatedList, transactions: updatedList, lastUpdated: new Date().toISOString() }, { merge: true });
+      }
+    } catch (_) {}
+
     await batch.commit();
   } catch (err) {
     console.error('Failed to mark payment success:', err);
@@ -338,13 +362,14 @@ export async function markPaymentFailedAndRefund(
     const globalTxRef = doc(firestore, 'paymentTransactions', transid);
 
     // التأكد من عدم تكرار الإرجاع
+    const gSnap = await getDoc(globalTxRef);
     const snap = await getDoc(userTxRef);
-    if (snap.exists() && snap.data().refunded) {
+    if ((gSnap.exists() && gSnap.data()?.refunded) || (snap.exists() && snap.data()?.refunded)) {
       return;
     }
 
     const cleanReason = formatProviderErrorMessage(reason);
-    const currentNotes = snap.exists() ? (snap.data().notes || '') : '';
+    const currentNotes = (gSnap.exists() ? (gSnap.data()?.notes || '') : '') || (snap.exists() ? (snap.data()?.notes || '') : '');
     const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
     const updatedNotes = cleanNotes ? `${cleanNotes}\nالسبب من المزود: ${cleanReason}` : `السبب من المزود: ${cleanReason}`;
 
@@ -361,6 +386,32 @@ export async function markPaymentFailedAndRefund(
     batch.update(userDocRef, { balance: increment(amount) });
     // batch.update(userTxRef, updateData);
     batch.update(globalTxRef, updateData);
+
+    try {
+      const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
+      const hSnap = await getDoc(historyRef);
+      if (hSnap.exists()) {
+        const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+        const updatedList = rawList.map((item: any) => {
+          if (item.id === transid || item.transid === transid) {
+            return {
+              ...item,
+              status: 'failed',
+              s: 'failed',
+              readiness: 'فاشلة',
+              r: 'فاشلة',
+              refunded: true,
+              providerMessage: cleanReason,
+              notes: updatedNotes,
+              failedAt: new Date().toISOString()
+            };
+          }
+          return item;
+        });
+        batch.set(historyRef, { list: updatedList, transactions: updatedList, lastUpdated: new Date().toISOString() }, { merge: true });
+      }
+    } catch (_) {}
+
     await batch.commit();
   } catch (err) {
     console.error('Failed to refund and mark payment failed:', err);

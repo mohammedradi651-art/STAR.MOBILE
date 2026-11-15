@@ -382,9 +382,10 @@ export async function POST(req: Request) {
       // حذف الكرت فوراً من مخزون صاحب الشبكة بمجرد شرائه
       batch.delete(cardDoc.ref);
 
-      // تسجيل العملية في سجل العمليات الخاص بالعميل بنفس التنسيق المعتاد 100%
-      const txRef = doc(collection(firestore, `users/${userDoc.id}/transactions`));
-      batch.set(txRef, {
+      // تسجيل العملية في المستند الموحد history
+      const historyRef = doc(firestore, `users/${userDoc.id}/transactions`, 'history');
+      const buyerTx = {
+        id: `sms_card_${Date.now()}`,
         userId: userDoc.id,
         transactionDate: now,
         amount: finalCategoryPrice,
@@ -393,7 +394,13 @@ export async function POST(req: Request) {
         cardNumber: purchasedCardNumber,
         ...(purchasedCardPassword ? { cardPassword: purchasedCardPassword } : {}),
         status: 'completed',
-      });
+        readiness: 'جاهزة'
+      };
+      batch.set(historyRef, {
+        transactions: arrayUnion(buyerTx),
+        list: arrayUnion(buyerTx),
+        lastUpdated: now
+      }, { merge: true });
 
       // تسجيل في soldCards
       const soldCardRef = doc(collection(firestore, 'soldCards'));
@@ -420,14 +427,22 @@ export async function POST(req: Request) {
         const ownerRef = doc(firestore, 'users', ownerId);
         batch.update(ownerRef, { balance: increment(payoutAmount) });
 
-        const ownerTxRef = doc(collection(firestore, `users/${ownerId}/transactions`));
-        batch.set(ownerTxRef, {
+        const ownerHistoryRef = doc(firestore, `users/${ownerId}/transactions`, 'history');
+        const ownerTx = {
+          id: `sms_payout_${Date.now()}`,
           userId: ownerId,
           transactionDate: now,
           amount: payoutAmount,
           transactionType: 'أرباح مبيعات الكروت',
-          notes: `أرباح كرت ${categoryName || ''} - شبكة: ${networkName} (صافي بعد خصم 10% عمولة)`
-        });
+          notes: `أرباح كرت ${categoryName || ''} - شبكة: ${networkName} (صافي بعد خصم 10% عمولة)`,
+          status: 'completed',
+          readiness: 'جاهزة'
+        };
+        batch.set(ownerHistoryRef, {
+          transactions: arrayUnion(ownerTx),
+          list: arrayUnion(ownerTx),
+          lastUpdated: now
+        }, { merge: true });
       }
 
       await batch.commit();
@@ -506,9 +521,9 @@ export async function POST(req: Request) {
       const batch = writeBatch(firestore);
       batch.update(userDoc.ref, { balance: increment(-finalCategoryPrice) });
 
-      const txRef = doc(collection(firestore, `users/${userDoc.id}/transactions`));
-      batch.set(txRef, {
-        id: txRef.id,
+      const historyRef = doc(firestore, `users/${userDoc.id}/transactions`, 'history');
+      const buyerTx = {
+        id: `sms_card_${Date.now()}`,
         userId: userDoc.id,
         transactionDate: now,
         amount: finalCategoryPrice,
@@ -517,8 +532,14 @@ export async function POST(req: Request) {
         cardNumber: purchasedCardNumber,
         ...(purchasedCardPassword ? { cardPassword: purchasedCardPassword } : {}),
         status: 'completed',
+        readiness: 'جاهزة',
         externalRef: externalRef
-      });
+      };
+      batch.set(historyRef, {
+        transactions: arrayUnion(buyerTx),
+        list: arrayUnion(buyerTx),
+        lastUpdated: now
+      }, { merge: true });
 
       const baityOrderRef = doc(firestore, 'baityOrders', externalRef);
       batch.set(baityOrderRef, {

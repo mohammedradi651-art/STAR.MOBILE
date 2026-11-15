@@ -287,7 +287,9 @@ export default function FavoritesPage() {
             const batch = writeBatch(firestore);
             batch.update(userDocRef, { balance: increment(-effectivePrice) });
             batch.delete(cardToPurchaseDoc.ref); // حذف الكرت فوراً من مخزون صاحب الشبكة بمجرد شرائه
-            batch.set(doc(collection(firestore, `users/${user.uid}/transactions`)), {
+
+            const buyerTx = {
+                id: `card_${Date.now()}`,
                 userId: user.uid, 
                 transactionDate: now, 
                 amount: effectivePrice,
@@ -295,7 +297,14 @@ export default function FavoritesPage() {
                 notes: `شبكة: ${selectedNetwork.name}`,
                 cardNumber: cardData.cardNumber,
                 status: 'completed',
-            });
+                readiness: 'جاهزة'
+            };
+            const userHistoryRef = doc(firestore, `users/${user.uid}/transactions`, 'history');
+            batch.set(userHistoryRef, {
+                transactions: arrayUnion(buyerTx),
+                list: arrayUnion(buyerTx),
+                lastUpdated: now
+            }, { merge: true });
 
             const soldCardRef = doc(collection(firestore, 'soldCards'));
             batch.set(soldCardRef, {
@@ -321,14 +330,22 @@ export default function FavoritesPage() {
                 const ownerRef = doc(firestore, 'users', ownerId);
                 batch.update(ownerRef, { balance: increment(payoutAmount) });
 
-                const ownerTxRef = doc(collection(firestore, `users/${ownerId}/transactions`));
-                batch.set(ownerTxRef, {
+                const ownerHistoryRef = doc(firestore, `users/${ownerId}/transactions`, 'history');
+                const ownerTx = {
+                    id: `payout_${Date.now()}`,
                     userId: ownerId,
                     transactionDate: now,
                     amount: payoutAmount,
                     transactionType: 'أرباح مبيعات الكروت',
-                    notes: `أرباح كرت ${selectedCategory.name} - شبكة: ${selectedNetwork.name} (صافي بعد خصم 10% عمولة)`
-                });
+                    notes: `أرباح كرت ${selectedCategory.name} - شبكة: ${selectedNetwork.name} (صافي بعد خصم 10% عمولة)`,
+                    status: 'completed',
+                    readiness: 'جاهزة'
+                };
+                batch.set(ownerHistoryRef, {
+                    transactions: arrayUnion(ownerTx),
+                    list: arrayUnion(ownerTx),
+                    lastUpdated: now
+                }, { merge: true });
             }
 
             await batch.commit();
@@ -340,13 +357,12 @@ export default function FavoritesPage() {
         } else {
             // 2. شبكة خارجية (بيتي): خصم المبلغ فوراً والاستماع للرد المباشر حتى 50 ثانية
             const externalRef = `SM-BN-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
-            const txRef = doc(collection(firestore, `users/${user.uid}/transactions`));
+            const txId = `baity_${Date.now()}`;
             const baityOrderRef = doc(firestore, 'baityOrders', externalRef);
+            const userHistoryRef = doc(firestore, `users/${user.uid}/transactions`, 'history');
 
-            const initBatch = writeBatch(firestore);
-            initBatch.update(userDocRef, { balance: increment(-effectivePrice) });
-            initBatch.set(txRef, {
-                id: txRef.id,
+            const pendingTx = {
+                id: txId,
                 userId: user.uid,
                 transactionDate: now,
                 amount: effectivePrice,
@@ -358,11 +374,19 @@ export default function FavoritesPage() {
                 networkName: selectedNetwork.name,
                 className: selectedCategory.name,
                 classId: selectedCategory.id,
-            });
+            };
+
+            const initBatch = writeBatch(firestore);
+            initBatch.update(userDocRef, { balance: increment(-effectivePrice) });
+            initBatch.set(userHistoryRef, {
+                transactions: arrayUnion(pendingTx),
+                list: arrayUnion(pendingTx),
+                lastUpdated: now
+            }, { merge: true });
             initBatch.set(baityOrderRef, {
                 externalRef: externalRef,
                 userId: user.uid,
-                transactionId: txRef.id,
+                transactionId: txId,
                 classId: selectedCategory.id,
                 className: selectedCategory.name,
                 networkName: selectedNetwork.name,
@@ -389,17 +413,33 @@ export default function FavoritesPage() {
                 try {
                     const refundBatch = writeBatch(firestore);
                     refundBatch.update(userDocRef, { balance: increment(effectivePrice) });
-                    refundBatch.update(txRef, {
-                        status: 'failed',
-                        readiness: 'فاشلة',
-                        notes: `شبكة: ${selectedNetwork.name} (فشل الشراء)`,
-                        failedAt: new Date().toISOString()
-                    });
                     refundBatch.update(baityOrderRef, {
                         status: 'failed',
                         failedAt: new Date().toISOString(),
                         errorReason: reason || 'فشل الشراء من المزود'
                     });
+
+                    // تحديث في history
+                    const hSnap = await getDoc(userHistoryRef);
+                    if (hSnap.exists()) {
+                        const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+                        const updatedList = rawList.map((item: any) => {
+                            if (item.id === txId || item.externalRef === externalRef) {
+                                return {
+                                    ...item,
+                                    status: 'failed',
+                                    s: 'failed',
+                                    readiness: 'فاشلة',
+                                    r: 'فاشلة',
+                                    notes: `شبكة: ${selectedNetwork.name} (فشل الشراء)`,
+                                    failedAt: new Date().toISOString()
+                                };
+                            }
+                            return item;
+                        });
+                        refundBatch.set(userHistoryRef, { list: updatedList, transactions: updatedList, lastUpdated: new Date().toISOString() }, { merge: true });
+                    }
+
                     await refundBatch.commit();
                     isExternalOrderDeducted = false;
                 } catch (refErr) {
@@ -433,16 +473,6 @@ export default function FavoritesPage() {
 
                 try {
                     const finishBatch = writeBatch(firestore);
-                    const transactionPayload: any = {
-                        status: 'completed',
-                        readiness: 'جاهزة',
-                        cardNumber: cardData.cardID,
-                        completedAt: new Date().toISOString()
-                    };
-                    if (cardData.cardPass && cardData.cardPass !== cardData.cardID) {
-                        transactionPayload.cardPassword = cardData.cardPass;
-                    }
-                    finishBatch.update(txRef, transactionPayload);
                     finishBatch.update(baityOrderRef, {
                         status: 'completed',
                         cardNumber: cardData.cardID,
@@ -450,6 +480,29 @@ export default function FavoritesPage() {
                         uuidOrder: uuidOrder || '',
                         completedAt: new Date().toISOString()
                     });
+
+                    // تحديث في history
+                    const hSnap = await getDoc(userHistoryRef);
+                    if (hSnap.exists()) {
+                        const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+                        const updatedList = rawList.map((item: any) => {
+                            if (item.id === txId || item.externalRef === externalRef) {
+                                return {
+                                    ...item,
+                                    status: 'completed',
+                                    s: 'completed',
+                                    readiness: 'جاهزة',
+                                    r: 'جاهزة',
+                                    cardNumber: cardData.cardID,
+                                    cardPassword: cardData.cardPass || cardData.cardID,
+                                    completedAt: new Date().toISOString()
+                                };
+                            }
+                            return item;
+                        });
+                        finishBatch.set(userHistoryRef, { list: updatedList, transactions: updatedList, lastUpdated: new Date().toISOString() }, { merge: true });
+                    }
+
                     await finishBatch.commit().catch(() => {});
                     purchaseSuccessfullyCommitted = true;
                     isExternalOrderDeducted = false;

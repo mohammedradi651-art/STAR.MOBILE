@@ -525,17 +525,26 @@ export default function UsersPage() {
     if (isNaN(amount) || amount <= 0) return;
 
     const userDocRef = doc(firestore, 'users', selectedUser.id);
-    const userTransactionsRef = collection(firestore, 'users', selectedUser.id, 'transactions');
+    const historyRef = doc(firestore, `users/${selectedUser.id}/transactions`, 'history');
 
     updateDocumentNonBlocking(userDocRef, { balance: increment(amount) });
     setSearchedUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, balance: (u.balance ?? 0) + amount } : u));
-    addDocumentNonBlocking(userTransactionsRef, {
-        userId: selectedUser.id,
-        transactionDate: new Date().toISOString(),
-        amount: amount,
-        transactionType: 'إيداع رصيد',
-        notes: 'إيداع من الإدارة',
-    });
+    
+    const depositTx = {
+      id: `manual_dep_${Date.now()}`,
+      userId: selectedUser.id,
+      transactionDate: new Date().toISOString(),
+      amount: amount,
+      transactionType: 'إيداع رصيد',
+      notes: 'إيداع من الإدارة',
+      status: 'completed',
+      readiness: 'جاهزة'
+    };
+    setDoc(historyRef, {
+      transactions: arrayUnion(depositTx),
+      list: arrayUnion(depositTx),
+      lastUpdated: new Date().toISOString()
+    }, { merge: true }).catch(console.error);
 
     const newBalance = (selectedUser.balance ?? 0) + amount;
     const shortName = getFirstLast(selectedUser.displayName);
@@ -624,17 +633,26 @@ export default function UsersPage() {
     if (isNaN(amount) || amount <= 0 || (selectedUser.balance ?? 0) < amount) return;
   
     const userRef = doc(firestore, 'users', selectedUser.id);
-    const txCol = collection(firestore, 'users', selectedUser.id, 'transactions');
+    const historyRef = doc(firestore, `users/${selectedUser.id}/transactions`, 'history');
 
     updateDocumentNonBlocking(userRef, { balance: increment(-amount) });
     setSearchedUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, balance: (u.balance ?? 0) - amount } : u));
-    addDocumentNonBlocking(txCol, {
-        userId: selectedUser.id,
-        transactionDate: new Date().toISOString(),
-        amount: amount,
-        transactionType: 'سحب نقدي',
-        notes: 'سحب نقدي من الإدارة',
-    });
+    
+    const withdrawTx = {
+      id: `manual_wth_${Date.now()}`,
+      userId: selectedUser.id,
+      transactionDate: new Date().toISOString(),
+      amount: amount,
+      transactionType: 'سحب نقدي',
+      notes: 'سحب نقدي من الإدارة',
+      status: 'completed',
+      readiness: 'جاهزة'
+    };
+    setDoc(historyRef, {
+      transactions: arrayUnion(withdrawTx),
+      list: arrayUnion(withdrawTx),
+      lastUpdated: new Date().toISOString()
+    }, { merge: true }).catch(console.error);
 
     toast({ title: "نجاح", description: `تم السحب بنجاح.` });
     setIsWithdrawDialogOpen(false);

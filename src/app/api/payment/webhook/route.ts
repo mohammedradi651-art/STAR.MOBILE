@@ -407,16 +407,21 @@ async function handleWebhookExecution(
 
     await batch.commit();
 
-    // إرسال إشعار سحابي FCM فوري للعميل
+    // إرسال إشعار سحابي FCM فقط إذا تأخر الرد (أي بقيت العملية قيد الانتظار أكثر من 30 ثانية)
+    // إذا كانت العملية فورية وظهرت للعميل مباشرة في التطبيق، لا يتم إرسال إشعار سحابي
     if (userId) {
-      const finalService = txData.transactionType || 'سداد اتصالات';
-      sendPushNotificationToUser(firestore, userId, {
-        title: 'تم تنفيذ عمليتك بنجاح ✅',
-        body: `تم إكمال ${finalService} بمبلغ ${amount} ريال بنجاح.`,
-        transid: cleanTransId,
-        status: 'success',
-        amount: amount
-      }).catch(() => {});
+      const createdTime = new Date(txData?.createdAt || txData?.transactionDate || txData?.date || 0).getTime();
+      const isDelayed = (Date.now() - createdTime) > 30000;
+      if (isDelayed) {
+        const finalService = txData.transactionType || 'سداد اتصالات';
+        sendPushNotificationToUser(firestore, userId, {
+          title: 'تم اكتمال عمليتك المعلقة ✅',
+          body: `تم إكمال ${finalService} بمبلغ ${amount} ريال بنجاح.`,
+          transid: cleanTransId,
+          status: 'success',
+          amount: amount
+        }).catch(() => {});
+      }
     }
 
     // إشعار نظام العميل عبر Webhook إذا قام بتمرير backurl
@@ -533,16 +538,20 @@ async function handleWebhookExecution(
 
     await batch.commit();
 
-    // إرسال إشعار سحابي FCM فوري للعميل بالفشل واسترجاع الرصيد
+    // إرسال إشعار سحابي FCM فقط إذا تأخر الرد
     if (userId) {
-      const finalService = txData.transactionType || 'سداد اتصالات';
-      sendPushNotificationToUser(firestore, userId, {
-        title: 'تعذر تنفيذ العملية وتم إعادة الرصيد ⚠️',
-        body: `فشلت عملية ${finalService}: ${cancellationReason}. وتمت إعادة ${amount} ريال إلى حسابك.`,
-        transid: cleanTransId,
-        status: 'failed',
-        amount: amount
-      }).catch(() => {});
+      const createdTime = new Date(txData?.createdAt || txData?.transactionDate || txData?.date || 0).getTime();
+      const isDelayed = (Date.now() - createdTime) > 25000;
+      if (isDelayed) {
+        const finalService = txData.transactionType || 'سداد اتصالات';
+        sendPushNotificationToUser(firestore, userId, {
+          title: 'تعذر تنفيذ العملية وتم إعادة الرصيد ⚠️',
+          body: `فشلت عملية ${finalService}: ${cancellationReason}. وتمت إعادة ${amount} ريال إلى حسابك.`,
+          transid: cleanTransId,
+          status: 'failed',
+          amount: amount
+        }).catch(() => {});
+      }
     }
 
     // إشعار نظام العميل عبر Webhook إذا قام بتمرير backurl

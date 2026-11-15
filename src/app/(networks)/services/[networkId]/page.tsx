@@ -153,33 +153,40 @@ function NetworkPurchasePageComponent() {
 
     setIsProcessing(true);
     const externalRef = `SM-BN-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
+    const txId = `baity_${Date.now()}`;
     const now = new Date().toISOString();
     const formattedDate = new Date().toLocaleDateString('ar-YE');
-    const txRef = doc(collection(firestore, `users/${user.uid}/transactions`));
+    const userHistoryRef = doc(firestore, `users/${user.uid}/transactions`, 'history');
     const baityOrderRef = doc(firestore, 'baityOrders', externalRef);
+
+    const pendingTx = {
+        id: txId,
+        userId: user.uid,
+        transactionDate: now,
+        amount: effectivePrice,
+        transactionType: `شراء كرت ${selectedCategory.name}`,
+        notes: `شبكة: ${networkName}`,
+        status: 'pending',
+        readiness: 'قيد الانتظار',
+        externalRef: externalRef,
+        networkName: networkName,
+        className: selectedCategory.name,
+        classId: selectedCategory.id,
+    };
 
     try {
         // 1. خصم المبلغ فوراً من العميل بمجرد تأكيد الشراء
         const initBatch = writeBatch(firestore);
         initBatch.update(userDocRef!, { balance: increment(-effectivePrice) });
-        initBatch.set(txRef, {
-            id: txRef.id,
-            userId: user.uid,
-            transactionDate: now,
-            amount: effectivePrice,
-            transactionType: `شراء كرت ${selectedCategory.name}`,
-            notes: `شبكة: ${networkName}`,
-            status: 'pending',
-            readiness: 'قيد الانتظار',
-            externalRef: externalRef,
-            networkName: networkName,
-            className: selectedCategory.name,
-            classId: selectedCategory.id,
-        });
+        initBatch.set(userHistoryRef, {
+            transactions: arrayUnion(pendingTx),
+            list: arrayUnion(pendingTx),
+            lastUpdated: now
+        }, { merge: true });
         initBatch.set(baityOrderRef, {
             externalRef: externalRef,
             userId: user.uid,
-            transactionId: txRef.id,
+            transactionId: txId,
             classId: selectedCategory.id,
             className: selectedCategory.name,
             networkName: networkName,
@@ -205,17 +212,33 @@ function NetworkPurchasePageComponent() {
             try {
                 const refundBatch = writeBatch(firestore);
                 refundBatch.update(userDocRef!, { balance: increment(effectivePrice) });
-                refundBatch.update(txRef, {
-                    status: 'failed',
-                    readiness: 'فاشلة',
-                    notes: `شبكة: ${networkName} (فشل الشراء)`,
-                    failedAt: new Date().toISOString()
-                });
                 refundBatch.update(baityOrderRef, {
                     status: 'failed',
                     failedAt: new Date().toISOString(),
                     errorReason: reason || 'فشل الشراء من المزود'
                 });
+
+                // تحديث في history
+                const hSnap = await getDoc(userHistoryRef);
+                if (hSnap.exists()) {
+                    const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+                    const updatedList = rawList.map((item: any) => {
+                        if (item.id === txId || item.externalRef === externalRef) {
+                            return {
+                                ...item,
+                                status: 'failed',
+                                s: 'failed',
+                                readiness: 'فاشلة',
+                                r: 'فاشلة',
+                                notes: `شبكة: ${networkName} (فشل الشراء)`,
+                                failedAt: new Date().toISOString()
+                            };
+                        }
+                        return item;
+                    });
+                    refundBatch.set(userHistoryRef, { list: updatedList, transactions: updatedList, lastUpdated: new Date().toISOString() }, { merge: true });
+                }
+
                 await refundBatch.commit();
             } catch (refErr) {
                 console.error("Refund commit error:", refErr);
@@ -245,16 +268,6 @@ function NetworkPurchasePageComponent() {
 
             try {
                 const finishBatch = writeBatch(firestore);
-                const transactionPayload: any = {
-                    status: 'completed',
-                    readiness: 'جاهزة',
-                    cardNumber: cardData.cardID,
-                    completedAt: new Date().toISOString(),
-                };
-                if (cardData.cardPass && cardData.cardPass !== cardData.cardID) {
-                    transactionPayload.cardPassword = cardData.cardPass;
-                }
-                finishBatch.update(txRef, transactionPayload);
                 finishBatch.update(baityOrderRef, {
                     status: 'completed',
                     cardNumber: cardData.cardID,
@@ -262,6 +275,29 @@ function NetworkPurchasePageComponent() {
                     uuidOrder: uuidOrder || '',
                     completedAt: new Date().toISOString(),
                 });
+
+                // تحديث في history
+                const hSnap = await getDoc(userHistoryRef);
+                if (hSnap.exists()) {
+                    const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+                    const updatedList = rawList.map((item: any) => {
+                        if (item.id === txId || item.externalRef === externalRef) {
+                            return {
+                                ...item,
+                                status: 'completed',
+                                s: 'completed',
+                                readiness: 'جاهزة',
+                                r: 'جاهزة',
+                                cardNumber: cardData.cardID,
+                                cardPassword: cardData.cardPass || cardData.cardID,
+                                completedAt: new Date().toISOString()
+                            };
+                        }
+                        return item;
+                    });
+                    finishBatch.set(userHistoryRef, { list: updatedList, transactions: updatedList, lastUpdated: new Date().toISOString() }, { merge: true });
+                }
+
                 await finishBatch.commit().catch(() => {});
             } catch (e) {
                 console.error("Finish batch error:", e);

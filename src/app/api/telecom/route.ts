@@ -463,7 +463,8 @@ export async function POST(request: Request) {
           const updatedHistoryList = [compactTxItem, ...historyList.filter((x: any) => (x.id !== transid && x.transid !== transid))];
 
           transaction.update(userRef, { balance: increment(-requiredCost) });
-          transaction.set(clientTxRef, txRecord);
+          // تم إلغاء إنشاء مستند منفصل والاعتماد حصرياً على history
+          // transaction.set(clientTxRef, txRecord);
           transaction.set(globalTxRef, txRecord);
           transaction.set(historyRef, {
             list: updatedHistoryList,
@@ -1319,9 +1320,10 @@ async function markSuccessInDb(firestore: any, userId: string, transid: string, 
     const globalTxRef = doc(firestore, 'paymentTransactions', transid);
     const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
 
+    const gSnap = await getDoc(globalTxRef);
     const snap = await getDoc(userTxRef);
-    const clientBackUrl = snap.exists() ? (snap.data()?.clientBackUrl || null) : null;
-    const txData = snap.exists() ? snap.data() : null;
+    const clientBackUrl = gSnap.exists() ? (gSnap.data()?.clientBackUrl || null) : (snap.exists() ? (snap.data()?.clientBackUrl || null) : null);
+    const txData = gSnap.exists() ? gSnap.data() : (snap.exists() ? snap.data() : null);
 
     const updateData = {
       status: 'success',
@@ -1359,16 +1361,20 @@ async function markSuccessInDb(firestore: any, userId: string, transid: string, 
 
     await batch.commit();
 
-    // إرسال إشعار سحابي FCM فوري للعميل
-    const finalAmount = txData?.amount || 0;
-    const finalService = txData?.transactionType || 'سداد اتصالات';
-    sendPushNotificationToUser(firestore, userId, {
-      title: 'تم تنفيذ عمليتك بنجاح ✅',
-      body: `تم إكمال ${finalService} بمبلغ ${finalAmount} ريال بنجاح.`,
-      transid: transid,
-      status: 'success',
-      amount: finalAmount
-    }).catch(() => {});
+    // إرسال إشعار سحابي FCM فقط إذا تأخر الرد
+    const createdTime = new Date(txData?.createdAt || txData?.transactionDate || txData?.date || 0).getTime();
+    const isDelayed = (Date.now() - createdTime) > 30000;
+    if (isDelayed) {
+      const finalAmount = txData?.amount || 0;
+      const finalService = txData?.transactionType || 'سداد اتصالات';
+      sendPushNotificationToUser(firestore, userId, {
+        title: 'تم اكتمال عمليتك المعلقة ✅',
+        body: `تم إكمال ${finalService} بمبلغ ${finalAmount} ريال بنجاح.`,
+        transid: transid,
+        status: 'success',
+        amount: finalAmount
+      }).catch(() => {});
+    }
 
     if (clientBackUrl) {
       try {
@@ -1414,16 +1420,17 @@ async function refundUser(firestore: any, userId: string, transid: string, amoun
     const globalTxRef = doc(firestore, 'paymentTransactions', transid);
     const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
 
+    const gSnap = await getDoc(globalTxRef);
     const snap = await getDoc(userTxRef);
-    if (snap.exists() && snap.data()?.refunded) {
+    if ((gSnap.exists() && gSnap.data()?.refunded) || (snap.exists() && snap.data()?.refunded)) {
       return;
     }
 
-    const currentNotes = snap.exists() ? (snap.data()?.notes || '') : '';
+    const currentNotes = (gSnap.exists() ? (gSnap.data()?.notes || '') : '') || (snap.exists() ? (snap.data()?.notes || '') : '');
     const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
     const updatedNotes = cleanNotes ? `${cleanNotes}\nسبب الرفض: ${reason}` : `سبب الرفض: ${reason}`;
-    const clientBackUrl = snap.exists() ? (snap.data()?.clientBackUrl || null) : null;
-    const txData = snap.exists() ? snap.data() : null;
+    const clientBackUrl = gSnap.exists() ? (gSnap.data()?.clientBackUrl || null) : (snap.exists() ? (snap.data()?.clientBackUrl || null) : null);
+    const txData = gSnap.exists() ? gSnap.data() : (snap.exists() ? snap.data() : null);
 
     const updateData: any = {
       status: 'failed',
@@ -1468,16 +1475,20 @@ async function refundUser(firestore: any, userId: string, transid: string, amoun
 
     await batch.commit();
 
-    // إرسال إشعار سحابي FCM فوري للعميل بالفشل واسترجاع الرصيد
-    const finalAmount = txData?.amount || amount;
-    const finalService = txData?.transactionType || 'سداد اتصالات';
-    sendPushNotificationToUser(firestore, userId, {
-      title: 'تعذر تنفيذ العملية وتم إعادة الرصيد ⚠️',
-      body: `فشلت عملية ${finalService}: ${reason}. وتمت إعادة ${finalAmount} ريال إلى حسابك.`,
-      transid: transid,
-      status: 'failed',
-      amount: finalAmount
-    }).catch(() => {});
+    // إرسال إشعار سحابي FCM فقط إذا تأخر الرد
+    const createdTime = new Date(txData?.createdAt || txData?.transactionDate || txData?.date || 0).getTime();
+    const isDelayed = (Date.now() - createdTime) > 25000;
+    if (isDelayed) {
+      const finalAmount = txData?.amount || amount;
+      const finalService = txData?.transactionType || 'سداد اتصالات';
+      sendPushNotificationToUser(firestore, userId, {
+        title: 'تعذر تنفيذ العملية وتم إعادة الرصيد ⚠️',
+        body: `فشلت عملية ${finalService}: ${reason}. وتمت إعادة ${finalAmount} ريال إلى حسابك.`,
+        transid: transid,
+        status: 'failed',
+        amount: finalAmount
+      }).catch(() => {});
+    }
 
     if (clientBackUrl) {
       try {

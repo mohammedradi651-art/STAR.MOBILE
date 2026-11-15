@@ -166,15 +166,23 @@ export default function WaterPage() {
 
         batch.update(userDocRef, { balance: increment(-totalToDeduct) });
 
-        const txRef = doc(firestoreCollection(firestore, `users/${user.uid}/transactions`));
-        batch.set(txRef, {
+        const historyRef = doc(firestore, `users/${user.uid}/transactions`, 'history');
+        const waterTx = {
+            id: requestId,
             userId: user.uid,
             transactionDate: now,
             amount: totalToDeduct,
             transactionType: 'سداد فاتورة مياه',
             notes: `المنطقة: ${cityName} - رقم المشترك: ${result.subscriberNumber}`,
-            recipientPhoneNumber: result.subscriberNumber
-        });
+            recipientPhoneNumber: result.subscriberNumber,
+            status: 'pending',
+            readiness: 'قيد الانتظار'
+        };
+        batch.set(historyRef, {
+            transactions: arrayUnion(waterTx),
+            list: arrayUnion(waterTx),
+            lastUpdated: now
+        }, { merge: true });
 
         const orderWaterRef = doc(firestore, 'Order', 'waterRequests');
         batch.update(orderWaterRef, {

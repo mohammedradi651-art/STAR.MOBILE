@@ -120,13 +120,13 @@ export default function WithdrawPage() {
 
         const now = new Date().toISOString();
         const requestId = `wth_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        const txDocRef = doc(collection(firestore, `users/${user.uid}/transactions`));
+        const txId = Date.now().toString().slice(-8);
 
         const txNotes = `سحب إلى: ${selectedMethod.name} | رقم الحساب: ${accountNumber} | المستلم: ${recipientName}`;
 
         const requestData = {
             id: requestId,
-            transactionId: txDocRef.id,
+            transactionId: txId,
             ownerId: user.uid,
             ownerName: userProfile.displayName,
             ownerPhoneNumber: userProfile.phoneNumber,
@@ -143,7 +143,7 @@ export default function WithdrawPage() {
         };
 
         const txData = {
-            id: txDocRef.id,
+            id: txId,
             requestId: requestId,
             userId: user.uid,
             transactionDate: now,
@@ -163,8 +163,13 @@ export default function WithdrawPage() {
             const batch = writeBatch(firestore);
             // 1. خصم الرصيد فوراً من حساب مالك الشبكة
             batch.update(userDocRef, { balance: increment(-numericAmount) });
-            // 2. تسجيل المعاملة في كشف حسابه بحالة قيد الانتظار
-            batch.set(txDocRef, txData);
+            // 2. تسجيل المعاملة في كشف حسابه بحالة قيد الانتظار في history
+            const historyRef = doc(firestore, `users/${user.uid}/transactions`, 'history');
+            batch.set(historyRef, {
+                transactions: arrayUnion(txData),
+                list: arrayUnion(txData),
+                lastUpdated: now
+            }, { merge: true });
             // 3. إرسال طلب السحب للإدارة داخل Order/withdrawalRequests
             const orderWithRef = doc(firestore, 'Order', 'withdrawalRequests');
             batch.update(orderWithRef, {

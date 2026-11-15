@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { collection, doc, query, orderBy, updateDoc, increment, writeBatch, getDocs, getDoc, where, limit } from 'firebase/firestore';
+import { collection, doc, query, orderBy, updateDoc, increment, writeBatch, getDocs, getDoc, where, limit, serverTimestamp } from 'firebase/firestore';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { useOrderDocArray, updateOrderItemInDoc } from '@/lib/order-unified';
 import { Card, CardContent } from '@/components/ui/card';
@@ -209,8 +209,60 @@ export default function AdminRequestsPage() {
   const handleElectComplete = async (reqId: string) => {
     if (!firestore) return;
     try {
-      await updateOrderItemInDoc(firestore, 'electricityRequests', reqId, { status: 'completed' });
-      toast({ title: 'تم السداد', description: 'تم وضع علامة تم السداد بنجاح.' });
+      const now = new Date().toISOString();
+      await updateOrderItemInDoc(firestore, 'electricityRequests', reqId, { 
+        status: 'completed',
+        readiness: 'جاهزة',
+        completedAt: now
+      });
+
+      const targetReq = electRequests?.find(r => r.id === reqId) || selectedElect;
+      if (targetReq?.userId) {
+        // تحديث مصفوفة history للعمليات
+        try {
+          const historyRef = doc(firestore, `users/${targetReq.userId}/transactions`, 'history');
+          const historySnap = await getDoc(historyRef);
+          if (historySnap.exists()) {
+            const list = historySnap.data()?.list || historySnap.data()?.transactions || [];
+            let updated = false;
+            const newList = list.map((item: any) => {
+              if (item.id === reqId || item.transactionId === reqId || item.operationId === reqId || item.subscriberNumber === targetReq.subscriberNumber) {
+                updated = true;
+                return {
+                  ...item,
+                  s: 'completed',
+                  r: 'جاهز',
+                  readiness: 'جاهز',
+                  status: 'completed',
+                  completedAt: now,
+                };
+              }
+              return item;
+            });
+            if (updated) {
+              await updateDoc(historyRef, { list: newList, transactions: newList, lastUpdated: now });
+            }
+          }
+        } catch (e) {
+          console.error("Error updating history for electricity complete:", e);
+        }
+
+        // إرسال إشعار سحابي FCM مباشر للعميل
+        fetch('/api/notifications/send-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: targetReq.userId,
+            title: 'تم سداد فاتورة الكهرباء بنجاح ⚡',
+            body: `تم تأكيد سداد فاتورة الكهرباء رقم (${targetReq.subscriberNumber}) بمبلغ ${Number(targetReq.totalAmount).toLocaleString()} ريال بنجاح.`,
+            transid: targetReq.id,
+            status: 'completed',
+            amount: targetReq.totalAmount,
+          }),
+        }).catch(err => console.error("Push notification error:", err));
+      }
+
+      toast({ title: 'تم السداد', description: 'تم وضع علامة تم السداد وإشعار العميل بنجاح.' });
       setSelectedElect(null);
     } catch {
       toast({ variant: 'destructive', title: 'خطأ', description: 'فشل التحديث.' });
@@ -221,17 +273,81 @@ export default function AdminRequestsPage() {
     if (!selectedElect || !firestore) return;
     const batch = writeBatch(firestore);
     try {
-      await updateOrderItemInDoc(firestore, 'electricityRequests', selectedElect.id, { status: 'cancelled' });
-      batch.update(doc(firestore, 'users', selectedElect.userId), { balance: increment(selectedElect.totalAmount) });
-      batch.set(doc(collection(firestore, `users/${selectedElect.userId}/transactions`)), {
-        userId: selectedElect.userId,
-        transactionDate: new Date().toISOString(),
-        amount: selectedElect.totalAmount,
-        transactionType: 'استرجاع سداد كهرباء',
-        notes: `إلغاء طلب رقم: ${selectedElect.subscriberNumber}. ${electCancelNote ? `السبب: ${electCancelNote}` : ''}`
+      const now = new Date().toISOString();
+      await updateOrderItemInDoc(firestore, 'electricityRequests', selectedElect.id, { 
+        status: 'cancelled',
+        readiness: 'فاشلة',
+        cancelledAt: now,
+        cancelReason: electCancelNote || 'تم إلغاء الطلب من قبل الإدارة'
       });
+      batch.update(doc(firestore, 'users', selectedElect.userId), { balance: increment(selectedElect.totalAmount) });
+
+      // تحديث مصفوفة history للعمليات دون إنشاء أي مستند منفصل
+      try {
+        const historyRef = doc(firestore, `users/${selectedElect.userId}/transactions`, 'history');
+        const historySnap = await getDoc(historyRef);
+        if (historySnap.exists()) {
+          const list = historySnap.data()?.list || historySnap.data()?.transactions || [];
+          let updated = false;
+          const newList = list.map((item: any) => {
+            if (item.id === selectedElect.id || item.transactionId === selectedElect.id || item.operationId === selectedElect.id || item.subscriberNumber === selectedElect.subscriberNumber) {
+              updated = true;
+              return {
+                ...item,
+                s: 'failed',
+                r: 'غير جاهز',
+                readiness: 'غير جاهز',
+                status: 'cancelled',
+                refunded: true,
+                notes: `إلغاء طلب رقم: ${selectedElect.subscriberNumber}. ${electCancelNote ? `السبب: ${electCancelNote}` : ''}`,
+                failedAt: now,
+              };
+            }
+            return item;
+          });
+          if (updated) {
+            batch.update(historyRef, { list: newList, transactions: newList, lastUpdated: now });
+          } else {
+            const refundEntry = {
+              id: 'ref_' + Date.now(),
+              t: 'استرجاع سداد كهرباء',
+              transactionType: 'استرجاع سداد كهرباء',
+              type: 'refund',
+              direction: 'credit',
+              amount: selectedElect.totalAmount,
+              a: selectedElect.totalAmount,
+              date: now,
+              d: now,
+              status: 'completed',
+              s: 'completed',
+              readiness: 'جاهز',
+              r: 'جاهز',
+              notes: `إلغاء طلب رقم: ${selectedElect.subscriberNumber}. ${electCancelNote ? `السبب: ${electCancelNote}` : ''}`
+            };
+            batch.update(historyRef, { list: [refundEntry, ...list], transactions: [refundEntry, ...list], lastUpdated: now });
+          }
+        }
+      } catch (e) {
+        console.error("Error updating history for electricity cancel:", e);
+      }
+
       await batch.commit();
-      toast({ title: 'تم الإلغاء', description: 'تم إرجاع المبلغ لحساب المشترك.' });
+
+      // إرسال إشعار سحابي FCM مباشر للعميل
+      fetch('/api/notifications/send-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: selectedElect.userId,
+          title: 'تم إلغاء طلب سداد الكهرباء ⚠️',
+          body: `تم إلغاء طلب سداد فاتورة الكهرباء (${selectedElect.subscriberNumber}) وإعادة مبلغ ${Number(selectedElect.totalAmount).toLocaleString()} ريال لرصيدك.${electCancelNote ? ` السبب: ${electCancelNote}` : ''}`,
+          transid: selectedElect.id,
+          status: 'failed',
+          amount: selectedElect.totalAmount,
+        }),
+      }).catch(err => console.error("Push notification error:", err));
+
+      toast({ title: 'تم الإلغاء', description: 'تم إرجاع المبلغ لحساب المشترك وإشعاره بنجاح.' });
       setIsElectCancelOpen(false);
       setSelectedElect(null);
       setElectCancelNote('');
@@ -244,8 +360,60 @@ export default function AdminRequestsPage() {
   const handleWaterComplete = async (reqId: string) => {
     if (!firestore) return;
     try {
-      await updateOrderItemInDoc(firestore, 'waterRequests', reqId, { status: 'completed' });
-      toast({ title: 'تم السداد', description: 'تم وضع علامة تم السداد بنجاح.' });
+      const now = new Date().toISOString();
+      await updateOrderItemInDoc(firestore, 'waterRequests', reqId, { 
+        status: 'completed',
+        readiness: 'جاهزة',
+        completedAt: now
+      });
+
+      const targetReq = waterRequests?.find(r => r.id === reqId) || selectedWater;
+      if (targetReq?.userId) {
+        // تحديث مصفوفة history للعمليات
+        try {
+          const historyRef = doc(firestore, `users/${targetReq.userId}/transactions`, 'history');
+          const historySnap = await getDoc(historyRef);
+          if (historySnap.exists()) {
+            const list = historySnap.data()?.list || historySnap.data()?.transactions || [];
+            let updated = false;
+            const newList = list.map((item: any) => {
+              if (item.id === reqId || item.transactionId === reqId || item.operationId === reqId || item.subscriberNumber === targetReq.subscriberNumber) {
+                updated = true;
+                return {
+                  ...item,
+                  s: 'completed',
+                  r: 'جاهز',
+                  readiness: 'جاهز',
+                  status: 'completed',
+                  completedAt: now,
+                };
+              }
+              return item;
+            });
+            if (updated) {
+              await updateDoc(historyRef, { list: newList, transactions: newList, lastUpdated: now });
+            }
+          }
+        } catch (e) {
+          console.error("Error updating history for water complete:", e);
+        }
+
+        // إرسال إشعار سحابي FCM مباشر للعميل
+        fetch('/api/notifications/send-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: targetReq.userId,
+            title: 'تم سداد فاتورة المياه بنجاح 💧',
+            body: `تم تأكيد سداد فاتورة المياه رقم (${targetReq.subscriberNumber}) بمبلغ ${Number(targetReq.totalAmount).toLocaleString()} ريال بنجاح.`,
+            transid: targetReq.id,
+            status: 'completed',
+            amount: targetReq.totalAmount,
+          }),
+        }).catch(err => console.error("Push notification error:", err));
+      }
+
+      toast({ title: 'تم السداد', description: 'تم وضع علامة تم السداد وإشعار العميل بنجاح.' });
       setSelectedWater(null);
     } catch {
       toast({ variant: 'destructive', title: 'خطأ', description: 'فشل التحديث.' });
@@ -257,17 +425,81 @@ export default function AdminRequestsPage() {
     const batch = writeBatch(firestore);
     const refundAmount = Number(selectedWater.totalAmount || 0);
     try {
-      await updateOrderItemInDoc(firestore, 'waterRequests', selectedWater.id, { status: 'cancelled' });
-      batch.update(doc(firestore, 'users', selectedWater.userId), { balance: increment(refundAmount) });
-      batch.set(doc(collection(firestore, `users/${selectedWater.userId}/transactions`)), {
-        userId: selectedWater.userId,
-        transactionDate: new Date().toISOString(),
-        amount: refundAmount,
-        transactionType: 'استرجاع سداد مياه',
-        notes: `إلغاء طلب مياه رقم: ${selectedWater.subscriberNumber}. ${waterCancelNote ? `السبب: ${waterCancelNote}` : ''}`
+      const now = new Date().toISOString();
+      await updateOrderItemInDoc(firestore, 'waterRequests', selectedWater.id, { 
+        status: 'cancelled',
+        readiness: 'فاشلة',
+        cancelledAt: now,
+        cancelReason: waterCancelNote || 'تم إلغاء الطلب من قبل الإدارة'
       });
+      batch.update(doc(firestore, 'users', selectedWater.userId), { balance: increment(refundAmount) });
+
+      // تحديث مصفوفة history للعمليات دون إنشاء أي مستند منفصل
+      try {
+        const historyRef = doc(firestore, `users/${selectedWater.userId}/transactions`, 'history');
+        const historySnap = await getDoc(historyRef);
+        if (historySnap.exists()) {
+          const list = historySnap.data()?.list || historySnap.data()?.transactions || [];
+          let updated = false;
+          const newList = list.map((item: any) => {
+            if (item.id === selectedWater.id || item.transactionId === selectedWater.id || item.operationId === selectedWater.id || item.subscriberNumber === selectedWater.subscriberNumber) {
+              updated = true;
+              return {
+                ...item,
+                s: 'failed',
+                r: 'غير جاهز',
+                readiness: 'غير جاهز',
+                status: 'cancelled',
+                refunded: true,
+                notes: `إلغاء طلب مياه رقم: ${selectedWater.subscriberNumber}. ${waterCancelNote ? `السبب: ${waterCancelNote}` : ''}`,
+                failedAt: now,
+              };
+            }
+            return item;
+          });
+          if (updated) {
+            batch.update(historyRef, { list: newList, transactions: newList, lastUpdated: now });
+          } else {
+            const refundEntry = {
+              id: 'ref_' + Date.now(),
+              t: 'استرجاع سداد مياه',
+              transactionType: 'استرجاع سداد مياه',
+              type: 'refund',
+              direction: 'credit',
+              amount: refundAmount,
+              a: refundAmount,
+              date: now,
+              d: now,
+              status: 'completed',
+              s: 'completed',
+              readiness: 'جاهز',
+              r: 'جاهز',
+              notes: `إلغاء طلب مياه رقم: ${selectedWater.subscriberNumber}. ${waterCancelNote ? `السبب: ${waterCancelNote}` : ''}`
+            };
+            batch.update(historyRef, { list: [refundEntry, ...list], transactions: [refundEntry, ...list], lastUpdated: now });
+          }
+        }
+      } catch (e) {
+        console.error("Error updating history for water cancel:", e);
+      }
+
       await batch.commit();
-      toast({ title: 'تم الإلغاء', description: 'تم إرجاع المبلغ لحساب المشترك بنجاح.' });
+
+      // إرسال إشعار سحابي FCM مباشر للعميل
+      fetch('/api/notifications/send-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: selectedWater.userId,
+          title: 'تم إلغاء طلب سداد المياه ⚠️',
+          body: `تم إلغاء طلب سداد فاتورة المياه (${selectedWater.subscriberNumber}) وإعادة مبلغ ${refundAmount.toLocaleString()} ريال لرصيدك.${waterCancelNote ? ` السبب: ${waterCancelNote}` : ''}`,
+          transid: selectedWater.id,
+          status: 'failed',
+          amount: refundAmount,
+        }),
+      }).catch(err => console.error("Push notification error:", err));
+
+      toast({ title: 'تم الإلغاء', description: 'تم إرجاع المبلغ لحساب المشترك وإشعاره بنجاح.' });
       setIsWaterCancelOpen(false);
       setSelectedWater(null);
       setWaterCancelNote('');
@@ -283,32 +515,6 @@ export default function AdminRequestsPage() {
     try {
       const now = new Date().toISOString();
 
-      // البحث عن معاملة العميل المرتبطة بطلب السحب
-      let txDocRef = null;
-      let existingNotes = '';
-
-      if (selectedWith.transactionId) {
-        const candidateRef = doc(firestore, `users/${selectedWith.ownerId}/transactions`, selectedWith.transactionId);
-        const candidateSnap = await getDoc(candidateRef);
-        if (candidateSnap.exists()) {
-          txDocRef = candidateRef;
-          existingNotes = candidateSnap.data()?.notes || '';
-        }
-      }
-
-      if (!txDocRef) {
-        const txQ = query(
-          collection(firestore, `users/${selectedWith.ownerId}/transactions`),
-          where('requestId', '==', selectedWith.id),
-          limit(1)
-        );
-        const txSnap = await getDocs(txQ);
-        if (!txSnap.empty) {
-          txDocRef = txSnap.docs[0].ref;
-          existingNotes = txSnap.docs[0].data()?.notes || '';
-        }
-      }
-
       if (withAction === 'approve') {
         const soldCardsRef = collection(firestore, 'soldCards');
         const q = query(soldCardsRef, where('ownerId', '==', selectedWith.ownerId), where('payoutStatus', '==', 'pending'));
@@ -321,39 +527,31 @@ export default function AdminRequestsPage() {
           } else break;
         }
 
-        // تحديث حالة العملية عند مالك الشبكة إلى "جاهزة"
-        if (txDocRef) {
-          batch.update(txDocRef, {
-            status: 'completed',
-            readiness: 'جاهزة',
-            completedAt: now
-          });
-        }
-
         // تحديث مصفوفة history للعمليات حتى تظهر فوراً "جاهزة" في التطبيق
         try {
           const historyRef = doc(firestore, `users/${selectedWith.ownerId}/transactions`, 'history');
           const historySnap = await getDoc(historyRef);
           if (historySnap.exists()) {
-            const list = historySnap.data()?.list || [];
+            const list = historySnap.data()?.list || historySnap.data()?.transactions || [];
             let updated = false;
-            const targetId = selectedWith.transactionId || selectedWith.id;
+            const targetId = String(selectedWith.transactionId || selectedWith.id || '').trim();
             const newList = list.map((item: any) => {
-              if (item.id === targetId || item.transactionId === targetId || item.id === selectedWith.id) {
+              const itemId = String(item.id || item.transactionId || item.operationId || '').trim();
+              if (itemId === targetId || itemId === String(selectedWith.id).trim()) {
                 updated = true;
                 return {
                   ...item,
                   s: 'completed',
-                  r: 'جاهزة',
-                  readiness: 'جاهزة',
-                  status: 'completed',
+                  r: 'جاهز',
+                  readiness: 'جاهز',
+                  status: 'approved',
                   completedAt: now,
                 };
               }
               return item;
             });
             if (updated) {
-              batch.update(historyRef, { list: newList, lastUpdated: now });
+              batch.update(historyRef, { list: newList, transactions: newList, lastUpdated: now });
             }
           }
         } catch (e) {
@@ -365,7 +563,8 @@ export default function AdminRequestsPage() {
           const netWithRef = doc(firestore, 'network_withdrawals', selectedWith.ownerId);
           const netWithSnap = await getDoc(netWithRef);
           if (netWithSnap.exists()) {
-            const list = netWithSnap.data()?.list || [];
+            const data = netWithSnap.data() || {};
+            const list = data.list || data.requests || [];
             let updated = false;
             const targetId = String(selectedWith.transactionId || selectedWith.id || '').trim();
             const newList = list.map((item: any) => {
@@ -384,18 +583,12 @@ export default function AdminRequestsPage() {
               return item;
             });
             if (updated) {
-              await updateDoc(netWithRef, { list: newList, lastUpdated: serverTimestamp() });
+              await updateDoc(netWithRef, { list: newList, requests: newList, lastUpdated: serverTimestamp() });
             }
           }
         } catch (e) {
           console.error("Error updating network_withdrawals:", e);
         }
-
-        batch.set(doc(collection(firestore, `users/${selectedWith.ownerId}/notifications`)), {
-          title: 'تمت الموافقة على طلب السحب 💸',
-          body: `تمت الموافقة على طلب سحب مبلغ ${Number(selectedWith.amount).toLocaleString('en-US')} ريال بنجاح وتم التحويل لحسابك.`,
-          timestamp: now,
-        });
 
         await updateOrderItemInDoc(firestore, 'withdrawalRequests', selectedWith.id, { 
           status: 'approved',
@@ -403,7 +596,7 @@ export default function AdminRequestsPage() {
           completedAt: now
         });
 
-        // إرسال إشعار سحابي FCM مباشر للعميل
+        // إرسال إشعار سحابي FCM مباشر للعميل وحفظه في الإشعارات
         fetch('/api/notifications/send-push', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -419,65 +612,54 @@ export default function AdminRequestsPage() {
       } else {
         // رفض طلب السحب:
         const failReason = withRejectNote?.trim() || 'تم رفض طلب السحب من قبل الإدارة';
-        const finalNotes = existingNotes 
-          ? `${existingNotes} | سبب الرفض: ${failReason}`
-          : `سبب الرفض: ${failReason}`;
 
         // 1. إعادة المبلغ فوراً لرصيد مالك الشبكة إذا كان قد خُصم
         const userRef = doc(firestore, 'users', selectedWith.ownerId);
-        if (selectedWith.balanceDeducted || selectedWith.transactionId || txDocRef) {
+        if (selectedWith.balanceDeducted || selectedWith.transactionId) {
           batch.update(userRef, { balance: increment(selectedWith.amount) });
         }
 
-        // 2. تحديث حركة العميل إلى "فاشلة" مع وضع السبب في الملاحظة
-        if (txDocRef) {
-          batch.update(txDocRef, {
-            status: 'failed',
-            readiness: 'فاشلة',
-            notes: finalNotes,
-            providerMessage: failReason,
-            failedAt: now,
-            refunded: true
-          });
-        }
-
-        // تحديث مصفوفة history للعمليات إلى فاشلة
+        // 2. تحديث مصفوفة history للعمليات إلى فاشلة
         try {
           const historyRef = doc(firestore, `users/${selectedWith.ownerId}/transactions`, 'history');
           const historySnap = await getDoc(historyRef);
           if (historySnap.exists()) {
-            const list = historySnap.data()?.list || [];
+            const list = historySnap.data()?.list || historySnap.data()?.transactions || [];
             let updated = false;
-            const targetId = selectedWith.transactionId || selectedWith.id;
+            const targetId = String(selectedWith.transactionId || selectedWith.id || '').trim();
             const newList = list.map((item: any) => {
-              if (item.id === targetId || item.transactionId === targetId || item.id === selectedWith.id) {
+              const itemId = String(item.id || item.transactionId || item.operationId || '').trim();
+              if (itemId === targetId || itemId === String(selectedWith.id).trim()) {
                 updated = true;
                 return {
                   ...item,
                   s: 'failed',
-                  r: 'فاشلة',
-                  readiness: 'فاشلة',
-                  status: 'failed',
-                  notes: finalNotes,
+                  r: 'غير جاهز',
+                  readiness: 'غير جاهز',
+                  status: 'rejected',
+                  notes: `سبب الرفض: ${failReason}`,
+                  rejectReason: failReason,
                   failedAt: now,
+                  refunded: true,
                 };
               }
               return item;
             });
             if (updated) {
-              batch.update(historyRef, { list: newList, lastUpdated: now });
+              batch.update(historyRef, { list: newList, transactions: newList, lastUpdated: now });
             }
           }
         } catch (e) {
           console.error("Error updating history for withdrawal rejection:", e);
         }
 
-        // تحديث مستند network_withdrawals إلى فاشلة / غير جاهز
+        // 3. تحديث مستند network_withdrawals إلى فاشلة / غير جاهز
         try {
           const netWithRef = doc(firestore, 'network_withdrawals', selectedWith.ownerId);
           const netWithSnap = await getDoc(netWithRef);
           if (netWithSnap.exists()) {
-            const list = netWithSnap.data()?.list || [];
+            const data = netWithSnap.data() || {};
+            const list = data.list || data.requests || [];
             let updated = false;
             const targetId = String(selectedWith.transactionId || selectedWith.id || '').trim();
             const newList = list.map((item: any) => {
@@ -497,18 +679,12 @@ export default function AdminRequestsPage() {
               return item;
             });
             if (updated) {
-              await updateDoc(netWithRef, { list: newList, lastUpdated: serverTimestamp() });
+              await updateDoc(netWithRef, { list: newList, requests: newList, lastUpdated: serverTimestamp() });
             }
           }
         } catch (e) {
           console.error("Error updating network_withdrawals on reject:", e);
         }
-
-        batch.set(doc(collection(firestore, `users/${selectedWith.ownerId}/notifications`)), {
-          title: 'تم رفض طلب السحب ❌',
-          body: `تم رفض طلب سحب مبلغ ${Number(selectedWith.amount).toLocaleString('en-US')} ريال وإعادة الرصيد لحسابك. السبب: ${failReason}`,
-          timestamp: now,
-        });
 
         await updateOrderItemInDoc(firestore, 'withdrawalRequests', selectedWith.id, { 
           status: 'rejected',
@@ -533,7 +709,7 @@ export default function AdminRequestsPage() {
       }
 
       await batch.commit();
-      toast({ title: 'نجاح', description: `تم ${withAction === 'approve' ? 'قبول' : 'رفض'} طلب السحب.` });
+      toast({ title: 'نجاح', description: `تم ${withAction === 'approve' ? 'قبول' : 'رفض'} طلب السحب وإشعار العميل.` });
       setWithAction(null);
       setSelectedWith(null);
       setWithRejectNote('');
@@ -576,33 +752,17 @@ export default function AdminRequestsPage() {
           approvedAt: now
         });
 
-        if (selectedDep.transactionId) {
-          try {
-            const txRef = doc(firestore, `users/${selectedDep.userId}/transactions`, selectedDep.transactionId);
-            const txSnap = await getDoc(txRef);
-            if (txSnap.exists()) {
-              batch.update(txRef, {
-                status: 'success',
-                readiness: 'جاهزة',
-                completedAt: now,
-                notes: `تم تأكيد الإيداع وإضافة مبلغ ${formattedAmt} ر.ي إلى محفظتك بنجاح.`
-              });
-            }
-          } catch (e) {
-            console.error("Error checking txRef for deposit:", e);
-          }
-        }
-
         // تحديث مصفوفة history للعمليات حتى تظهر فوراً "جاهزة" في التطبيق
         try {
           const historyRef = doc(firestore, `users/${selectedDep.userId}/transactions`, 'history');
           const historySnap = await getDoc(historyRef);
           if (historySnap.exists()) {
-            const list = historySnap.data()?.list || [];
+            const list = historySnap.data()?.list || historySnap.data()?.transactions || [];
             let updated = false;
-            const targetId = selectedDep.transactionId || selectedDep.id;
+            const targetId = String(selectedDep.transactionId || selectedDep.id || '').trim();
             const newList = list.map((item: any) => {
-              if (item.id === targetId || item.transactionId === targetId || item.id === selectedDep.id) {
+              const itemId = String(item.id || item.transactionId || item.operationId || '').trim();
+              if (itemId === targetId || itemId === String(selectedDep.id).trim()) {
                 updated = true;
                 return {
                   ...item,
@@ -617,7 +777,7 @@ export default function AdminRequestsPage() {
               return item;
             });
             if (updated) {
-              batch.update(historyRef, { list: newList, lastUpdated: now });
+              batch.update(historyRef, { list: newList, transactions: newList, lastUpdated: now });
             }
           }
         } catch (e) {
@@ -631,9 +791,10 @@ export default function AdminRequestsPage() {
           if (userDepSnap.exists()) {
             const reqs = userDepSnap.data()?.requests || [];
             let updated = false;
-            const targetId = selectedDep.transactionId || selectedDep.id;
+            const targetId = String(selectedDep.transactionId || selectedDep.id || '').trim();
             const newReqs = reqs.map((r: any) => {
-              if (r.id === selectedDep.id || r.operationId === targetId || r.transactionId === targetId) {
+              const rId = String(r.id || r.operationId || r.transactionId || '').trim();
+              if (rId === targetId || rId === String(selectedDep.id).trim()) {
                 updated = true;
                 return {
                   ...r,
@@ -652,18 +813,7 @@ export default function AdminRequestsPage() {
           console.error("Error updating user deposit_requests:", e);
         }
 
-        const notifRef = doc(collection(firestore, `users/${selectedDep.userId}/notifications`));
-        batch.set(notifRef, {
-          id: notifRef.id,
-          title: notifTitle,
-          body: notifBody,
-          type: 'deposit_approved',
-          read: false,
-          createdAt: now,
-          timestamp: now
-        });
-
-        // إرسال إشعار سحابي FCM مباشر للعميل
+        // إرسال إشعار سحابي FCM مباشر للعميل وحفظه في الإشعارات
         try {
           await fetch('/api/notifications/send-push', {
             method: 'POST',
@@ -689,35 +839,17 @@ export default function AdminRequestsPage() {
           rejectedAt: now
         });
 
-        if (selectedDep.transactionId) {
-          try {
-            const txRef = doc(firestore, `users/${selectedDep.userId}/transactions`, selectedDep.transactionId);
-            const txSnap = await getDoc(txRef);
-            if (txSnap.exists()) {
-              batch.update(txRef, {
-                status: 'failed',
-                readiness: 'فاشلة',
-                rejectReason: failReason,
-                providerMessage: failReason,
-                failedAt: now,
-                notes: `تم رفض طلب الإيداع. السبب: ${failReason}`
-              });
-            }
-          } catch (e) {
-            console.error("Error checking txRef for deposit reject:", e);
-          }
-        }
-
         // تحديث مصفوفة history للعمليات إلى فاشلة
         try {
           const historyRef = doc(firestore, `users/${selectedDep.userId}/transactions`, 'history');
           const historySnap = await getDoc(historyRef);
           if (historySnap.exists()) {
-            const list = historySnap.data()?.list || [];
+            const list = historySnap.data()?.list || historySnap.data()?.transactions || [];
             let updated = false;
-            const targetId = selectedDep.transactionId || selectedDep.id;
+            const targetId = String(selectedDep.transactionId || selectedDep.id || '').trim();
             const newList = list.map((item: any) => {
-              if (item.id === targetId || item.transactionId === targetId || item.id === selectedDep.id) {
+              const itemId = String(item.id || item.transactionId || item.operationId || '').trim();
+              if (itemId === targetId || itemId === String(selectedDep.id).trim()) {
                 updated = true;
                 return {
                   ...item,
@@ -732,7 +864,7 @@ export default function AdminRequestsPage() {
               return item;
             });
             if (updated) {
-              batch.update(historyRef, { list: newList, lastUpdated: now });
+              batch.update(historyRef, { list: newList, transactions: newList, lastUpdated: now });
             }
           }
         } catch (e) {
@@ -746,9 +878,10 @@ export default function AdminRequestsPage() {
           if (userDepSnap.exists()) {
             const reqs = userDepSnap.data()?.requests || [];
             let updated = false;
-            const targetId = selectedDep.transactionId || selectedDep.id;
+            const targetId = String(selectedDep.transactionId || selectedDep.id || '').trim();
             const newReqs = reqs.map((r: any) => {
-              if (r.id === selectedDep.id || r.operationId === targetId || r.transactionId === targetId) {
+              const rId = String(r.id || r.operationId || r.transactionId || '').trim();
+              if (rId === targetId || rId === String(selectedDep.id).trim()) {
                 updated = true;
                 return {
                   ...r,
@@ -768,44 +901,33 @@ export default function AdminRequestsPage() {
           console.error("Error updating user deposit_requests rejection:", e);
         }
 
-        const notifRef = doc(collection(firestore, `users/${selectedDep.userId}/notifications`));
-        batch.set(notifRef, {
-          id: notifRef.id,
-          title: 'تعذر قبول طلب التغذية ❌',
-          body: `تم رفض طلب تغذية رصيدك بمبلغ ${selectedDep.amount.toLocaleString()} ر.ي. السبب: ${failReason}`,
-          type: 'deposit_rejected',
-          read: false,
-          createdAt: now,
-          timestamp: now
-        });
-
         // إرسال إشعار سحابي FCM مباشر للعميل
-        fetch('/api/notifications/send-push', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: selectedDep.userId,
-            title: 'تعذر قبول طلب التغذية ❌',
-            body: `تم رفض طلب تغذية رصيدك بمبلغ ${selectedDep.amount.toLocaleString()} ر.ي. السبب: ${failReason}`,
-            transid: selectedDep.transactionId || selectedDep.id,
-            status: 'failed',
-            amount: selectedDep.amount,
-          }),
-        }).catch(err => console.error("Push notification error:", err));
+        try {
+          await fetch('/api/notifications/send-push', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: selectedDep.userId,
+              title: 'تعذر قبول طلب التغذية ❌',
+              body: `تم رفض طلب تغذية رصيدك بمبلغ ${selectedDep.amount.toLocaleString()} ر.ي. السبب: ${failReason}`,
+              transid: selectedDep.transactionId || selectedDep.id,
+              status: 'failed',
+              amount: selectedDep.amount,
+            }),
+          });
+        } catch (err) {
+          console.error("Push notification error:", err);
+        }
       }
 
       await batch.commit();
-      toast({
-        title: depAction === 'approve' ? 'تمت الموافقة بنجاح 🎉' : 'تم رفض الطلب',
-        description: depAction === 'approve'
-          ? `تم شحن ${selectedDep.amount.toLocaleString()} ر.ي لحساب ${selectedDep.userName || selectedDep.userPhone}.`
-          : 'تم تحديث حالة العملية للمستخدم وحفظ سبب الرفض.'
-      });
+      toast({ title: 'نجاح', description: `تم ${depAction === 'approve' ? 'قبول' : 'رفض'} طلب الإيداع وإشعار العميل.` });
       setDepAction(null);
       setSelectedDep(null);
       setDepRejectNote('');
-    } catch (e: any) {
-      toast({ variant: 'destructive', title: 'خطأ', description: e.message || 'فشلت العملية.' });
+    } catch (err: any) {
+      console.error("Error in handleDepositAction:", err);
+      toast({ variant: 'destructive', title: 'خطأ', description: err?.message || 'فشلت العملية.' });
     } finally {
       setIsProcessingDep(false);
     }

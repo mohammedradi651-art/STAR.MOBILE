@@ -203,15 +203,44 @@ export async function POST(req: Request) {
             
             const batch = writeBatch(firestore);
             batch.update(cardDoc.ref, { status: 'sold', soldTo: effectiveUserId, soldTimestamp: timestamp });
-            batch.set(doc(collection(firestore, `users/${effectiveUserId}/transactions`)), {
-                userId: effectiveUserId,
-                transactionDate: timestamp,
-                amount: discountedPrice,
-                transactionType: 'شراء كرت محلي',
-                notes: `شبكة: ${localSnap.data().name}${isAdmin ? ' (عبر البوت)' : ''}`,
-                cardNumber: cardData.cardNumber,
-                status: 'completed'
-            });
+            
+            const buyerHistRef = doc(firestore, `users/${effectiveUserId}/transactions`, 'history');
+            batch.set(buyerHistRef, {
+                list: arrayUnion({
+                    id: cardDoc.id,
+                    operationId: cardDoc.id,
+                    transactionId: cardDoc.id,
+                    userId: effectiveUserId,
+                    transactionDate: timestamp,
+                    date: timestamp,
+                    d: timestamp,
+                    amount: discountedPrice,
+                    a: discountedPrice,
+                    transactionType: 'شراء كرت محلي',
+                    t: 'شراء كرت محلي',
+                    type: 'network_card',
+                    notes: `شبكة: ${localSnap.data().name}${isAdmin ? ' (عبر البوت)' : ''}`,
+                    cardNumber: cardData.cardNumber,
+                    status: 'completed',
+                    s: 'completed',
+                    readiness: 'جاهز',
+                    r: 'جاهز'
+                }),
+                transactions: arrayUnion({
+                    id: cardDoc.id,
+                    operationId: cardDoc.id,
+                    transactionId: cardDoc.id,
+                    userId: effectiveUserId,
+                    transactionDate: timestamp,
+                    amount: discountedPrice,
+                    transactionType: 'شراء كرت محلي',
+                    notes: `شبكة: ${localSnap.data().name}${isAdmin ? ' (عبر البوت)' : ''}`,
+                    cardNumber: cardData.cardNumber,
+                    status: 'completed',
+                    readiness: 'جاهزة'
+                }),
+                lastUpdated: timestamp
+            }, { merge: true });
 
             // تحويل أرباح الكرت لمالك الشبكة بعد خصم 10%
             const ownerId = localSnap.data()?.ownerId;
@@ -219,13 +248,37 @@ export async function POST(req: Request) {
                 const commission = Math.ceil(originalPrice * 0.10);
                 const payoutAmount = originalPrice - commission;
                 batch.update(doc(firestore, 'users', ownerId), { balance: increment(payoutAmount) });
-                batch.set(doc(collection(firestore, `users/${ownerId}/transactions`)), {
-                    userId: ownerId,
-                    transactionDate: timestamp,
-                    amount: payoutAmount,
-                    transactionType: 'أرباح مبيعات الكروت',
-                    notes: `أرباح كرت ${catSnap.data()?.name || ''} - شبكة: ${localSnap.data().name} (صافي بعد خصم 10% عمولة)`
-                });
+
+                const ownerHistRef = doc(firestore, `users/${ownerId}/transactions`, 'history');
+                batch.set(ownerHistRef, {
+                    list: arrayUnion({
+                        id: 'payout_' + Date.now(),
+                        userId: ownerId,
+                        transactionDate: timestamp,
+                        date: timestamp,
+                        d: timestamp,
+                        amount: payoutAmount,
+                        a: payoutAmount,
+                        transactionType: 'أرباح مبيعات الكروت',
+                        t: 'أرباح مبيعات الكروت',
+                        notes: `أرباح كرت ${catSnap.data()?.name || ''} - شبكة: ${localSnap.data().name} (صافي بعد خصم 10% عمولة)`,
+                        status: 'completed',
+                        s: 'completed',
+                        readiness: 'جاهز',
+                        r: 'جاهز'
+                    }),
+                    transactions: arrayUnion({
+                        id: 'payout_' + Date.now(),
+                        userId: ownerId,
+                        transactionDate: timestamp,
+                        amount: payoutAmount,
+                        transactionType: 'أرباح مبيعات الكروت',
+                        notes: `أرباح كرت ${catSnap.data()?.name || ''} - شبكة: ${localSnap.data().name} (صافي بعد خصم 10% عمولة)`,
+                        status: 'completed',
+                        readiness: 'جاهزة'
+                    }),
+                    lastUpdated: timestamp
+                }, { merge: true });
             }
 
             await batch.commit();
@@ -314,29 +367,46 @@ export async function POST(req: Request) {
             }
 
             const externalRef = `SM-API-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
-            const txRef = doc(collection(firestore, `users/${effectiveUserId}/transactions`));
+            const txId = (10000000 + Math.floor(Math.random() * 90000000)).toString();
             const baityOrderRef = doc(firestore, 'baityOrders', externalRef);
+            const userHistRef = doc(firestore, `users/${effectiveUserId}/transactions`, 'history');
 
-            // 1. خصم المبلغ المخفض (950) فوراً وتسجيل الطلب معلقاً
+            // 1. خصم المبلغ المخفض (950) فوراً وتسجيل الطلب معلقاً في history الموحد
             const initBatch = writeBatch(firestore);
             initBatch.update(doc(firestore, 'users', effectiveUserId), { balance: increment(-discountedPrice) });
-            initBatch.set(txRef, {
-                id: txRef.id,
+            const initialTx = {
+                id: txId,
+                operationId: txId,
+                transactionId: txId,
                 userId: effectiveUserId,
                 transactionDate: timestamp,
+                date: timestamp,
+                d: timestamp,
                 amount: discountedPrice,
-                transactionType: 'شراء كرت خارجي',
+                a: discountedPrice,
+                transactionType: `شراء كرت خارجي - ${className || networkId}`,
+                t: `شراء كرت خارجي - ${className || networkId}`,
+                type: 'network_card',
                 notes: `شبكة بيتي: ${networkId}${isAdmin ? ' (عبر البوت)' : ''}`,
                 status: 'pending',
+                s: 'pending',
+                readiness: 'قيد الانتظار',
+                r: 'قيد الانتظار',
                 externalRef: externalRef,
                 networkId: String(networkId),
                 classId: String(classId),
                 className: className
-            });
+            };
+            initBatch.set(userHistRef, {
+                list: arrayUnion(initialTx),
+                transactions: arrayUnion(initialTx),
+                lastUpdated: timestamp
+            }, { merge: true });
+
             initBatch.set(baityOrderRef, {
                 externalRef: externalRef,
                 userId: effectiveUserId,
-                transactionId: txRef.id,
+                transactionId: txId,
                 classId: String(classId),
                 className: className,
                 networkId: String(networkId),
@@ -376,22 +446,39 @@ export async function POST(req: Request) {
 
                 if (orderRes.ok && result.status === 200 && result.data?.order?.card) {
                     const card = result.data.order.card;
+                    const finishNow = new Date().toISOString();
 
-                    const finishBatch = writeBatch(firestore);
-                    finishBatch.update(txRef, {
-                        status: 'completed',
-                        cardNumber: card.cardID,
-                        cardPassword: card.cardPass || card.cardID,
-                        completedAt: new Date().toISOString()
-                    });
-                    finishBatch.update(baityOrderRef, {
+                    // تحديث مصفوفة history للعمليات
+                    try {
+                        const hSnap = await getDoc(userHistRef);
+                        if (hSnap.exists()) {
+                            const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+                            const updatedList = rawList.map((item: any) => {
+                                if (item.id === txId || item.externalRef === externalRef) {
+                                    return {
+                                        ...item,
+                                        status: 'completed',
+                                        s: 'completed',
+                                        readiness: 'جاهز',
+                                        r: 'جاهز',
+                                        cardNumber: card.cardID,
+                                        cardPassword: card.cardPass || card.cardID,
+                                        completedAt: finishNow
+                                    };
+                                }
+                                return item;
+                            });
+                            await updateDoc(userHistRef, { list: updatedList, transactions: updatedList, lastUpdated: finishNow });
+                        }
+                    } catch (_) {}
+
+                    await updateDoc(baityOrderRef, {
                         status: 'completed',
                         cardNumber: card.cardID,
                         cardPass: card.cardPass || '',
                         uuidOrder: result.data.order.uuidOrder || '',
-                        completedAt: new Date().toISOString()
-                    });
-                    await finishBatch.commit().catch(() => {});
+                        completedAt: finishNow
+                    }).catch(() => {});
 
                     return NextResponse.json({
                         success: true,
@@ -411,8 +498,30 @@ export async function POST(req: Request) {
                 // إذا رفض المزود الطلب بشكل صريح: استرجاع المبلغ فوراً
                 if (result.status && result.status !== 200) {
                     await updateDoc(doc(firestore, 'users', effectiveUserId), { balance: increment(discountedPrice) });
-                    await updateDoc(txRef, { status: 'failed', notes: `فشل من المزود وتم استرجاع الرصيد: ${result.message || ''}` });
-                    await updateDoc(baityOrderRef, { status: 'failed' });
+                    const failNow = new Date().toISOString();
+                    try {
+                        const hSnap = await getDoc(userHistRef);
+                        if (hSnap.exists()) {
+                            const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+                            const updatedList = rawList.map((item: any) => {
+                                if (item.id === txId || item.externalRef === externalRef) {
+                                    return {
+                                        ...item,
+                                        status: 'failed',
+                                        s: 'failed',
+                                        readiness: 'غير جاهز',
+                                        r: 'غير جاهز',
+                                        notes: `فشل من المزود وتم استرجاع الرصيد: ${result.message || ''}`,
+                                        failedAt: failNow,
+                                        refunded: true
+                                    };
+                                }
+                                return item;
+                            });
+                            await updateDoc(userHistRef, { list: updatedList, transactions: updatedList, lastUpdated: failNow });
+                        }
+                    } catch (_) {}
+                    await updateDoc(baityOrderRef, { status: 'failed' }).catch(() => {});
 
                     return NextResponse.json({
                         success: false,

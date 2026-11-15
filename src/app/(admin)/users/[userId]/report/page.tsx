@@ -607,8 +607,39 @@ function UserReportPage() {
       const userDocRef = doc(firestore, 'users', userId);
       const userTxRef = doc(firestore, `users/${userId}/transactions`, txId);
       const globalTxRef = doc(firestore, 'paymentTransactions', transid);
+      const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
 
       const batch = writeBatch(firestore);
+
+      // تحديث مصفوفة history
+      try {
+        const historySnap = await getDoc(historyRef);
+        if (historySnap.exists()) {
+          const rawList = historySnap.data()?.list || historySnap.data()?.transactions || [];
+          const updatedList = rawList.map((item: any) => {
+            const itemId = String(item.id || item.transid || item.operationId || '');
+            if (itemId === txId || itemId === transid) {
+              return {
+                ...item,
+                status: targetStatus === 'success' ? 'success' : 'failed',
+                s: targetStatus === 'success' ? 'completed' : 'failed',
+                readiness: targetStatus === 'success' ? 'جاهزة' : 'فاشلة',
+                r: targetStatus === 'success' ? 'جاهزة' : 'فاشلة',
+                notes: statusNote.trim() || (targetStatus === 'success' ? 'تم التسديد بنجاح' : 'فشلت العملية وتمت إعادة المبلغ للرصيد'),
+                note: statusNote.trim() || (targetStatus === 'success' ? 'تم التسديد بنجاح' : 'فشلت العملية وتمت إعادة المبلغ للرصيد'),
+                ...(targetStatus === 'success' ? { completedAt: now } : { failedAt: now, refunded: true }),
+                updatedAt: now
+              };
+            }
+            return item;
+          });
+          batch.set(historyRef, { list: updatedList, transactions: updatedList, lastUpdated: now }, { merge: true });
+        }
+      } catch (_) {}
+
+      // تحديث المستندات الفردية إن وجدت
+      const userTxSnap = await getDoc(userTxRef);
+      const globalTxSnap = await getDoc(globalTxRef);
 
       if (targetStatus === 'success') {
         const updateData = {
@@ -620,8 +651,8 @@ function UserReportPage() {
           updatedAt: now,
           manualUpdateBy: 'admin'
         };
-        batch.update(userTxRef, updateData);
-        batch.update(globalTxRef, updateData);
+        if (userTxSnap.exists()) batch.update(userTxRef, updateData);
+        if (globalTxSnap.exists()) batch.update(globalTxRef, updateData);
 
         const notifRef = doc(collection(firestore, `users/${userId}/notifications`));
         batch.set(notifRef, {
@@ -643,8 +674,8 @@ function UserReportPage() {
           updatedAt: now,
           manualUpdateBy: 'admin'
         };
-        batch.update(userTxRef, updateData);
-        batch.update(globalTxRef, updateData);
+        if (userTxSnap.exists()) batch.update(userTxRef, updateData);
+        if (globalTxSnap.exists()) batch.update(globalTxRef, updateData);
 
         const notifRef = doc(collection(firestore, `users/${userId}/notifications`));
         batch.set(notifRef, {
@@ -655,6 +686,21 @@ function UserReportPage() {
       }
 
       await batch.commit();
+
+      // إرسال إشعار سحابي FCM مباشر إلى صاحب الحساب
+      try {
+        fetch('/api/notifications/send-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: userId,
+            title: targetStatus === 'success' ? 'اكتملت العملية بنجاح ✅' : 'فشلت العملية وتم استرجاع الرصيد ⚠️',
+            body: targetStatus === 'success'
+              ? `تم تأكيد سداد ${statusTargetTx.transactionType} بمبلغ ${amount.toLocaleString()} ريال بنجاح.`
+              : `تعذر تنفيذ ${statusTargetTx.transactionType} وتمت إعادة مبلغ ${amount.toLocaleString()} ريال إلى محفظتك.`
+          })
+        }).catch(() => {});
+      } catch (_) {}
 
       if (statusTargetTx.clientBackUrl) {
         try {
@@ -723,11 +769,29 @@ function UserReportPage() {
 
       const userTxRef = doc(firestore, `users/${userId}/transactions`, txId);
       const globalTxRef = doc(firestore, 'paymentTransactions', transid);
+      const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
 
       const batch = writeBatch(firestore);
-      // حذف المعاملة من سجل العميل ومن السجل العام فقط بدون المساس بالرصيد
-      batch.delete(userTxRef);
-      batch.delete(globalTxRef);
+      
+      // حذف المعاملة من المستند الموحد history
+      try {
+        const historySnap = await getDoc(historyRef);
+        if (historySnap.exists()) {
+          const rawList = historySnap.data()?.list || historySnap.data()?.transactions || [];
+          const filteredList = rawList.filter((item: any) => {
+            const itemId = String(item.id || item.transid || item.operationId || '');
+            return itemId !== txId && itemId !== transid;
+          });
+          batch.set(historyRef, { list: filteredList, transactions: filteredList, lastUpdated: new Date().toISOString() }, { merge: true });
+        }
+      } catch (_) {}
+
+      // حذف المعاملة من السجل الفردي والعام إن وجدا
+      const userTxSnap = await getDoc(userTxRef);
+      if (userTxSnap.exists()) batch.delete(userTxRef);
+
+      const globalTxSnap = await getDoc(globalTxRef);
+      if (globalTxSnap.exists()) batch.delete(globalTxRef);
 
       await batch.commit();
 

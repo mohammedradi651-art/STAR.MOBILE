@@ -223,16 +223,31 @@ export async function POST(req: Request) {
             updatedAt: nowIso,
           });
 
-          // 2. تحديث سجل معاملة العميل في transactions
-          if (userId && transactionId) {
-            const txRef = db.collection('users').doc(userId).collection('transactions').doc(transactionId);
-            await txRef.update({
-              status: 'completed',
-              readiness: 'جاهزة',
-              cardNumber: cardData.cardID,
-              cardPassword: cardData.cardPass || cardData.cardID,
-              completedAt: nowIso,
-            });
+          // 2. تحديث سجل معاملة العميل في history الموحد
+          if (userId) {
+            try {
+              const histRef = db.collection('users').doc(userId).collection('transactions').doc('history');
+              const hSnap = await histRef.get();
+              if (hSnap.exists) {
+                const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+                const updatedList = rawList.map((item: any) => {
+                  if (item.id === transactionId || item.externalRef === externalRef) {
+                    return {
+                      ...item,
+                      status: 'completed',
+                      s: 'completed',
+                      readiness: 'جاهز',
+                      r: 'جاهز',
+                      cardNumber: cardData.cardID,
+                      cardPassword: cardData.cardPass || cardData.cardID,
+                      completedAt: nowIso,
+                    };
+                  }
+                  return item;
+                });
+                await histRef.update({ list: updatedList, transactions: updatedList, lastUpdated: nowIso });
+              }
+            } catch (_) {}
           }
 
           // 3. إضافة إشعار داخل التطبيق للعميل
@@ -280,12 +295,30 @@ export async function POST(req: Request) {
               updatedAt: nowIso,
             });
 
-            if (userId && transactionId) {
-              await db.collection('users').doc(userId).collection('transactions').doc(transactionId).update({
-                status: 'failed',
-                readiness: 'فاشلة',
-                notes: (existingOrder.notes || '') + ' (فشلت العملية)',
-              });
+            if (userId) {
+              try {
+                const histRef = db.collection('users').doc(userId).collection('transactions').doc('history');
+                const hSnap = await histRef.get();
+                if (hSnap.exists) {
+                  const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+                  const updatedList = rawList.map((item: any) => {
+                    if (item.id === transactionId || item.externalRef === externalRef) {
+                      return {
+                        ...item,
+                        status: 'failed',
+                        s: 'failed',
+                        readiness: 'غير جاهز',
+                        r: 'غير جاهز',
+                        notes: (existingOrder.notes || '') + ' (فشلت العملية وتمت استعادة الرصيد)',
+                        failedAt: nowIso,
+                        refunded: true,
+                      };
+                    }
+                    return item;
+                  });
+                  await histRef.update({ list: updatedList, transactions: updatedList, lastUpdated: nowIso });
+                }
+              } catch (_) {}
             }
           }
         }

@@ -195,16 +195,24 @@ export default function AlwadiPage() {
             const batch = writeBatch(firestore);
             const now = new Date().toISOString();
             batch.update(userDocRef, { balance: increment(-finalPrice) });
-            const txRef = doc(collection(firestore, 'users', user.uid, 'transactions'));
-            batch.set(txRef, {
+            const historyRef = doc(firestore, `users/${user.uid}/transactions`, 'history');
+            const alwadiTx = {
+                id: `alwadi_${Date.now()}`,
                 userId: user.uid,
                 transactionDate: now,
                 amount: finalPrice,
                 transactionType: 'تجديد منظومة الوادي',
                 notes: `باقة: ${selectedOption.title} - رقم الكرت: ${cardNumber}`,
                 subscriberName: inquiryResult.data.name,
-                cardNumber: cardNumber
-            });
+                cardNumber: cardNumber,
+                status: 'completed',
+                readiness: 'جاهزة'
+            };
+            batch.set(historyRef, {
+                transactions: arrayUnion(alwadiTx),
+                list: arrayUnion(alwadiTx),
+                lastUpdated: now
+            }, { merge: true });
             await batch.commit();
         }
 

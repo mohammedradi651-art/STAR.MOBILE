@@ -260,24 +260,38 @@ export async function POST(req: Request) {
     const userRef = doc(firestore, 'users', authResult.userId);
     batch.update(userRef, { balance: increment(-finalPrice) });
 
-    // ب. تسجيل المعاملة في كشف حساب العميل بحالة معلقة (قيد الانتظار) كالمستخدم العادي
-    const userTxRef = doc(firestore, `users/${authResult.userId}/transactions`, transid);
-    batch.set(userTxRef, {
+    // ب. تسجيل المعاملة في كشف حساب العميل الموحد (history) بحالة معلقة (قيد الانتظار)
+    const historyRef = doc(firestore, `users/${authResult.userId}/transactions`, 'history');
+    const initialGameTx = {
       id: transid,
+      operationId: transid,
+      transactionId: transid,
       userId: authResult.userId,
       transactionDate: now,
+      date: now,
+      d: now,
       createdAt: now,
       amount: finalPrice,
+      a: finalPrice,
       transactionType: txType,
+      t: txType,
+      type: 'game_purchase',
       notes: txNotes,
       recipientPhoneNumber: playerId,
       accountNumber: playerId,
       status: 'pending',
+      s: 'pending',
       readiness: 'قيد الانتظار',
+      r: 'قيد الانتظار',
       transid: transid,
       clientBackUrl: clientBackUrl,
       serviceCategory: 'الالعاب'
-    });
+    };
+    batch.set(historyRef, {
+      list: arrayUnion(initialGameTx),
+      transactions: arrayUnion(initialGameTx),
+      lastUpdated: now
+    }, { merge: true });
 
     // ج. تسجيل المعاملة في paymentTransactions بحالة معلقة
     const globalTxRef = doc(firestore, 'paymentTransactions', transid);
@@ -449,8 +463,31 @@ export async function POST(req: Request) {
         completedAt: new Date().toISOString()
       };
       const successBatch = writeBatch(firestore);
-      successBatch.update(userTxRef, successPayload);
       successBatch.set(globalTxRef, successPayload, { merge: true });
+
+      // تحديث مصفوفة history للعمليات الموحدة
+      try {
+        const hSnap = await getDoc(historyRef);
+        if (hSnap.exists()) {
+          const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+          const updatedList = rawList.map((item: any) => {
+            if (item.id === transid || item.transid === transid) {
+              return {
+                ...item,
+                status: 'success',
+                s: 'completed',
+                readiness: 'جاهز',
+                r: 'جاهز',
+                providerMessage: telecomResult?.resultDesc || telecomResult?.message || 'تم شحن الحساب بنجاح',
+                completedAt: new Date().toISOString()
+              };
+            }
+            return item;
+          });
+          successBatch.update(historyRef, { list: updatedList, transactions: updatedList, lastUpdated: new Date().toISOString() });
+        }
+      } catch (_) {}
+
       await successBatch.commit();
 
       const remainingBalance = Number((userBalance - finalPrice).toFixed(2));
@@ -517,8 +554,33 @@ export async function POST(req: Request) {
         notes: `${txNotes}\nالسبب من المزود: ${cleanFailReason}`,
         failedAt: new Date().toISOString()
       };
-      failBatch.update(userTxRef, failPayload);
       failBatch.set(globalTxRef, failPayload, { merge: true });
+
+      // تحديث مصفوفة history للعمليات الموحدة
+      try {
+        const hSnap = await getDoc(historyRef);
+        if (hSnap.exists()) {
+          const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+          const updatedList = rawList.map((item: any) => {
+            if (item.id === transid || item.transid === transid) {
+              return {
+                ...item,
+                status: 'failed',
+                s: 'failed',
+                readiness: 'غير جاهز',
+                r: 'غير جاهز',
+                refunded: true,
+                providerMessage: cleanFailReason,
+                notes: `${txNotes}\nالسبب من المزود: ${cleanFailReason}`,
+                failedAt: new Date().toISOString()
+              };
+            }
+            return item;
+          });
+          failBatch.update(historyRef, { list: updatedList, transactions: updatedList, lastUpdated: new Date().toISOString() });
+        }
+      } catch (_) {}
+
       await failBatch.commit();
 
       return NextResponse.json({

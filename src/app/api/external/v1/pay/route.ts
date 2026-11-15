@@ -281,24 +281,33 @@ export async function POST(req: Request) {
 
     // 5. خصم الرصيد أولاً وتسجيل المعاملة كـ "قيد الانتظار" عبر runTransaction لمنع الرصيد السالب نهائياً
     const userRef = doc(firestore, 'users', effectiveUserId);
-    const txRef = doc(firestore, `users/${effectiveUserId}/transactions`, transactionId);
+    const historyRef = doc(firestore, `users/${effectiveUserId}/transactions`, 'history');
     const globalTxRef = doc(firestore, 'paymentTransactions', transactionId);
 
     const clientBackUrl = body.backurl || body.backUrl || body.callbackUrl || body.callback_url || null;
 
     const txRecord = {
       id: transactionId,
+      operationId: transactionId,
+      transactionId: transactionId,
       userId: effectiveUserId,
       transactionDate: timestamp,
+      date: timestamp,
+      d: timestamp,
       createdAt: timestamp,
       amount: payAmount,
+      a: payAmount,
       transactionType: telecomDetails.transactionType,
+      t: telecomDetails.transactionType,
+      type: 'telecom_pay',
       notes: telecomDetails.notes,
       recipientPhoneNumber: telecomDetails.recipientPhoneNumber || mobile,
       transid: transactionId,
       backpass: backpass,
       status: 'pending',
+      s: 'pending',
       readiness: 'قيد الانتظار',
+      r: 'قيد الانتظار',
       refunded: false,
       serviceCategory: telecomDetails.serviceName,
       clientBackUrl: clientBackUrl,
@@ -316,7 +325,11 @@ export async function POST(req: Request) {
           throw new Error(`INSUFFICIENT_BALANCE:${currentLiveBal}`);
         }
         transaction.update(userRef, { balance: increment(-payAmount) });
-        transaction.set(txRef, txRecord);
+        transaction.set(historyRef, {
+          list: arrayUnion(txRecord),
+          transactions: arrayUnion(txRecord),
+          lastUpdated: timestamp
+        }, { merge: true });
         transaction.set(globalTxRef, txRecord);
       });
     } catch (txnErr: any) {
@@ -489,8 +502,30 @@ export async function POST(req: Request) {
       };
 
       const successBatch = writeBatch(firestore);
-      successBatch.update(txRef, successPayload);
       successBatch.set(globalTxRef, successPayload, { merge: true });
+
+      try {
+        const hSnap = await getDoc(historyRef);
+        if (hSnap.exists()) {
+          const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+          const updatedList = rawList.map((item: any) => {
+            if (item.id === transactionId || item.transid === transactionId) {
+              return {
+                ...item,
+                status: 'success',
+                s: 'completed',
+                readiness: 'جاهز',
+                r: 'جاهز',
+                providerMessage: finalSuccessMsg,
+                completedAt: new Date().toISOString()
+              };
+            }
+            return item;
+          });
+          successBatch.update(historyRef, { list: updatedList, transactions: updatedList, lastUpdated: new Date().toISOString() });
+        }
+      } catch (_) {}
+
       await successBatch.commit();
 
       return NextResponse.json({
@@ -552,8 +587,32 @@ export async function POST(req: Request) {
         failedAt: new Date().toISOString()
       };
 
-      refundBatch.update(txRef, failPayload);
       refundBatch.set(globalTxRef, failPayload, { merge: true });
+
+      try {
+        const hSnap = await getDoc(historyRef);
+        if (hSnap.exists()) {
+          const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+          const updatedList = rawList.map((item: any) => {
+            if (item.id === transactionId || item.transid === transactionId) {
+              return {
+                ...item,
+                status: 'failed',
+                s: 'failed',
+                readiness: 'غير جاهز',
+                r: 'غير جاهز',
+                refunded: true,
+                providerMessage: cleanError,
+                notes: `${telecomDetails.notes}\nالسبب: ${cleanError}`,
+                failedAt: new Date().toISOString()
+              };
+            }
+            return item;
+          });
+          refundBatch.update(historyRef, { list: updatedList, transactions: updatedList, lastUpdated: new Date().toISOString() });
+        }
+      } catch (_) {}
+
       await refundBatch.commit();
 
       return NextResponse.json({
