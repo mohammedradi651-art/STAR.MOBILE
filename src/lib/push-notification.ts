@@ -159,13 +159,13 @@ export async function sendBroadcastPushNotification(payload: {
       },
     };
 
-    // إرسال للموضوعين all_users و broadcast المشترك بهما التطبيق
-    await Promise.allSettled([
-      messaging.send({ ...messagePayload, topic: 'all_users' }),
-      messaging.send({ ...messagePayload, topic: 'broadcast' })
-    ]);
+    // إرسال لموضوع واحد فقط لمنع أي تكرار نهائياً
+    await messaging.send({
+      ...messagePayload,
+      topic: 'all_users',
+    });
 
-    console.log('[FCM] Broadcast push notification sent to topics all_users & broadcast');
+    console.log('[FCM] Broadcast push notification sent to topic all_users');
   } catch (err: any) {
     console.warn('[FCM] Failed to send broadcast push notification:', err?.message || err);
   }

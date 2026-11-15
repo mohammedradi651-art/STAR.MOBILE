@@ -61,9 +61,26 @@ export default function NotificationsPage() {
     }));
   }, [personalDocData]);
   
-  // 2. الإشعارات العامة
-  const globalNotifications: Notification[] = [];
-  const isLoadingGlobal = false;
+  // 2. جلب الإشعارات العامة من app_notifications/broadcast
+  const broadcastDocRef = useMemoFirebase(
+    () => (firestore ? doc(firestore, 'app_notifications', 'broadcast') : null),
+    [firestore]
+  );
+  const { data: broadcastDocData, isLoading: isLoadingGlobal } = useDoc<any>(broadcastDocRef);
+
+  const globalNotifications: Notification[] = React.useMemo(() => {
+    if (!broadcastDocData) return [];
+    const list = Array.isArray(broadcastDocData.announcements) ? broadcastDocData.announcements : [];
+    return list.map((n: any) => ({
+      id: String(n.id || 'b'),
+      title: String(n.title || ''),
+      body: String(n.body || ''),
+      timestamp: n.createdAt || n.date || new Date().toISOString(),
+      type: 'broadcast',
+      read: true,
+      isGlobal: true,
+    }));
+  }, [broadcastDocData]);
 
   // 3. دمج وترتيب الإشعارات
   const allNotifications = React.useMemo(() => {
@@ -174,13 +191,6 @@ export default function NotificationsPage() {
                                     {format(parseISO(`${monthKey}-01`), 'MMMM yyyy', { locale: ar })}
                                 </h3>
                             </div>
-                            <button 
-                                onClick={() => setMonthToDelete(monthKey)}
-                                className="p-2 hover:bg-destructive/10 rounded-xl transition-colors group"
-                                title="أرشفة هذا الشهر"
-                            >
-                                <Trash2 className="h-4 w-4 text-muted-foreground group-hover:text-destructive transition-colors" />
-                            </button>
                         </div>
 
                         <div className="space-y-3">

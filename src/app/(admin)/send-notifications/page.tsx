@@ -216,27 +216,6 @@ export default function SendNotificationsPage() {
                   <p className="text-xs text-muted-foreground mt-2">{formattedDate}</p>
                 )}
               </div>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" size="icon">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      هل أنت متأكد من أنك تريد حذف هذا الإشعار من التطبيق؟
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => handleDelete(notification.id)}>
-                      حذف
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
             </Card>
           );
         })}
