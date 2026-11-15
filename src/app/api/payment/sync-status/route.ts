@@ -127,7 +127,7 @@ export async function POST(request: Request) {
       batch.set(txDocRef, updatePayload, { merge: true });
       if (txData.userId) {
         const userTxRef = doc(firestore, `users/${txData.userId}/transactions`, cleanTransId);
-        batch.set(userTxRef, updatePayload, { merge: true });
+        // batch.set(userTxRef, ...);
       }
       await batch.commit();
 
@@ -178,7 +178,7 @@ export async function POST(request: Request) {
       batch.set(txDocRef, updatePayload, { merge: true });
       if (txData.userId) {
         const userTxRef = doc(firestore, `users/${txData.userId}/transactions`, cleanTransId);
-        batch.set(userTxRef, updatePayload, { merge: true });
+        // batch.set(userTxRef, ...);
       }
       await batch.commit();
 

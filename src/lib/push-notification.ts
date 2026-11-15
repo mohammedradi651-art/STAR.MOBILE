@@ -116,3 +116,57 @@ export async function sendPushNotificationToUser(
     console.warn(`[FCM] Failed to send push notification to user ${userId}:`, err?.message || err);
   }
 }
+
+/**
+ * إرسال إشعار سحابي عام (Broadcast) لجميع العملاء عبر مواضيع FCM
+ */
+export async function sendBroadcastPushNotification(payload: {
+  title: string;
+  body: string;
+  id?: string;
+}) {
+  const app = getAdminApp();
+  if (!app) {
+    console.warn('[FCM] Firebase Admin app is not initialized. Cannot send broadcast push.');
+    return;
+  }
+
+  try {
+    const messaging = admin.messaging(app);
+    const messagePayload = {
+      notification: {
+        title: payload.title,
+        body: payload.body,
+      },
+      data: {
+        tag: 'starmobile_broadcast',
+        id: String(payload.id || Date.now()),
+        title: payload.title,
+        body: payload.body,
+      },
+      android: {
+        priority: 'high' as const,
+        notification: {
+          channelId: 'starmobile_notifications_channel',
+          icon: 'ic_notification',
+          color: '#014BB6',
+          sound: 'default',
+          defaultSound: true,
+          defaultVibrateTimings: true,
+          priority: 'max' as const,
+          visibility: 'public' as const,
+        },
+      },
+    };
+
+    // إرسال للموضوعين all_users و broadcast المشترك بهما التطبيق
+    await Promise.allSettled([
+      messaging.send({ ...messagePayload, topic: 'all_users' }),
+      messaging.send({ ...messagePayload, topic: 'broadcast' })
+    ]);
+
+    console.log('[FCM] Broadcast push notification sent to topics all_users & broadcast');
+  } catch (err: any) {
+    console.warn('[FCM] Failed to send broadcast push notification:', err?.message || err);
+  }
+}

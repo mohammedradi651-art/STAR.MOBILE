@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
 import { useOrderDocArray, updateOrderItemInDoc } from '@/lib/order-unified';
-import { collection, query, orderBy, doc, updateDoc, increment, writeBatch, limit } from 'firebase/firestore';
+import { collection, query, orderBy, doc, updateDoc, increment, writeBatch, limit, getDoc, setDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -273,7 +273,7 @@ export default function DepositManagementPage() {
                 approvedAt: now
             });
 
-            // 3. تحديث حركة المستخدم
+            // 3. تحديث حركة المستخدم وسجل history
             if (req.transactionId) {
                 const txRef = doc(firestore, `users/${req.userId}/transactions`, req.transactionId);
                 batch.update(txRef, {
@@ -282,6 +282,55 @@ export default function DepositManagementPage() {
                     completedAt: now,
                     notes: `تم تأكيد الإيداع وإضافة مبلغ ${req.amount.toLocaleString()} ر.ي إلى محفظتك بنجاح.`
                 });
+            }
+
+            // تحديث أو إدراج العملية في سجل العمليات المركزي history
+            try {
+                const historyRef = doc(firestore, `users/${req.userId}/transactions`, 'history');
+                const historySnap = await getDoc(historyRef);
+                const targetId = req.transactionId || req.id;
+                let updated = false;
+                let newList: any[] = [];
+                if (historySnap.exists()) {
+                    const list = historySnap.data()?.list || [];
+                    newList = list.map((item: any) => {
+                        if (item.id === targetId || item.transactionId === targetId || item.id === req.id) {
+                            updated = true;
+                            return {
+                                ...item,
+                                s: 'completed',
+                                r: 'جاهزة',
+                                readiness: 'جاهزة',
+                                status: 'completed',
+                                note: `تم تأكيد الإيداع وإضافة مبلغ ${req.amount.toLocaleString()} ر.ي إلى محفظتك بنجاح.`,
+                                completedAt: now,
+                            };
+                        }
+                        return item;
+                    });
+                }
+                if (!updated) {
+                    newList.push({
+                        id: targetId,
+                        t: `تغذية حساب - ${req.bankName || 'إيداع بنكي'}`,
+                        a: req.amount,
+                        pb: 0,
+                        nb: req.amount,
+                        d: now,
+                        s: 'completed',
+                        r: 'جاهزة',
+                        readiness: 'جاهزة',
+                        net: req.bankName || 'بنك',
+                        cat: 'إيداع',
+                        type: 'deposit',
+                        ph: req.userPhone || '',
+                        note: `تم تأكيد الإيداع وإضافة مبلغ ${req.amount.toLocaleString()} ر.ي إلى محفظتك بنجاح.`,
+                        rcpt: req.referenceNumber || req.identifierCode || targetId,
+                    });
+                }
+                batch.set(historyRef, { list: newList, lastUpdated: now, schema: 'compact_v1' }, { merge: true });
+            } catch (e) {
+                console.error("Error updating history in omqy approve:", e);
             }
 
             // 4. إشعار العميل
@@ -345,6 +394,57 @@ export default function DepositManagementPage() {
                     failedAt: now,
                     notes: `تم رفض طلب الإيداع. السبب: ${reason}`
                 });
+            }
+
+            // تحديث أو إدراج العملية في سجل العمليات المركزي history
+            try {
+                const historyRef = doc(firestore, `users/${req.userId}/transactions`, 'history');
+                const historySnap = await getDoc(historyRef);
+                const targetId = req.transactionId || req.id;
+                let updated = false;
+                let newList: any[] = [];
+                if (historySnap.exists()) {
+                    const list = historySnap.data()?.list || [];
+                    newList = list.map((item: any) => {
+                        if (item.id === targetId || item.transactionId === targetId || item.id === req.id) {
+                            updated = true;
+                            return {
+                                ...item,
+                                s: 'failed',
+                                r: 'غير جاهز',
+                                readiness: 'غير جاهز',
+                                status: 'failed',
+                                note: `تم رفض طلب الإيداع. السبب: ${reason}`,
+                                rejectReason: reason,
+                                failedAt: now,
+                            };
+                        }
+                        return item;
+                    });
+                }
+                if (!updated) {
+                    newList.push({
+                        id: targetId,
+                        t: `تغذية حساب - ${req.bankName || 'إيداع بنكي'}`,
+                        a: req.amount,
+                        pb: 0,
+                        nb: 0,
+                        d: now,
+                        s: 'failed',
+                        r: 'غير جاهز',
+                        readiness: 'غير جاهز',
+                        net: req.bankName || 'بنك',
+                        cat: 'إيداع',
+                        type: 'deposit',
+                        ph: req.userPhone || '',
+                        note: `تم رفض طلب الإيداع. السبب: ${reason}`,
+                        rejectReason: reason,
+                        rcpt: req.referenceNumber || req.identifierCode || targetId,
+                    });
+                }
+                batch.set(historyRef, { list: newList, lastUpdated: now, schema: 'compact_v1' }, { merge: true });
+            } catch (e) {
+                console.error("Error updating history in omqy reject:", e);
             }
 
             // 3. إرسال إشعار للعميل يوضح سبب الرفض

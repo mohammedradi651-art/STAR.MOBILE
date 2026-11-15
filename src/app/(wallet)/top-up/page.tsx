@@ -246,6 +246,31 @@ export default function TopUpPage() {
                     })
                 }, { merge: true });
 
+                // إضافة العملية إلى سجل العمليات المركزي history
+                const historyRef = doc(firestore, `users/${userProfile.id}/transactions`, 'history');
+                const historyEntry = {
+                    id: txRef.id,
+                    t: `تغذية حساب - ${bankNameArabic}`,
+                    a: amt,
+                    pb: userProfile.balance || 0,
+                    nb: userProfile.balance || 0,
+                    d: now,
+                    s: 'pending',
+                    r: 'قيد الانتظار',
+                    readiness: 'قيد الانتظار',
+                    net: bankNameArabic,
+                    cat: 'إيداع',
+                    type: 'deposit',
+                    ph: userProfile.phoneNumber || '',
+                    note: pendingTxNotes,
+                    rcpt: refOrAccount,
+                };
+                pendingBatch.set(historyRef, {
+                    lastUpdated: now,
+                    schema: 'compact_v1',
+                    list: arrayUnion(historyEntry)
+                }, { merge: true });
+
                 pendingBatch.set(txRef, txData);
                 await pendingBatch.commit();
 
@@ -272,15 +297,42 @@ export default function TopUpPage() {
                 batch.update(notifDoc.ref, { status: 'paid', paidTo: userProfile.id, paidAt: now });
 
                 const txRef = doc(collection(firestore, `users/${userProfile.id}/transactions`));
+                const autoTxTitle = `تغذية آلي - ${bankType === 'alomqy' ? 'المشقاص' : bankType === 'kuraimi' ? 'الكريمي' : 'بنك أمجاد'}`;
+                const autoTxNotes = `مطابقة آلية. الوسيلة: ${selectedMethod?.name || 'بنك'}`;
                 batch.set(txRef, {
                     userId: userProfile.id,
                     transactionDate: now,
                     amount: notifData.amount,
-                    transactionType: `تغذية آلي - ${bankType === 'alomqy' ? 'المشقاص' : bankType === 'kuraimi' ? 'الكريمي' : 'بنك أمجاد'}`,
-                    notes: `مطابقة آلية. الوسيلة: ${selectedMethod?.name}`,
+                    transactionType: autoTxTitle,
+                    notes: autoTxNotes,
                     status: 'success',
                     readiness: 'جاهزة'
                 });
+
+                // إضافة العملية إلى سجل العمليات المركزي history
+                const autoHistoryRef = doc(firestore, `users/${userProfile.id}/transactions`, 'history');
+                const autoHistoryEntry = {
+                    id: txRef.id,
+                    t: autoTxTitle,
+                    a: notifData.amount,
+                    pb: userProfile.balance || 0,
+                    nb: (userProfile.balance || 0) + notifData.amount,
+                    d: now,
+                    s: 'completed',
+                    r: 'جاهزة',
+                    readiness: 'جاهزة',
+                    net: selectedMethod?.name || 'بنك',
+                    cat: 'إيداع',
+                    type: 'deposit',
+                    ph: userProfile.phoneNumber || '',
+                    note: autoTxNotes,
+                    rcpt: bankType === 'alomqy' ? alomqyAccount : bankType === 'kuraimi' ? kuraimiReference : 'مطابقة بالاسم',
+                };
+                batch.set(autoHistoryRef, {
+                    lastUpdated: now,
+                    schema: 'compact_v1',
+                    list: arrayUnion(autoHistoryEntry)
+                }, { merge: true });
 
                 await batch.commit();
 

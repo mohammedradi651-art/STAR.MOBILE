@@ -1172,7 +1172,7 @@ export async function POST(request: Request) {
               providerMessage: rawDesc,
               updatedAt: new Date().toISOString()
             };
-            batch.set(userTxRef, updatePayload, { merge: true });
+            // batch.set(userTxRef, ...);
             batch.set(globalTxRef, updatePayload, { merge: true });
             await batch.commit();
           } catch (e) {
@@ -1330,7 +1330,7 @@ async function markSuccessInDb(firestore: any, userId: string, transid: string, 
       completedAt: new Date().toISOString()
     };
     const batch = writeBatch(firestore);
-    batch.update(userTxRef, updateData);
+    // batch.update(userTxRef, ...);
     batch.update(globalTxRef, updateData);
 
     // تحديث مصفوفة history
@@ -1439,7 +1439,7 @@ async function refundUser(firestore: any, userId: string, transid: string, amoun
 
     const batch = writeBatch(firestore);
     batch.update(userRef, { balance: increment(amount) });
-    batch.update(userTxRef, updateData);
+    // batch.update(userTxRef, ...);
     batch.update(globalTxRef, updateData);
 
     // تحديث مصفوفة history

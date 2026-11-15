@@ -78,11 +78,22 @@ const Header = () => {
     setDeferredPrompt(null);
   };
 
-  const globalNotificationsQuery = useMemoFirebase(
-    () => (firestore) ? query(collection(firestore, 'notifications'), orderBy('timestamp', 'desc'), limit(5)) : null,
+  const broadcastDocRef = useMemoFirebase(
+    () => (firestore ? doc(firestore, 'app_notifications', 'broadcast') : null),
     [firestore]
   );
-  const { data: globalNotifications } = useCollection<Notification>(globalNotificationsQuery);
+  const { data: broadcastDoc } = useDoc<any>(broadcastDocRef);
+
+  const globalNotifications = useMemo(() => {
+    if (!broadcastDoc) return [];
+    const list = Array.isArray(broadcastDoc.announcements) ? broadcastDoc.announcements : [];
+    return list.map((item: any) => ({
+      id: item.id || 'b',
+      title: item.title || '',
+      body: item.body || '',
+      timestamp: item.createdAt || item.date || new Date().toISOString(),
+    }));
+  }, [broadcastDoc]);
 
   const personalNotificationsQuery = useMemoFirebase(
     () => (firestore && user) ? query(collection(firestore, 'users', user.uid, 'notifications'), orderBy('timestamp', 'desc'), limit(5)) : null,

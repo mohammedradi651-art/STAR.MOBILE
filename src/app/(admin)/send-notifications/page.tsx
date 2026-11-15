@@ -1,14 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { useFirestore, addDocumentNonBlocking, useCollection, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, query, orderBy, doc } from 'firebase/firestore';
+import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { doc, setDoc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { Send, Trash2, PlusCircle, BellOff } from 'lucide-react';
@@ -27,12 +27,13 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-
-type Notification = {
-    id: string;
-    title: string;
-    body: string;
-    timestamp: string;
+type BroadcastItem = {
+  id: string;
+  title: string;
+  body: string;
+  date?: string;
+  createdAt?: string;
+  type?: string;
 };
 
 export default function SendNotificationsPage() {
@@ -43,17 +44,21 @@ export default function SendNotificationsPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  const notificationsQuery = useMemoFirebase(
-    () => firestore
-        ? query(
-            collection(firestore, 'notifications'),
-            orderBy('timestamp', 'desc')
-          )
-        : null,
+  const broadcastDocRef = useMemoFirebase(
+    () => firestore ? doc(firestore, 'app_notifications', 'broadcast') : null,
     [firestore]
   );
-  const { data: sentNotifications, isLoading: isLoadingNotifications } = useCollection<Notification>(notificationsQuery);
+  const { data: broadcastDoc, isLoading: isLoadingNotifications } = useDoc<any>(broadcastDocRef);
 
+  const announcements: BroadcastItem[] = useMemo(() => {
+    if (!broadcastDoc) return [];
+    const list: BroadcastItem[] = Array.isArray(broadcastDoc.announcements) ? broadcastDoc.announcements : [];
+    return [...list].sort((a, b) => {
+      const da = new Date(a.createdAt || a.date || 0).getTime();
+      const db = new Date(b.createdAt || b.date || 0).getTime();
+      return db - da;
+    });
+  }, [broadcastDoc]);
 
   const handleSend = async () => {
     if (!title || !message || !firestore) {
@@ -67,16 +72,55 @@ export default function SendNotificationsPage() {
 
     setIsLoading(true);
     try {
-      const notificationsCollection = collection(firestore, 'notifications');
-      await addDocumentNonBlocking(notificationsCollection, {
-        title,
-        body: message,
-        timestamp: new Date().toISOString(),
-      });
+      const nowIso = new Date().toISOString();
+      const newId = `b_${Date.now()}`;
+      const newItem: BroadcastItem = {
+        id: newId,
+        title: title.trim(),
+        body: message.trim(),
+        createdAt: nowIso,
+        date: format(new Date(), 'yyyy-MM-dd HH:mm'),
+        type: 'broadcast',
+      };
+
+      const existingAnnouncements = Array.isArray(broadcastDoc?.announcements)
+        ? broadcastDoc.announcements
+        : [];
+      const updatedAnnouncements = [newItem, ...existingAnnouncements];
+
+      // 1. الحفظ المباشر داخل app_notifications/broadcast
+      await setDoc(
+        doc(firestore, 'app_notifications', 'broadcast'),
+        {
+          id: newId,
+          title: title.trim(),
+          body: message.trim(),
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          type: 'broadcast',
+          announcements: updatedAnnouncements,
+        },
+        { merge: true }
+      );
+
+      // 2. إرسال إشعار سحابي FCM فوري لجميع الأجهزة المشتركة
+      try {
+        await fetch('/api/notifications/broadcast', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: newId,
+            title: title.trim(),
+            body: message.trim(),
+          }),
+        });
+      } catch (fcmErr) {
+        console.warn('Failed to trigger broadcast push via API:', fcmErr);
+      }
 
       toast({
         title: "نجاح",
-        description: "تم إرسال الإشعار بنجاح.",
+        description: "تم إرسال الإشعار السحابي وحفظه في التطبيق بنجاح.",
       });
       setTitle('');
       setMessage('');
@@ -92,145 +136,168 @@ export default function SendNotificationsPage() {
       setIsLoading(false);
     }
   };
-  
-  const handleDelete = (id: string) => {
-    if (!firestore) return;
-    const docRef = doc(firestore, 'notifications', id);
-    deleteDocumentNonBlocking(docRef);
-    toast({
+
+  const handleDelete = async (id: string) => {
+    if (!firestore || !broadcastDoc) return;
+    try {
+      const existing = Array.isArray(broadcastDoc.announcements) ? broadcastDoc.announcements : [];
+      const updated = existing.filter((item: any) => item.id !== id);
+
+      const latest = updated[0];
+      await updateDoc(doc(firestore, 'app_notifications', 'broadcast'), {
+        announcements: updated,
+        ...(latest ? {
+          id: latest.id,
+          title: latest.title,
+          body: latest.body,
+          updatedAt: latest.createdAt || new Date().toISOString()
+        } : {
+          title: '',
+          body: ''
+        })
+      });
+
+      toast({
         title: 'تم الحذف',
         description: 'تم حذف الإشعار بنجاح.',
         variant: 'destructive',
-    });
-  }
+      });
+    } catch (err) {
+      console.error('Error deleting broadcast item:', err);
+    }
+  };
 
   const renderSentNotifications = () => {
-    if(isLoadingNotifications) {
-        return (
-            <div className="space-y-3">
-                {[...Array(3)].map((_, i) => (
-                    <Card key={i} className="p-4 flex items-center justify-between">
-                        <div className="flex-1 space-y-2">
-                            <Skeleton className="h-4 w-3/4" />
-                            <Skeleton className="h-3 w-full" />
-                            <Skeleton className="h-3 w-1/2" />
-                        </div>
-                        <Skeleton className="h-8 w-8" />
-                    </Card>
-                ))}
-            </div>
-        )
+    if (isLoadingNotifications) {
+      return (
+        <div className="space-y-3">
+          {[...Array(3)].map((_, i) => (
+            <Card key={i} className="p-4 flex items-center justify-between">
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+              <Skeleton className="h-8 w-8" />
+            </Card>
+          ))}
+        </div>
+      );
     }
 
-    if (!sentNotifications || sentNotifications.length === 0) {
-        return (
-            <div className="text-center py-10">
-                <BellOff className="mx-auto h-12 w-12 text-muted-foreground" />
-                <p className="mt-4 text-sm text-muted-foreground">لم يتم إرسال أي إشعارات بعد.</p>
-            </div>
-        );
+    if (!announcements || announcements.length === 0) {
+      return (
+        <div className="text-center py-10">
+          <BellOff className="mx-auto h-12 w-12 text-muted-foreground" />
+          <p className="mt-4 text-sm text-muted-foreground">لم يتم إرسال أي إشعارات عامة بعد.</p>
+        </div>
+      );
     }
 
     return (
-        <div className="space-y-3">
-            {sentNotifications.map(notification => (
-                <Card key={notification.id} className="p-4 flex items-start justify-between gap-4">
-                   <div className="flex-1">
-                     <p className="font-bold text-sm">{notification.title}</p>
-                     <p className="text-sm text-muted-foreground mt-1">{notification.body}</p>
-                     <p className="text-xs text-muted-foreground mt-2">{format(parseISO(notification.timestamp), 'd MMM yyyy, h:mm a', { locale: ar })}</p>
-                   </div>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                         <Button variant="destructive" size="icon">
-                            <Trash2 className="h-4 w-4" />
-                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            هل أنت متأكد من أنك تريد حذف هذا الإشعار؟ لا يمكن التراجع عن هذا الإجراء.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDelete(notification.id)}>
-                            حذف
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                </Card>
-            ))}
-        </div>
-    )
-  }
+      <div className="space-y-3">
+        {announcements.map((notification) => {
+          let formattedDate = '';
+          try {
+            const rawDate = notification.createdAt || notification.date;
+            if (rawDate) {
+              formattedDate = format(parseISO(rawDate), 'd MMM yyyy, h:mm a', { locale: ar });
+            }
+          } catch {
+            formattedDate = notification.date || '';
+          }
+
+          return (
+            <Card key={notification.id} className="p-4 flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <p className="font-bold text-sm">{notification.title}</p>
+                <p className="text-sm text-muted-foreground mt-1">{notification.body}</p>
+                {formattedDate && (
+                  <p className="text-xs text-muted-foreground mt-2">{formattedDate}</p>
+                )}
+              </div>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="icon">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      هل أنت متأكد من أنك تريد حذف هذا الإشعار من التطبيق؟
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => handleDelete(notification.id)}>
+                      حذف
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </Card>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
-    <>
-      <div className="flex flex-col h-full bg-background">
-        <SimpleHeader title="إرسال الإشعارات" />
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          
-          {!isAdding && (
-            <Button onClick={() => setIsAdding(true)} className="w-full">
-                <PlusCircle className="ml-2 h-4 w-4" />
-                إرسال إشعار جديد
-            </Button>
-          )}
-
-          {isAdding && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-center">إنشاء إشعار جديد</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="title">عنوان الإشعار</Label>
-                  <Input
-                    id="title"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="مثال: عرض جديد!"
-                    disabled={isLoading}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="message">نص الإشعار</Label>
-                  <Textarea
-                    id="message"
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    placeholder="اكتب محتوى رسالة الإشعار هنا..."
-                    rows={5}
-                    disabled={isLoading}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                    <Button onClick={() => setIsAdding(false)} variant="outline" disabled={isLoading}>
-                        إلغاء
-                    </Button>
-                    <Button onClick={handleSend} disabled={isLoading}>
-                        {isLoading ? 'جاري الإرسال...' : <><Send className="ml-2 h-4 w-4" /> إرسال</>}
-                    </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
-            <CardHeader>
-                <CardTitle className="text-center">الإشعارات المرسلة</CardTitle>
-                <CardDescription className="text-center">قائمة بجميع الإشعارات التي تم إرسالها.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                {renderSentNotifications()}
-            </CardContent>
-          </Card>
-        </div>
+    <div className="space-y-6">
+      <SimpleHeader title="إرسال إشعارات عامة" />
+      <div className="flex justify-end">
+        <Button onClick={() => setIsAdding(!isAdding)}>
+          <PlusCircle className="mr-2 h-4 w-4" />
+          {isAdding ? 'إلغاء' : 'إرسال إشعار جديد'}
+        </Button>
       </div>
+
+      {isAdding && (
+        <Card>
+          <CardHeader>
+            <CardTitle>إنشاء إشعار عام للعملاء</CardTitle>
+            <CardDescription>
+              سيتم إرسال هذا الإشعار لجميع الأجهزة سحابياً وحفظه في مستند البث العام للتطبيق مباشرة.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="title">عنوان الإشعار</Label>
+              <Input
+                id="title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="مثال: خصم خاص اليوم!"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="message">نص الإشعار</Label>
+              <Textarea
+                id="message"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="اكتب تفاصيل الإشعار هنا..."
+                rows={4}
+              />
+            </div>
+            <Button onClick={handleSend} disabled={isLoading} className="w-full">
+              <Send className="mr-2 h-4 w-4" />
+              {isLoading ? 'جاري الإرسال السحابي...' : 'إرسال الإشعار الآن'}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>سجل الإشعارات المرسلة للتطبيق</CardTitle>
+          <CardDescription>قائمة الإشعارات العامة الحالية المحفوظة في التطبيق</CardDescription>
+        </CardHeader>
+        <CardContent>{renderSentNotifications()}</CardContent>
+      </Card>
       <Toaster />
-    </>
+    </div>
   );
 }

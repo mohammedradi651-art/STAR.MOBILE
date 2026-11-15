@@ -227,9 +227,10 @@ export async function initiateTelecomPayment({
     }
 
     transaction.update(userDocRef, { balance: increment(-amount) });
-    transaction.set(userTxRef, txData);
+    // تم إلغاء إنشاء مستند منفصل والاعتماد حصرياً على history
+    // transaction.set(userTxRef, txData);
     transaction.set(globalTxRef, txData);
-    // حفظ نسخة أيضاً في المستند الموحد history
+    // حفظ في المستند الموحد history
     const userHistoryRef = doc(firestore, `users/${userId}/transactions`, 'history');
     transaction.set(userHistoryRef, {
       transactions: arrayUnion(txData),
@@ -259,7 +260,8 @@ export async function markPaymentSuccess(
       completedAt: new Date().toISOString()
     };
     const batch = writeBatch(firestore);
-    batch.update(userTxRef, updateData);
+    // إلغاء التحديث على المستند المنفصل - التحديث في paymentTransactions و history
+    // batch.update(userTxRef, updateData);
     batch.update(globalTxRef, updateData);
     await batch.commit();
   } catch (err) {
@@ -357,7 +359,7 @@ export async function markPaymentFailedAndRefund(
 
     const batch = writeBatch(firestore);
     batch.update(userDocRef, { balance: increment(amount) });
-    batch.update(userTxRef, updateData);
+    // batch.update(userTxRef, updateData);
     batch.update(globalTxRef, updateData);
     await batch.commit();
   } catch (err) {

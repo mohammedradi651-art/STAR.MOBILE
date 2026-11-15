@@ -119,13 +119,39 @@ export default function TransactionsPage() {
   );
   const { data: historyData, isLoading } = useDoc<any>(historyDocRef);
 
+  const standaloneQuery = useMemoFirebase(
+    () => (user && firestore ? query(collection(firestore, `users/${user.uid}/transactions`), limit(50)) : null),
+    [user, firestore]
+  );
+  const { data: standaloneDocs } = useCollection<any>(standaloneQuery);
+
   const transactions: Transaction[] = useMemo(() => {
-    if (!historyData) return [];
-    const arr = Array.isArray(historyData.list) && historyData.list.length > 0 
-      ? historyData.list 
-      : (Array.isArray(historyData.transactions) ? historyData.transactions : []);
+    const map = new Map<string, any>();
+
+    if (historyData) {
+      const arr = Array.isArray(historyData.list) && historyData.list.length > 0 
+        ? historyData.list 
+        : (Array.isArray(historyData.transactions) ? historyData.transactions : []);
+      for (const item of arr) {
+        const id = String(item.id || item.transid || item.operationId || '');
+        if (id) map.set(id, item);
+      }
+    }
+
+    if (standaloneDocs) {
+      for (const docSnap of standaloneDocs) {
+        if (docSnap.id === 'history') continue;
+        const id = String(docSnap.id || docSnap.transid || '');
+        if (id && !map.has(id)) {
+          map.set(id, docSnap);
+        }
+      }
+    }
+
+    const allItems = Array.from(map.values());
+    if (allItems.length === 0) return [];
     
-    return arr.map((item: any) => {
+    return allItems.map((item: any) => {
       const id = String(item.id || item.transid || item.operationId || '');
       const t = String(item.transactionType || item.t || item.operationType || item.notes || 'عملية مالية');
       const a = Number(item.amount ?? item.a ?? 0) || 0;

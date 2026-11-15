@@ -375,7 +375,8 @@ async function handleWebhookExecution(
 
     const batch = writeBatch(firestore);
     if (txDocRef) batch.set(txDocRef, updatePayload, { merge: true });
-    if (userTxRef) batch.set(userTxRef, updatePayload, { merge: true });
+    // تم إلغاء الكتابة في مستند منفصل والاعتماد حصرياً على history
+    // if (userTxRef) batch.set(userTxRef, updatePayload, { merge: true });
 
     // تحديث مستند history لكشف الحساب
     if (userId) {
@@ -500,7 +501,8 @@ async function handleWebhookExecution(
       batch.update(userRef, { balance: increment(amount) });
     }
     if (txDocRef) batch.set(txDocRef, updatePayload, { merge: true });
-    if (userTxRef) batch.set(userTxRef, updatePayload, { merge: true });
+    // تم إلغاء الكتابة في مستند منفصل والاعتماد حصرياً على history
+    // if (userTxRef) batch.set(userTxRef, updatePayload, { merge: true });
 
     // تحديث مستند history لكشف الحساب
     if (userId) {
