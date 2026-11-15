@@ -306,7 +306,6 @@ export async function POST(req: Request) {
                 transactions: arrayUnion(alwadiTx),
                 lastUpdated: timestamp
             }, { merge: true });
-            });
 
             await batch.commit();
             
