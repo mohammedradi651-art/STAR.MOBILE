@@ -5,7 +5,8 @@ import { SimpleHeader } from '@/components/layout/simple-header';
 import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from '@/firebase';
 import { collection, query, orderBy, writeBatch, doc, limit } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Bell, BellOff, Trash2, Calendar, Clock } from 'lucide-react';
+import { Bell, BellOff, Trash2, Calendar, Clock, BellRing } from 'lucide-react';
+import { requestWebNotificationPermission } from '@/firebase/web-push';
 import { format, parseISO } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { Card, CardContent } from '@/components/ui/card';
@@ -40,6 +41,25 @@ export default function NotificationsPage() {
   const { toast } = useToast();
   const [monthToDelete, setMonthToDelete] = useState<string | null>(null);
   const [notifsLimit, setNotifsLimit] = useState<number>(30);
+  const [isEnablingPush, setIsEnablingPush] = useState(false);
+
+  const handleEnablePush = async () => {
+    setIsEnablingPush(true);
+    const res = await requestWebNotificationPermission(firestore, user?.uid);
+    setIsEnablingPush(false);
+    if (res.success) {
+      toast({
+        title: "تم تفعيل الإشعارات بنجاح 🎉",
+        description: "ستصلك الإشعارات السحابية مباشرة على متصفحك وجهازك.",
+      });
+    } else {
+      toast({
+        variant: "destructive",
+        title: "تنبيه",
+        description: res.error || "يرجى السماح بالإشعارات من إعدادات المتصفح.",
+      });
+    }
+  };
 
   // 1. جلب الإشعارات الشخصية من المستند الموحد notifications/{uid}
   const personalNotifDocRef = useMemoFirebase(
@@ -191,6 +211,17 @@ export default function NotificationsPage() {
                                     {format(parseISO(`${monthKey}-01`), 'MMMM yyyy', { locale: ar })}
                                 </h3>
                             </div>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={handleEnablePush}
+                                disabled={isEnablingPush}
+                                className="h-8 px-2.5 rounded-full text-xs font-bold gap-1.5 border-primary/20 text-primary hover:bg-primary/10 transition-all shadow-none"
+                                title="تفعيل الإشعارات السحابية لهذا الجهاز"
+                            >
+                                <BellRing className="h-3.5 w-3.5 animate-bounce" />
+                                <span>{isEnablingPush ? 'جاري التفعيل...' : 'سماح بالإشعارات'}</span>
+                            </Button>
                         </div>
 
                         <div className="space-y-3">
