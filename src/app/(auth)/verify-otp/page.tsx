@@ -172,7 +172,7 @@ export default function VerifyOtpPage() {
             }, 2000);
 
         } catch (error: any) {
-            toast({ variant: "destructive", title: "فشل انشاء حسابك", description: "هذا الرقم مسجل لدينا - سجل دخولك مباشرة." });
+            toast({ variant: "destructive", title: "فشل انشاء حسابك", description: "لديك حساب مسجل بنفس الرقم" });
             setIsVerifying(false);
         }
     };

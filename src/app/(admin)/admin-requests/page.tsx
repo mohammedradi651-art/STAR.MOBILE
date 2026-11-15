@@ -360,6 +360,37 @@ export default function AdminRequestsPage() {
           console.error("Error updating history for withdrawal:", e);
         }
 
+        // تحديث مستند network_withdrawals ليظهر السحب مباشرة كـ "جاهز" في التطبيق
+        try {
+          const netWithRef = doc(firestore, 'network_withdrawals', selectedWith.ownerId);
+          const netWithSnap = await getDoc(netWithRef);
+          if (netWithSnap.exists()) {
+            const list = netWithSnap.data()?.list || [];
+            let updated = false;
+            const targetId = String(selectedWith.transactionId || selectedWith.id || '').trim();
+            const newList = list.map((item: any) => {
+              const itemId = String(item.id || item.transactionId || item.operationId || '').trim();
+              if (itemId === targetId || itemId === String(selectedWith.id).trim()) {
+                updated = true;
+                return {
+                  ...item,
+                  status: 'approved',
+                  s: 'completed',
+                  readiness: 'جاهز',
+                  r: 'جاهز',
+                  completedAt: now,
+                };
+              }
+              return item;
+            });
+            if (updated) {
+              await updateDoc(netWithRef, { list: newList, lastUpdated: serverTimestamp() });
+            }
+          }
+        } catch (e) {
+          console.error("Error updating network_withdrawals:", e);
+        }
+
         batch.set(doc(collection(firestore, `users/${selectedWith.ownerId}/notifications`)), {
           title: 'تمت الموافقة على طلب السحب 💸',
           body: `تمت الموافقة على طلب سحب مبلغ ${Number(selectedWith.amount).toLocaleString('en-US')} ريال بنجاح وتم التحويل لحسابك.`,
@@ -439,6 +470,38 @@ export default function AdminRequestsPage() {
           }
         } catch (e) {
           console.error("Error updating history for withdrawal rejection:", e);
+        }
+
+        // تحديث مستند network_withdrawals إلى فاشلة / غير جاهز
+        try {
+          const netWithRef = doc(firestore, 'network_withdrawals', selectedWith.ownerId);
+          const netWithSnap = await getDoc(netWithRef);
+          if (netWithSnap.exists()) {
+            const list = netWithSnap.data()?.list || [];
+            let updated = false;
+            const targetId = String(selectedWith.transactionId || selectedWith.id || '').trim();
+            const newList = list.map((item: any) => {
+              const itemId = String(item.id || item.transactionId || item.operationId || '').trim();
+              if (itemId === targetId || itemId === String(selectedWith.id).trim()) {
+                updated = true;
+                return {
+                  ...item,
+                  status: 'rejected',
+                  s: 'failed',
+                  readiness: 'غير جاهز',
+                  r: 'غير جاهز',
+                  rejectReason: failReason,
+                  failedAt: now,
+                };
+              }
+              return item;
+            });
+            if (updated) {
+              await updateDoc(netWithRef, { list: newList, lastUpdated: serverTimestamp() });
+            }
+          }
+        } catch (e) {
+          console.error("Error updating network_withdrawals on reject:", e);
         }
 
         batch.set(doc(collection(firestore, `users/${selectedWith.ownerId}/notifications`)), {
