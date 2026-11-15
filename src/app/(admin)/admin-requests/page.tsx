@@ -537,8 +537,9 @@ export default function AdminRequestsPage() {
       setWithAction(null);
       setSelectedWith(null);
       setWithRejectNote('');
-    } catch {
-      toast({ variant: 'destructive', title: 'خطأ', description: 'فشلت العملية.' });
+    } catch (err: any) {
+      console.error("Error in handleWithdrawalAction:", err);
+      toast({ variant: 'destructive', title: 'خطأ', description: err?.message || 'فشلت العملية.' });
     }
   };
 
