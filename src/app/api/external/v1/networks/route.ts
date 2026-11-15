@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
-import { collection, query, where, getDocs, doc, writeBatch, increment, limit as firestoreLimit, getDoc, updateDoc, setDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, writeBatch, increment, limit as firestoreLimit, getDoc, updateDoc, setDoc, collectionGroup } from 'firebase/firestore';
 
 /**
  * @fileOverview بوابة الربط البرمجي للشبكات v1.6
@@ -70,20 +70,18 @@ export async function POST(req: Request) {
 
     // 1. جلب كافة الشبكات (محلية من local_networks + بيتي)
     if (action === 'list_networks') {
-        const usersWithNets = await getDocs(query(collection(firestore, 'users'), where('networkName', '!=', '')));
+        const netSnap = await getDocs(collectionGroup(firestore, 'local_networks'));
         const localNets: any[] = [];
-        for (const u of usersWithNets.docs) {
-            const lRef = doc(firestore, `users/${u.id}/local_networks`, u.id);
-            const lSnap = await getDoc(lRef);
-            if (lSnap.exists()) {
-                const data = lSnap.data();
-                localNets.push({
-                    id: u.id,
-                    name: data.name || data.networkName,
-                    location: data.location || data.city || 'حضرموت',
-                    type: 'local'
-                });
-            }
+        for (const d of netSnap.docs) {
+            const data = d.data();
+            if (data.status === 'rejected') continue;
+            const ownerId = d.ref.parent.parent ? d.ref.parent.parent.id : (data.ownerUid || d.id);
+            localNets.push({
+                id: ownerId,
+                name: data.name || data.networkName || 'شبكة محلية',
+                location: data.location || data.neighborhood || data.city || 'حضرموت',
+                type: 'local'
+            });
         }
 
         let externalNets = [];

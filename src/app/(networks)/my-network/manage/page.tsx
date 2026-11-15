@@ -40,7 +40,7 @@ import {
     updateDocumentNonBlocking, 
     useUser 
 } from '@/firebase';
-import { collection, doc, writeBatch, query, where } from 'firebase/firestore';
+import { collection, doc, writeBatch, query, where, updateDoc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -201,18 +201,34 @@ export default function OwnerNetworkManagePage() {
     }, {} as Record<string, NetworkCard[]>);
   }, [cards]);
   
-  const handleAddCategory = () => {
-    if (newCategory.name && newCategory.price && newCategory.validity && newCategory.capacity && categoriesCollection && networkId) {
-        addDocumentNonBlocking(categoriesCollection, {
-            networkId: networkId,
-            name: newCategory.name,
-            price: Number(newCategory.price),
-            capacity: newCategory.capacity,
-            validity: newCategory.validity,
-        });
-        setNewCategory({ name: '', price: '', capacity: '', validity: '' });
-        setIsAddingCategory(false);
-        toast({ title: 'نجاح', description: 'تمت إضافة الفئة بنجاح.' });
+  const handleAddCategory = async () => {
+    if (!firestore || !user?.uid) return;
+    if (newCategory.name && newCategory.price && newCategory.validity) {
+        try {
+            const localRef = doc(firestore, `users/${user.uid}/local_networks`, user.uid);
+            const snap = await getDoc(localRef);
+            const currentCats = snap.exists() ? (snap.data().categories || []) : [];
+            const catId = `cat_${Date.now()}`;
+            const newCatObj = {
+                id: catId,
+                name: newCategory.name.trim(),
+                price: Number(newCategory.price),
+                capacity: newCategory.capacity || '',
+                validity: newCategory.validity.trim(),
+                notes: newCategory.capacity || '',
+                createdAt: new Date().toISOString()
+            };
+            await updateDoc(localRef, {
+                categories: [...currentCats, newCatObj],
+                updatedAt: serverTimestamp()
+            });
+            setNewCategory({ name: '', price: '', capacity: '', validity: '' });
+            setIsAddingCategory(false);
+            toast({ title: 'نجاح', description: 'تمت إضافة الفئة بنجاح.' });
+        } catch (e: any) {
+            console.error('Error adding category:', e);
+            toast({ title: 'خطأ', description: 'فشل حفظ الفئة: ' + e.message, variant: 'destructive' });
+        }
     } else {
         toast({ title: 'خطأ', description: 'يرجى ملء جميع الحقول المطلوبة.', variant: 'destructive' });
     }
@@ -223,27 +239,57 @@ export default function OwnerNetworkManagePage() {
     setEditingCategoryValues({ name: category.name, price: String(category.price), capacity: category.capacity || '', validity: category.validity || '' });
   };
 
-  const handleSaveCategory = (id: string) => {
-    if (!firestore || !networkId || !editingCategoryValues.name || !editingCategoryValues.price || !editingCategoryValues.validity || !editingCategoryValues.capacity) {
+  const handleSaveCategory = async (id: string) => {
+    if (!firestore || !user?.uid || !editingCategoryValues.name || !editingCategoryValues.price || !editingCategoryValues.validity) {
         toast({ title: 'خطأ', description: 'يرجى ملء جميع الحقول المطلوبة.', variant: 'destructive' });
         return;
     }
-    const docRef = doc(firestore, `networks/${networkId}/cardCategories`, id);
-    updateDocumentNonBlocking(docRef, { 
-        name: editingCategoryValues.name, 
-        price: Number(editingCategoryValues.price),
-        capacity: editingCategoryValues.capacity,
-        validity: editingCategoryValues.validity,
-    });
-    setEditingCategoryId(null);
-    toast({ title: 'تم الحفظ', description: 'تم تحديث الفئة بنجاح.' });
+    try {
+        const localRef = doc(firestore, `users/${user.uid}/local_networks`, user.uid);
+        const snap = await getDoc(localRef);
+        if (!snap.exists()) return;
+        const currentCats = snap.data().categories || [];
+        const updatedCats = currentCats.map((c: any) => {
+            if (c.id === id) {
+                return {
+                    ...c,
+                    name: editingCategoryValues.name.trim(),
+                    price: Number(editingCategoryValues.price),
+                    capacity: editingCategoryValues.capacity,
+                    notes: editingCategoryValues.capacity,
+                    validity: editingCategoryValues.validity.trim(),
+                    updatedAt: new Date().toISOString()
+                };
+            }
+            return c;
+        });
+        await updateDoc(localRef, {
+            categories: updatedCats,
+            updatedAt: serverTimestamp()
+        });
+        setEditingCategoryId(null);
+        toast({ title: 'تم الحفظ', description: 'تم تحديث الفئة بنجاح.' });
+    } catch (e: any) {
+        toast({ title: 'خطأ', description: 'فشل التعديل: ' + e.message, variant: 'destructive' });
+    }
   };
 
-  const handleDeleteCategory = (id: string) => {
-    if (!firestore || !networkId) return;
-    const docRef = doc(firestore, `networks/${networkId}/cardCategories`, id);
-    deleteDocumentNonBlocking(docRef);
-    toast({ title: 'تم الحذف', description: 'تم حذف الفئة بنجاح.', variant: 'destructive' });
+  const handleDeleteCategory = async (id: string) => {
+    if (!firestore || !user?.uid) return;
+    try {
+        const localRef = doc(firestore, `users/${user.uid}/local_networks`, user.uid);
+        const snap = await getDoc(localRef);
+        if (!snap.exists()) return;
+        const currentCats = snap.data().categories || [];
+        const updatedCats = currentCats.filter((c: any) => c.id !== id);
+        await updateDoc(localRef, {
+            categories: updatedCats,
+            updatedAt: serverTimestamp()
+        });
+        toast({ title: 'تم الحذف', description: 'تم حذف الفئة بنجاح.', variant: 'destructive' });
+    } catch (e: any) {
+        toast({ title: 'خطأ', description: 'فشل الحذف: ' + e.message, variant: 'destructive' });
+    }
   };
   
   const handleOpenAddCardDialog = (categoryId: string) => {
@@ -252,28 +298,20 @@ export default function OwnerNetworkManagePage() {
   };
   
   const handleSaveCards = async () => {
-    if (!firestore || !cardsCollection || !networkId) return;
+    if (!firestore || !user?.uid) return;
     setIsProcessingCards(true);
 
-    const cardsToAdd: Omit<NetworkCard, 'id'>[] = [];
+    const cardsToAdd: string[] = [];
     if (addCardMode === 'single') {
-        if (singleCard.cardNumber) {
-            cardsToAdd.push({
-                cardNumber: singleCard.cardNumber,
-                categoryId: selectedCategoryIdForCard,
-                status: 'available'
-            });
+        if (singleCard.cardNumber.trim()) {
+            cardsToAdd.push(singleCard.cardNumber.trim());
         }
     } else {
         const lines = bulkCards.trim().split('\n');
         lines.forEach(line => {
             const cardNumber = line.trim();
             if (cardNumber) {
-                cardsToAdd.push({
-                    cardNumber,
-                    categoryId: selectedCategoryIdForCard,
-                    status: 'available'
-                });
+                cardsToAdd.push(cardNumber);
             }
         });
     }
@@ -284,27 +322,51 @@ export default function OwnerNetworkManagePage() {
         return;
     }
 
-    const batch = writeBatch(firestore);
-    cardsToAdd.forEach(cardData => {
-        const cardRef = doc(cardsCollection);
-        batch.set(cardRef, cardData);
-    });
+    try {
+        const cardsRef = doc(firestore, `users/${user.uid}/local_networks/${user.uid}/cards_data`, 'cards');
+        const snap = await getDoc(cardsRef);
+        const existingCards: any[] = snap.exists() ? (snap.data().cards || []) : [];
+        const existingSet = new Set(existingCards.map(c => String(c.c).trim()));
+        
+        const catObj = categories.find(c => c.id === selectedCategoryIdForCard);
+        let addedCount = 0;
 
-    batch.commit().then(() => {
-        toast({ title: 'نجاح', description: `تمت إضافة ${cardsToAdd.length} كرت بنجاح.`});
+        for (const cNo of cardsToAdd) {
+            if (!existingSet.has(cNo)) {
+                existingCards.push({
+                    c: cNo,
+                    cat: selectedCategoryIdForCard,
+                    categoryName: catObj?.name || '',
+                    p: catObj?.price || 0,
+                    u: false,
+                    isUsed: false,
+                    soldAt: null
+                });
+                existingSet.add(cNo);
+                addedCount++;
+            }
+        }
+
+        await setDoc(cardsRef, {
+            cards: existingCards,
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        // Update local network updatedAt
+        await updateDoc(doc(firestore, `users/${user.uid}/local_networks`, user.uid), {
+            updatedAt: serverTimestamp()
+        }).catch(() => {});
+
+        toast({ title: 'نجاح', description: `تمت إضافة ${addedCount} كرت بنجاح.`});
         setIsAddCardOpen(false);
         setSingleCard({ cardNumber: ''});
         setBulkCards('');
-    }).catch(serverError => {
-        const permissionError = new FirestorePermissionError({
-            operation: 'write',
-            path: `networks/${networkId}/cards`,
-            requestResourceData: { cards: cardsToAdd.length },
-        });
-        errorEmitter.emit('permission-error', permissionError);
-    }).finally(() => {
+    } catch (e: any) {
+        console.error('Error saving cards:', e);
+        toast({ title: 'خطأ', description: 'فشلت إضافة الكروت: ' + e.message, variant: 'destructive'});
+    } finally {
         setIsProcessingCards(false);
-    });
+    }
   };
 
   const handleEditCardClick = (card: NetworkCard) => {
@@ -312,25 +374,46 @@ export default function OwnerNetworkManagePage() {
     setEditingCardNumber(card.cardNumber);
   };
   
-  const handleSaveCard = () => {
-    if (!firestore || !networkId || !editingCard || !editingCardNumber) {
+  const handleSaveCard = async () => {
+    if (!firestore || !user?.uid || !editingCard || !editingCardNumber.trim()) {
         toast({ title: "خطأ", description: "بيانات الكرت غير صالحة.", variant: "destructive"});
         return;
     }
-    const cardDocRef = doc(firestore, `networks/${networkId}/cards`, editingCard.id);
-    updateDocumentNonBlocking(cardDocRef, { cardNumber: editingCardNumber });
-    toast({ title: "تم الحفظ", description: "تم تحديث رقم الكرت بنجاح."});
-    setEditingCard(null);
-    setEditingCardNumber('');
+    try {
+        const cardsRef = doc(firestore, `users/${user.uid}/local_networks/${user.uid}/cards_data`, 'cards');
+        const snap = await getDoc(cardsRef);
+        if (!snap.exists()) return;
+        const currentCards = snap.data().cards || [];
+        const updatedCards = currentCards.map((c: any) => {
+            if (String(c.c).trim() === String(editingCard.cardNumber).trim()) {
+                return { ...c, c: editingCardNumber.trim() };
+            }
+            return c;
+        });
+        await setDoc(cardsRef, { cards: updatedCards, updatedAt: serverTimestamp() }, { merge: true });
+        toast({ title: "تم الحفظ", description: "تم تحديث رقم الكرت بنجاح."});
+        setEditingCard(null);
+        setEditingCardNumber('');
+    } catch (e: any) {
+        toast({ title: "خطأ", description: "فشل التعديل: " + e.message, variant: "destructive"});
+    }
   };
   
-  const handleDeleteCard = () => {
-    if (!firestore || !networkId || !cardToDelete) return;
-    const cardDocRef = doc(firestore, `networks/${networkId}/cards`, cardToDelete.id);
-    deleteDocumentNonBlocking(cardDocRef);
-    toast({ title: "تم الحذف", description: "تم حذف الكرت بنجاح.", variant: "destructive"});
-    setCardToDelete(null);
-  }
+  const handleDeleteCard = async () => {
+    if (!firestore || !user?.uid || !cardToDelete) return;
+    try {
+        const cardsRef = doc(firestore, `users/${user.uid}/local_networks/${user.uid}/cards_data`, 'cards');
+        const snap = await getDoc(cardsRef);
+        if (!snap.exists()) return;
+        const currentCards = snap.data().cards || [];
+        const updatedCards = currentCards.filter((c: any) => String(c.c).trim() !== String(cardToDelete.cardNumber).trim());
+        await setDoc(cardsRef, { cards: updatedCards, updatedAt: serverTimestamp() }, { merge: true });
+        toast({ title: "تم الحذف", description: "تم حذف الكرت بنجاح.", variant: "destructive"});
+        setCardToDelete(null);
+    } catch (e: any) {
+        toast({ title: "خطأ", description: "فشل الحذف: " + e.message, variant: "destructive"});
+    }
+  };
 
   const renderCategories = () => {
     if (isLoadingCategories) return <Skeleton className="h-48 w-full rounded-[32px]" />;

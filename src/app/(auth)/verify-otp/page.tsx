@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth, useFirestore } from '@/firebase';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, writeBatch, collection } from 'firebase/firestore';
+import { doc, writeBatch, collection, serverTimestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { ShieldCheck, Clock, RotateCcw, ChevronRight, Loader2, Sparkles, CheckCircle2 } from 'lucide-react';
@@ -114,7 +114,7 @@ export default function VerifyOtpPage() {
                 const batch = writeBatch(firestore!);
                 const userRef = doc(firestore!, 'users', user.uid);
                 const nameParts = fullName.trim().split(/\s+/);
-                const randomAcc = '15' + Math.floor(1000000 + Math.random() * 9000000).toString();
+                const randomAcc = '23' + Math.floor(1000000 + Math.random() * 9000000).toString();
                 const nowIso = new Date().toISOString();
 
                 batch.set(userRef, {
@@ -142,12 +142,22 @@ export default function VerifyOtpPage() {
                 });
                 
                 if (accountType === 'network-owner') {
-                    const networkRef = doc(collection(firestore!, 'networks'));
-                    batch.set(networkRef, {
-                        name: networkName,
-                        location: networkLocation,
-                        ownerId: user.uid,
-                        phoneNumber: phoneNumber.trim()
+                    const localNetRef = doc(firestore!, `users/${user.uid}/local_networks`, user.uid);
+                    batch.set(localNetRef, {
+                        networkId: user.uid,
+                        ownerUid: user.uid,
+                        ownerName: fullName.trim(),
+                        ownerPhone: phoneNumber.trim(),
+                        networkName: (networkName || '').trim(),
+                        name: (networkName || '').trim(),
+                        governorate: 'حضرموت',
+                        city: location || '',
+                        neighborhood: networkLocation || '',
+                        location: (networkLocation || location || '').trim(),
+                        status: 'approved',
+                        categories: [],
+                        createdAt: serverTimestamp(),
+                        updatedAt: serverTimestamp()
                     });
                 }
                 await batch.commit();

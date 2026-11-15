@@ -46,7 +46,8 @@ import {
   limit as firestoreLimit,
   updateDoc,
   arrayUnion,
-  onSnapshot
+  onSnapshot,
+  collectionGroup
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useServicesConfig } from '@/hooks/use-services-config';
@@ -146,7 +147,7 @@ export default function CombinedNetworksPage() {
     return `${parts[0]} ${parts[parts.length - 1]}`;
   };
 
-  // جلب الشبكات المحلية من المستخدمين الذين يملكون local_networks
+  // جلب الشبكات المحلية مباشرة من مجموعة local_networks
   const [localNetworks, setLocalNetworks] = useState<any[]>([]);
   const [isLoadingLocal, setIsLoadingLocal] = useState(true);
 
@@ -154,23 +155,21 @@ export default function CombinedNetworksPage() {
     if (!firestore) return;
     const fetchLocal = async () => {
       try {
-        const uSnap = await getDocs(query(collection(firestore, 'users'), where('networkName', '!=', '')));
+        const netSnap = await getDocs(collectionGroup(firestore, 'local_networks'));
         const nets: any[] = [];
-        for (const u of uSnap.docs) {
-          const lRef = doc(firestore, `users/${u.id}/local_networks`, u.id);
-          const lSnap = await getDoc(lRef);
-          if (lSnap.exists()) {
-            const data = lSnap.data();
-            nets.push({
-              id: u.id,
-              name: data.name || data.networkName,
-              location: data.location || data.city || 'حضرموت',
-              ownerId: u.id,
-              ownerName: data.ownerName || u.data().fullName,
-              ownerPhone: data.ownerPhone || u.data().phoneNumber,
-              categories: data.categories || []
-            });
-          }
+        for (const d of netSnap.docs) {
+          const data = d.data();
+          if (data.status === 'rejected') continue;
+          const ownerId = d.ref.parent.parent ? d.ref.parent.parent.id : (data.ownerUid || d.id);
+          nets.push({
+            id: ownerId,
+            name: data.name || data.networkName || 'شبكة محلية',
+            location: data.location || data.neighborhood || data.city || 'حضرموت',
+            ownerId: ownerId,
+            ownerName: data.ownerName || 'مالك الشبكة',
+            ownerPhone: data.ownerPhone || '',
+            categories: data.categories || []
+          });
         }
         setLocalNetworks(nets);
       } catch (e) {

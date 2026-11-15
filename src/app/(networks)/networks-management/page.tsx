@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PlusCircle, Trash2, Edit, Save, X, Wifi, MapPin, Phone, Search, Settings } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
-import { collection, doc, getDocs, getDoc, query, where, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, getDoc, query, where, updateDoc, collectionGroup } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -40,25 +40,22 @@ export default function NetworksManagementPage() {
   const [networks, setNetworks] = useState<Network[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // جلب الشبكات من حسابات المستخدمين local_networks
+  // جلب الشبكات مباشرة من مجموعة local_networks
   useEffect(() => {
     if (!firestore) return;
     const fetchNetworks = async () => {
       try {
-        const uSnap = await getDocs(query(collection(firestore, 'users'), where('networkName', '!=', '')));
+        const netSnap = await getDocs(collectionGroup(firestore, 'local_networks'));
         const list: Network[] = [];
-        for (const u of uSnap.docs) {
-          const lRef = doc(firestore, `users/${u.id}/local_networks`, u.id);
-          const lSnap = await getDoc(lRef);
-          if (lSnap.exists()) {
-            const data = lSnap.data();
-            list.push({
-              id: u.id,
-              name: data.name || data.networkName || u.data().networkName,
-              location: data.location || data.city || u.data().networkLocation || 'حضرموت',
-              phoneNumber: data.ownerPhone || u.data().phoneNumber || ''
-            });
-          }
+        for (const d of netSnap.docs) {
+          const data = d.data();
+          const ownerId = d.ref.parent.parent ? d.ref.parent.parent.id : (data.ownerUid || d.id);
+          list.push({
+            id: ownerId,
+            name: data.name || data.networkName || 'شبكة محلية',
+            location: data.location || data.neighborhood || data.city || 'حضرموت',
+            phoneNumber: data.ownerPhone || ''
+          });
         }
         setNetworks(list);
       } catch (e) {
@@ -96,14 +93,21 @@ export default function NetworksManagementPage() {
     setEditingId(null);
   };
 
-  const handleSave = (id: string) => {
+  const handleSave = async (id: string) => {
     if (!firestore || !editingValues[id].name || !editingValues[id].location) {
         toast({ title: 'خطأ', description: 'الرجاء تعبئة اسم وموقع الشبكة.', variant: 'destructive'});
         return;
     };
-    const docRef = doc(firestore, 'networks', id);
-    updateDocumentNonBlocking(docRef, editingValues[id]);
+    const localRef = doc(firestore, `users/${id}/local_networks`, id);
+    await updateDocumentNonBlocking(localRef, {
+      name: editingValues[id].name,
+      networkName: editingValues[id].name,
+      location: editingValues[id].location,
+      neighborhood: editingValues[id].location,
+      ownerPhone: editingValues[id].phoneNumber
+    });
     setEditingId(null);
+    setNetworks(prev => prev.map(n => n.id === id ? { ...n, ...editingValues[id] } : n));
     toast({ title: "تم الحفظ", description: "تم تحديث بيانات الشبكة بنجاح." });
   };
   
@@ -114,10 +118,11 @@ export default function NetworksManagementPage() {
     }));
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!firestore) return;
-    const docRef = doc(firestore, 'networks', id);
-    deleteDocumentNonBlocking(docRef);
+    const localRef = doc(firestore, `users/${id}/local_networks`, id);
+    await deleteDocumentNonBlocking(localRef);
+    setNetworks(prev => prev.filter(n => n.id !== id));
     toast({ title: "تم الحذف", description: "تم حذف الشبكة بنجاح.", variant: "destructive" });
   };
   
