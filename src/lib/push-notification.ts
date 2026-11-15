@@ -111,6 +111,41 @@ export async function sendPushNotificationToUser(
       },
     });
 
+    // حفظ الإشعار في مستند notifications المخصص للمستخدم لتظهر في شاشة إشعاراتي بالتطبيق
+    try {
+      const userNotifDocRef = db.collection('users').doc(userId).collection('notifications').doc(userId);
+      const userNotifSnap = await userNotifDocRef.get();
+      const existingNotifs = (userNotifSnap.exists && Array.isArray(userNotifSnap.data()?.notifications))
+        ? userNotifSnap.data()?.notifications
+        : [];
+
+      const newNotif = {
+        id: 'n_' + Date.now(),
+        title: payload.title,
+        body: payload.body,
+        type: 'withdrawal',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+        data: {
+          transid: payload.transid || '',
+          status: payload.status || '',
+          amount: payload.amount || 0
+        }
+      };
+
+      const updatedNotifs = [newNotif, ...existingNotifs].slice(0, 40);
+      const unreadCount = updatedNotifs.filter((n: any) => !n.isRead).length;
+
+      await userNotifDocRef.set({
+        userId,
+        notifications: updatedNotifs,
+        unreadCount,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    } catch (saveErr) {
+      console.error('[FCM] Error saving notification to user notifications doc:', saveErr);
+    }
+
     console.log(`[FCM] Push notification sent successfully to user ${userId}`);
   } catch (err: any) {
     console.warn(`[FCM] Failed to send push notification to user ${userId}:`, err?.message || err);
