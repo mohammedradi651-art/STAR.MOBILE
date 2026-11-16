@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
-import { collection, query, where, getDocs, doc, writeBatch, increment, getDoc, runTransaction } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, writeBatch, increment, getDoc, runTransaction, arrayUnion } from 'firebase/firestore';
 import { DEFAULT_SERVICES_CONFIG, SystemServicesConfig, calculateApiTransactionCost } from '@/lib/services-config';
 import { 
   validateTelecomRequest, 

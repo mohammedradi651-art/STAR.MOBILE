@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
-import { collection, query, where, getDocs, doc, writeBatch, increment, limit as firestoreLimit, getDoc, updateDoc, setDoc, collectionGroup } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, writeBatch, increment, limit as firestoreLimit, getDoc, updateDoc, setDoc, collectionGroup, arrayUnion } from 'firebase/firestore';
 
 /**
  * @fileOverview بوابة الربط البرمجي للشبكات v1.6

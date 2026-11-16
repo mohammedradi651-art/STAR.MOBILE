@@ -9,7 +9,8 @@ import {
   writeBatch, 
   increment, 
   limit as firestoreLimit,
-  addDoc
+  addDoc,
+  arrayUnion
 } from 'firebase/firestore';
 
 export const dynamic = 'force-dynamic';

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
-import { collection, query, where, getDocs, doc, writeBatch, increment, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, writeBatch, increment, getDoc, arrayUnion } from 'firebase/firestore';
 import { DEFAULT_SERVICES_CONFIG, SystemServicesConfig, calculateFinalServicePrice } from '@/lib/services-config';
 
 /**
