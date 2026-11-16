@@ -493,11 +493,19 @@ export default function UsersPage() {
     
     updateDocumentNonBlocking(userDocRef, { balance: increment(amount) });
     setSearchedUsers(prev => prev.map(u => u.id === selectedUser.id ? { ...u, balance: (u.balance || 0) + amount } : u));
-    addDocumentNonBlocking(userNotificationsRef, {
-      title: 'تمت تغذية حسابك',
-      body: `تمت إضافة مبلغ ${amount.toLocaleString('en-US')} ريال إلى رصيدك.`,
-      timestamp: new Date().toISOString()
-    });
+    
+    // إرسال إشعار سحابي FCM فوري وتسجيله في المستند الموحد
+    fetch('/api/notifications/send-push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: selectedUser.id,
+        title: 'تمت تغذية حسابك بنجاح ✅',
+        body: `تمت إضافة مبلغ ${amount.toLocaleString('en-US')} ريال إلى رصيدك.`,
+        status: 'success',
+        amount: amount,
+      })
+    }).catch(e => console.error("Notification Push Error", e));
 
     // إرسال واتساب تلقائي
     if (selectedUser.phoneNumber) {

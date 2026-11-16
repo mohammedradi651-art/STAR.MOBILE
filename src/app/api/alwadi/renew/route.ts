@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import xmlrpc from 'xmlrpc';
 import { initializeServerFirebase } from '@/firebase/server-init';
-import { doc, getDoc, writeBatch, increment, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, writeBatch, increment, collection, query, where, getDocs, arrayUnion } from 'firebase/firestore';
 
 export const dynamic = 'force-dynamic';
 
@@ -169,11 +169,11 @@ export async function POST(req: Request) {
         }, { status: 400, headers: corsHeaders });
       }
 
-      // خصم الرصيد في السيرفر وتسجيل المعاملة كـ "قيد الانتظار"
+      // خصم الرصيد في السيرفر وتسجيل المعاملة في مستند history الموحد كـ "قيد الانتظار"
       try {
         const batch = writeBatch(firestore);
         const userRef = doc(firestore, 'users', effectiveUserId);
-        const userTxRef = doc(firestore, `users/${effectiveUserId}/transactions`, serverTransId);
+        const historyRef = doc(firestore, `users/${effectiveUserId}/transactions`, 'history');
         const globalTxRef = doc(firestore, 'paymentTransactions', serverTransId);
         const now = new Date().toISOString();
 
@@ -183,19 +183,29 @@ export async function POST(req: Request) {
           id: serverTransId,
           userId: effectiveUserId,
           transactionDate: now,
+          date: now,
+          d: now,
           createdAt: now,
           amount: finalCost,
+          a: finalCost,
           transactionType: 'تجديد منظومة الوادي',
+          t: 'تجديد منظومة الوادي',
           notes: `تجديد كرت الوادي رقم: ${cardNumber} (قيد المعالجة)`,
           recipientPhoneNumber: cardNumber,
           cardNumber: cardNumber,
           status: 'pending',
+          s: 'pending',
           readiness: 'قيد الانتظار',
+          r: 'قيد الانتظار',
           refunded: false,
           serviceCategory: 'منظومة الوادي'
         };
 
-        batch.set(userTxRef, txRecord);
+        batch.set(historyRef, {
+          list: arrayUnion(txRecord),
+          transactions: arrayUnion(txRecord),
+          lastUpdated: now
+        }, { merge: true });
         batch.set(globalTxRef, txRecord);
         await batch.commit();
         didDeductOnServer = true;
@@ -251,23 +261,44 @@ export async function POST(req: Request) {
     }
 
     if (createResult) {
-      // وضع علامة نجاح وجاهزة على المعاملة
+      // وضع علامة نجاح وجاهزة على المعاملة في history
       if (didDeductOnServer && effectiveUserId) {
         try {
           const successBatch = writeBatch(firestore);
-          const userTxRef = doc(firestore, `users/${effectiveUserId}/transactions`, serverTransId);
+          const historyRef = doc(firestore, `users/${effectiveUserId}/transactions`, 'history');
           const globalTxRef = doc(firestore, 'paymentTransactions', serverTransId);
+          const nowStr = new Date().toISOString();
+
+          const hSnap = await getDoc(historyRef);
+          if (hSnap.exists()) {
+            const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+            const updatedList = rawList.map((item: any) => {
+              if (item.id === serverTransId) {
+                return {
+                  ...item,
+                  status: 'success',
+                  s: 'completed',
+                  readiness: 'جاهزة',
+                  r: 'جاهزة',
+                  notes: `تم تجديد كرت الوادي رقم: ${cardNumber} بنجاح. رقم السجل: ${createResult}`,
+                  completedAt: nowStr
+                };
+              }
+              return item;
+            });
+            successBatch.set(historyRef, { list: updatedList, transactions: updatedList, lastUpdated: nowStr }, { merge: true });
+          }
+
           const successData = {
             status: 'success',
             readiness: 'جاهزة',
             notes: `تم تجديد كرت الوادي رقم: ${cardNumber} بنجاح. رقم السجل: ${createResult}`,
-            completedAt: new Date().toISOString()
+            completedAt: nowStr
           };
-          successBatch.update(userTxRef, successData);
           successBatch.update(globalTxRef, successData);
           await successBatch.commit();
         } catch (e) {
-          console.warn("Could not update tx to success:", e);
+          console.warn("Could not update tx to success in history:", e);
         }
       }
 
@@ -295,19 +326,41 @@ export async function POST(req: Request) {
 async function refundAlwadi(firestore: any, userId: string, transid: string, amount: number, reason: string) {
   try {
     const userRef = doc(firestore, 'users', userId);
-    const userTxRef = doc(firestore, `users/${userId}/transactions`, transid);
+    const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
     const globalTxRef = doc(firestore, 'paymentTransactions', transid);
+    const nowStr = new Date().toISOString();
 
     const batch = writeBatch(firestore);
     batch.update(userRef, { balance: increment(amount) });
+
+    const hSnap = await getDoc(historyRef);
+    if (hSnap.exists()) {
+      const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+      const updatedList = rawList.map((item: any) => {
+        if (item.id === transid) {
+          return {
+            ...item,
+            status: 'failed',
+            s: 'failed',
+            readiness: 'فاشلة',
+            r: 'فاشلة',
+            refunded: true,
+            notes: `فشلت العملية وتمت إعادة المبلغ (${amount} ر.ي): ${reason}`,
+            failedAt: nowStr
+          };
+        }
+        return item;
+      });
+      batch.set(historyRef, { list: updatedList, transactions: updatedList, lastUpdated: nowStr }, { merge: true });
+    }
+
     const failedData = {
       status: 'failed',
       readiness: 'فاشلة',
       refunded: true,
       notes: `فشلت العملية وتمت إعادة المبلغ (${amount} ر.ي): ${reason}`,
-      failedAt: new Date().toISOString()
+      failedAt: nowStr
     };
-    batch.update(userTxRef, failedData);
     batch.update(globalTxRef, failedData);
     await batch.commit();
   } catch (e) {

@@ -336,19 +336,20 @@ export default function DepositManagementPage() {
                 console.error("Error updating history in omqy approve:", e);
             }
 
-            // 4. إشعار العميل
-            const notifRef = doc(collection(firestore, `users/${req.userId}/notifications`));
-            batch.set(notifRef, {
-                id: notifRef.id,
-                title: 'تم شحن رصيدك بنجاح ✅',
-                body: `تمت الموافقة على طلب تغذية رصيدك بمبلغ ${req.amount.toLocaleString()} ر.ي عبر ${req.bankName}. الرصيد متاح في محفظتك الآن.`,
-                type: 'deposit_approved',
-                read: false,
-                createdAt: now,
-                timestamp: now
-            });
-
             await batch.commit();
+
+            // 4. إشعار العميل السحابي والموحد
+            fetch('/api/notifications/send-push', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: req.userId,
+                    title: 'تم شحن رصيدك بنجاح ✅',
+                    body: `تمت الموافقة على طلب تغذية رصيدك بمبلغ ${req.amount.toLocaleString()} ر.ي عبر ${req.bankName}. الرصيد متاح في محفظتك الآن.`,
+                    status: 'success',
+                    amount: req.amount,
+                })
+            }).catch(() => {});
 
             toast({
                 title: "تمت الموافقة بنجاح 🎉",
@@ -453,19 +454,20 @@ export default function DepositManagementPage() {
                 console.error("Error updating history in omqy reject:", e);
             }
 
-            // 3. إرسال إشعار للعميل يوضح سبب الرفض
-            const notifRef = doc(collection(firestore, `users/${req.userId}/notifications`));
-            batch.set(notifRef, {
-                id: notifRef.id,
-                title: 'تعذر قبول طلب التغذية ❌',
-                body: `تم رفض طلب تغذية رصيدك بمبلغ ${req.amount.toLocaleString()} ر.ي. السبب: ${reason}`,
-                type: 'deposit_rejected',
-                read: false,
-                createdAt: now,
-                timestamp: now
-            });
-
             await batch.commit();
+
+            // 3. إرسال إشعار سحابي وموحد للعميل يوضح سبب الرفض
+            fetch('/api/notifications/send-push', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: req.userId,
+                    title: 'تعذر قبول طلب التغذية ❌',
+                    body: `تم رفض طلب تغذية رصيدك بمبلغ ${req.amount.toLocaleString()} ر.ي. السبب: ${reason}`,
+                    status: 'failed',
+                    amount: req.amount,
+                })
+            }).catch(() => {});
 
             toast({
                 title: "تم رفض الطلب",

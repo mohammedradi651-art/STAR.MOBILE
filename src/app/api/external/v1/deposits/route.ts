@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
-import { collection, query, where, getDocs, orderBy, limit as firestoreLimit, doc, getDoc, writeBatch, increment } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, limit as firestoreLimit, doc, getDoc, writeBatch, increment, arrayUnion } from 'firebase/firestore';
+import { sendPushNotificationToUser } from '@/lib/push-notification';
 
 /**
  * @fileOverview نقطة نهاية مراقبة وشحن الإيداعات البنكية v1.8 (Master Scope)
@@ -129,24 +130,35 @@ export async function POST(req: Request) {
             batch.update(targetDoc.ref, { balance: increment(depositData.amount) });
             batch.update(depositRef, { status: 'paid', paidTo: targetId, paidAt: timestamp, matchedVia: 'Master-API' });
 
-            const txRef = doc(collection(firestore, `users/${targetId}/transactions`));
-            batch.set(txRef, {
+            const historyRef = doc(firestore, `users/${targetId}/transactions`, 'history');
+            const depositTx = {
+                id: `DEP-${Date.now()}`,
                 userId: targetId,
                 transactionDate: timestamp,
                 amount: depositData.amount,
                 transactionType: `تغذية حساب`,
                 notes: `إيداع بنكي - ${depositData.bank}`,
-                status: 'success'
-            });
-
-            const notifRef = doc(collection(firestore, `users/${targetId}/notifications`));
-            batch.set(notifRef, {
-                title: 'تم شحن رصيدك ✅',
-                body: `تم إضافة ${depositData.amount.toLocaleString()} ريال لحسابك عبر مطابقة إيداع بنكي.`,
-                timestamp: timestamp
-            });
+                status: 'success',
+                readiness: 'جاهزة'
+            };
+            batch.set(historyRef, {
+                list: arrayUnion(depositTx),
+                transactions: arrayUnion(depositTx),
+                lastUpdated: timestamp
+            }, { merge: true });
 
             await batch.commit();
+
+            // إرسال إشعار سحابي FCM فوري وتوثيقه في المستند الموحد
+            try {
+                await sendPushNotificationToUser(firestore, targetId, {
+                    title: 'تم شحن رصيدك ✅',
+                    body: `تم إضافة ${depositData.amount.toLocaleString()} ريال لحسابك عبر مطابقة إيداع بنكي.`,
+                    transid: `DEP-${Date.now()}`,
+                    status: 'success',
+                    amount: depositData.amount,
+                });
+            } catch (_) {}
 
             return NextResponse.json({
                 success: true,

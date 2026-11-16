@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import * as admin from 'firebase-admin';
+import { sendPushNotificationToUser } from '@/lib/push-notification';
 
 export const dynamic = 'force-dynamic';
 
@@ -250,18 +251,7 @@ export async function POST(req: Request) {
             } catch (_) {}
           }
 
-          // 3. إضافة إشعار داخل التطبيق للعميل
-          if (userId) {
-            const networkTitle = orderData?.class?.network?.name || existingOrder.networkName || 'الخير';
-            const classTitle = orderData?.class?.name || existingOrder.className || '';
-            await db.collection('users').doc(userId).collection('notifications').add({
-              title: 'تم إصدار كرت الشبكة بنجاح 🎉',
-              body: `تم تجهيز كرتك لشبكة: ${networkTitle} (${classTitle})\nرقم الكرت: ${cardData.cardID}`,
-              timestamp: nowIso,
-              type: 'card_delivered',
-              cardNumber: cardData.cardID,
-            });
-          }
+          // 3. تم إلغاء إشعار إصدار الكرت نهائياً بناءً على طلب الإدارة (تم إصدار كرت الشبكة بنجاح 🎉)
 
           // 4. إرسال رسالة SMS للعميل إذا توفر رقم جواله
           if (existingOrder.phoneNumber) {
@@ -280,13 +270,16 @@ export async function POST(req: Request) {
                 balance: admin.firestore.FieldValue.increment(refundAmount),
               });
 
-              // إشعار العميل بفشل الإصدار دون ذكر استرجاع الرصيد
-              await db.collection('users').doc(userId).collection('notifications').add({
-                title: 'تعذر إصدار الكرت ⚠️',
-                body: `تعذر إصدار كرت ${existingOrder.className || ''}، يرجى التواصل مع الادارة 770326828`,
-                timestamp: nowIso,
-                type: 'card_failed',
-              });
+              // إشعار العميل الموحد بفشل الإصدار مع إرسال إشعار سحابي FCM
+              try {
+                await sendPushNotificationToUser(null, userId, {
+                  title: 'تعذر إصدار الكرت ⚠️',
+                  body: `تعذر إصدار كرت ${existingOrder.className || ''}، يرجى التواصل مع الادارة 770326828`,
+                  transid: transactionId || externalRef,
+                  status: 'failed',
+                  amount: refundAmount,
+                });
+              } catch (_) {}
             }
 
             await orderRef.update({

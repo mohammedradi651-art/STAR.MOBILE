@@ -561,19 +561,7 @@ export async function POST(req: Request) {
       await batch.commit();
     }
 
-    // د. إضافة إشعار في حساب العميل
-    try {
-      const notifsCol = collection(firestore, `users/${userDoc.id}/notifications`);
-      await addDoc(notifsCol, {
-        title: 'تم شراء كرت شبكة بنجاح 💙',
-        message: `تم شراء كرت ${categoryName || ''} لشبكة ${networkName}. رقم الكرت: ${purchasedCardNumber}`,
-        timestamp: now,
-        type: 'network_card',
-        cardNumber: purchasedCardNumber
-      });
-    } catch (e) {
-      console.warn('Failed to add client notification', e);
-    }
+    // د. تم إلغاء إضافة إشعار كرت الشبكة بناءً على طلب الإدارة
 
     const newBalance = currentBalance - finalCategoryPrice;
 

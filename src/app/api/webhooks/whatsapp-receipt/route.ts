@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import * as admin from 'firebase-admin';
+import { sendPushNotificationToUser } from '@/lib/push-notification';
 
 /**
  * @fileOverview المسار الرسمي والنهائي لإيداع الرصيد آلياً عبر بوت الواتساب.
@@ -82,11 +83,13 @@ export async function POST(req: Request) {
     const userId = userDoc.id;
     const userData = userDoc.data();
 
-    // 4. منع تكرار شحن نفس الإيصال
-    const txRef = db.collection('users').doc(userId).collection('transactions');
-    const duplicateCheck = await txRef.where('receiptReference', '==', receiptNumber).limit(1).get();
+    // 4. منع تكرار شحن نفس الإيصال (فحص في المستند الموحد history)
+    const historyRef = db.collection('users').doc(userId).collection('transactions').doc('history');
+    const histSnap = await historyRef.get();
+    const existingList = histSnap.exists ? (histSnap.data()?.list || histSnap.data()?.transactions || []) : [];
+    const isDuplicate = existingList.some((t: any) => t.receiptReference === receiptNumber || t.rcpt === receiptNumber);
 
-    if (!duplicateCheck.empty) {
+    if (isDuplicate) {
       return NextResponse.json({ success: false, message: 'Receipt already processed' }, { status: 409 });
     }
 
@@ -98,26 +101,43 @@ export async function POST(req: Request) {
         balance: admin.firestore.FieldValue.increment(numericAmount) 
     });
 
-    const newTxRef = txRef.doc();
-    batch.set(newTxRef, {
+    const txId = `WA-${Date.now()}`;
+    const newTxEntry = {
+        id: txId,
         userId,
         transactionDate: now,
+        date: now,
         amount: numericAmount,
+        a: numericAmount,
         transactionType: 'تغذية رصيد (آلي)',
+        t: 'تغذية رصيد (آلي)',
         notes: `شحن آلي للإيصال: ${receiptNumber}`,
         receiptReference: receiptNumber,
-        status: 'success'
-    });
+        rcpt: receiptNumber,
+        status: 'success',
+        readiness: 'جاهزة'
+    };
 
-    const notifRef = db.collection('users').doc(userId).collection('notifications').doc();
-    batch.set(notifRef, {
-        title: 'تم شحن رصيدك بنجاح ✅',
-        body: `تم إضافة ${numericAmount.toLocaleString()} ريال إلى حسابك عبر الواتساب.`,
-        timestamp: now,
-        type: 'deposit'
-    });
+    const updatedList = [newTxEntry, ...existingList];
+    batch.set(historyRef, {
+        list: updatedList,
+        transactions: updatedList,
+        lastUpdated: now,
+        schema: 'compact_v1'
+    }, { merge: true });
 
     await batch.commit();
+
+    // إرسال إشعار سحابي FCM فوري وتوثيقه في المستند الموحد
+    try {
+        await sendPushNotificationToUser(null, userId, {
+            title: 'تم شحن رصيدك بنجاح ✅',
+            body: `تم إضافة ${numericAmount.toLocaleString()} ريال إلى حسابك عبر الواتساب.`,
+            transid: txId,
+            status: 'success',
+            amount: numericAmount,
+        });
+    } catch (_) {}
 
     return NextResponse.json({ 
         success: true, 

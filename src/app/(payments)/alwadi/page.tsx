@@ -216,14 +216,22 @@ export default function AlwadiPage() {
             await batch.commit();
         }
 
-        // تسجيل الإشعار بنجاح التجديد
-        const now = new Date().toISOString();
-        const notifRef = doc(collection(firestore, 'users', user.uid, 'notifications'));
-        await setDoc(notifRef, {
-            title: 'تم التجديد بنجاح',
-            body: `تم تجديد باقة ${selectedOption.title} بنجاح لمشترك منظومة الوادي: ${inquiryResult.data.name}.`,
-            timestamp: now
-        }).catch(e => console.warn("Failed to create notification:", e));
+        // تسجيل الإشعار بنجاح التجديد في الموحد مع إشعار سحابي فوري
+        try {
+            await fetch('/api/notifications/send-push', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: user.uid,
+                    title: 'تم التجديد بنجاح ✅',
+                    body: `تم تجديد باقة ${selectedOption.title} بنجاح لمشترك منظومة الوادي: ${inquiryResult.data.name}.`,
+                    status: 'success',
+                    amount: finalPrice,
+                })
+            });
+        } catch (e) {
+            console.warn("Failed to send push/notification:", e);
+        }
 
         // إرسال إشعار SMS تلقائي بالصيغة الملكية المطلوبة
         if (userProfile?.phoneNumber) {

@@ -653,13 +653,6 @@ function UserReportPage() {
         };
         if (userTxSnap.exists()) batch.update(userTxRef, updateData);
         if (globalTxSnap.exists()) batch.update(globalTxRef, updateData);
-
-        const notifRef = doc(collection(firestore, `users/${userId}/notifications`));
-        batch.set(notifRef, {
-          title: 'اكتملت العملية بنجاح',
-          body: `تم تأكيد سداد عملية ${statusTargetTx.transactionType} بمبلغ ${amount.toLocaleString('en-US')} ريال. الملاحظة: ${statusNote.trim() || 'تم التسديد بنجاح'}.`,
-          timestamp: now
-        });
       } else {
         // فشل وإرجاع الرصيد للمستخدم
         batch.update(userDocRef, { balance: increment(amount) });
@@ -676,18 +669,11 @@ function UserReportPage() {
         };
         if (userTxSnap.exists()) batch.update(userTxRef, updateData);
         if (globalTxSnap.exists()) batch.update(globalTxRef, updateData);
-
-        const notifRef = doc(collection(firestore, `users/${userId}/notifications`));
-        batch.set(notifRef, {
-          title: 'تم استرجاع الرصيد',
-          body: `تعذر تنفيذ عملية ${statusTargetTx.transactionType} وتمت إعادة مبلغ ${amount.toLocaleString('en-US')} ريال إلى محفظتك. الملاحظة: ${statusNote.trim() || 'فشلت العملية وتمت إعادة المبلغ للرصيد'}.`,
-          timestamp: now
-        });
       }
 
       await batch.commit();
 
-      // إرسال إشعار سحابي FCM مباشر إلى صاحب الحساب
+      // إرسال إشعار سحابي FCM مباشر إلى صاحب الحساب وحفظه في المستند الموحد
       try {
         fetch('/api/notifications/send-push', {
           method: 'POST',
@@ -696,10 +682,13 @@ function UserReportPage() {
             userId: userId,
             title: targetStatus === 'success' ? 'اكتملت العملية بنجاح ✅' : 'فشلت العملية وتم استرجاع الرصيد ⚠️',
             body: targetStatus === 'success'
-              ? `تم تأكيد سداد ${statusTargetTx.transactionType} بمبلغ ${amount.toLocaleString()} ريال بنجاح.`
-              : `تعذر تنفيذ ${statusTargetTx.transactionType} وتمت إعادة مبلغ ${amount.toLocaleString()} ريال إلى محفظتك.`
+              ? `تم تأكيد سداد عملية ${statusTargetTx.transactionType} بمبلغ ${amount.toLocaleString('en-US')} ريال. الملاحظة: ${statusNote.trim() || 'تم التسديد بنجاح'}.`
+              : `تعذر تنفيذ عملية ${statusTargetTx.transactionType} وتمت إعادة مبلغ ${amount.toLocaleString('en-US')} ريال إلى محفظتك. الملاحظة: ${statusNote.trim() || 'فشلت العملية وتمت إعادة المبلغ للرصيد'}.`,
+            transid: String(statusTargetTx.id || statusTargetTx.transid || ''),
+            status: targetStatus === 'success' ? 'success' : 'failed',
+            amount: amount
           })
-        }).catch(() => {});
+        }).catch(e => console.warn('Push error:', e));
       } catch (_) {}
 
       if (statusTargetTx.clientBackUrl) {
