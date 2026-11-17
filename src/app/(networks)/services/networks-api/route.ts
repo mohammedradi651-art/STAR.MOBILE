@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+export const revalidate = 60; // كاش سريع على السيرفر لمدة دقيقة لتسريع الاستجابة الفورية
 
 const EXTERNAL_API_URL = 'https://apis.baitynet.net/api/partner/networks';
 
@@ -24,10 +24,9 @@ export async function GET() {
         'x-api-key': API_KEY.trim(),
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'User-Agent': 'StarMobileApp/1.0', // إضافة User-Agent لضمان قبول الطلب في Vercel
+        'User-Agent': 'StarMobileApp/1.0',
       },
-      next: { revalidate: 0 },
-      cache: 'no-store'
+      next: { revalidate: 60 }
     });
 
     const contentType = response.headers.get("content-type") || "";

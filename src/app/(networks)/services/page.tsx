@@ -147,9 +147,26 @@ export default function CombinedNetworksPage() {
     return `${parts[0]} ${parts[parts.length - 1]}`;
   };
 
-  // جلب الشبكات المحلية مباشرة من مجموعة local_networks
-  const [localNetworks, setLocalNetworks] = useState<any[]>([]);
-  const [isLoadingLocal, setIsLoadingLocal] = useState(true);
+  // جلب الشبكات المحلية مع كاش محلي سريع جداً
+  const [localNetworks, setLocalNetworks] = useState<any[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('star_mobile_local_networks_cache');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch (e) {}
+    }
+    return [];
+  });
+  const [isLoadingLocal, setIsLoadingLocal] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const cached = localStorage.getItem('star_mobile_local_networks_cache');
+      return !cached;
+    }
+    return true;
+  });
 
   useEffect(() => {
     if (!firestore) return;
@@ -172,6 +189,7 @@ export default function CombinedNetworksPage() {
           });
         }
         setLocalNetworks(nets);
+        localStorage.setItem('star_mobile_local_networks_cache', JSON.stringify(nets));
       } catch (e) {
         console.error('Error fetching local networks:', e);
       } finally {
@@ -813,9 +831,9 @@ export default function CombinedNetworksPage() {
         </div>
         
         <div className="flex-1 overflow-y-auto px-4 pb-20 space-y-4">
-            {(isLoadingLocal || (isLoadingApi && apiNetworks.length === 0)) ? (
+            {(isLoadingLocal && localNetworks.length === 0 && isLoadingApi && apiNetworks.length === 0) ? (
                 <div className="flex justify-center py-20"><ProcessingOverlay /></div>
-            ) : allNetworksCombined.length === 0 ? (
+            ) : allNetworksCombined.length === 0 && !isLoadingLocal && !isLoadingApi ? (
                 <div className="text-center py-20 opacity-40"><Wifi className="h-16 w-16 mx-auto mb-4" /><p className="font-bold">لا توجد شبكات متاحة حالياً</p></div>
             ) : (
                 allNetworksCombined.map((net, index) => (

@@ -119,6 +119,11 @@ export function BalanceCard() {
     setIsConfigOpen(true);
   };
 
+  useEffect(() => {
+    // التحميل المسبق لصفحة الشبكات لتفتح بلمح البصر عند الضغط
+    router.prefetch('/services');
+  }, [router]);
+
   const handleActionClick = (service: any) => {
     if (isOffline && service.requiresInternet) {
       return;
