@@ -230,9 +230,10 @@ export async function initiateTelecomPayment({
     // تم إلغاء إنشاء مستند منفصل والاعتماد حصرياً على history
     // transaction.set(userTxRef, txData);
     transaction.set(globalTxRef, txData);
-    // حفظ في المستند الموحد history
+    // حفظ في المستند الموحد history في كلا الحقلين list و transactions لضمان التوافق مع التطبيق والموقع
     const userHistoryRef = doc(firestore, `users/${userId}/transactions`, 'history');
     transaction.set(userHistoryRef, {
+      list: arrayUnion(txData),
       transactions: arrayUnion(txData),
       lastUpdated: createdAt
     }, { merge: true });
@@ -268,9 +269,13 @@ export async function markPaymentSuccess(
       const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
       const hSnap = await getDoc(historyRef);
       if (hSnap.exists()) {
-        const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
-        const updatedList = rawList.map((item: any) => {
+        const rawList = hSnap.data()?.list || [];
+        const rawTxs = hSnap.data()?.transactions || [];
+        
+        let found = false;
+        const mapItem = (item: any) => {
           if (item.id === transid || item.transid === transid) {
+            found = true;
             return {
               ...item,
               status: 'success',
@@ -282,8 +287,28 @@ export async function markPaymentSuccess(
             };
           }
           return item;
-        });
-        batch.set(historyRef, { list: updatedList, transactions: updatedList, lastUpdated: new Date().toISOString() }, { merge: true });
+        };
+
+        let updatedList = rawList.map(mapItem);
+        let updatedTxs = rawTxs.map(mapItem);
+
+        // إذا لم تكن موجودة في المصفوفات (مثلاً بسبب عدم اكتمال الكتابة الأولى)، نضيفها فوراً
+        if (!found) {
+          const newTx = {
+            id: transid,
+            transid: transid,
+            status: 'success',
+            s: 'completed',
+            readiness: 'جاهزة',
+            r: 'جاهزة',
+            providerMessage: providerMessage || 'تم تنفيذ العملية بنجاح',
+            completedAt: new Date().toISOString()
+          };
+          updatedList = [newTx, ...updatedList];
+          updatedTxs = [...updatedTxs, newTx];
+        }
+
+        batch.set(historyRef, { list: updatedList, transactions: updatedTxs, lastUpdated: new Date().toISOString() }, { merge: true });
       }
     } catch (_) {}
 
@@ -391,9 +416,13 @@ export async function markPaymentFailedAndRefund(
       const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
       const hSnap = await getDoc(historyRef);
       if (hSnap.exists()) {
-        const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
-        const updatedList = rawList.map((item: any) => {
+        const rawList = hSnap.data()?.list || [];
+        const rawTxs = hSnap.data()?.transactions || [];
+
+        let found = false;
+        const mapFailedItem = (item: any) => {
           if (item.id === transid || item.transid === transid) {
+            found = true;
             return {
               ...item,
               status: 'failed',
@@ -407,8 +436,31 @@ export async function markPaymentFailedAndRefund(
             };
           }
           return item;
-        });
-        batch.set(historyRef, { list: updatedList, transactions: updatedList, lastUpdated: new Date().toISOString() }, { merge: true });
+        };
+
+        let updatedList = rawList.map(mapFailedItem);
+        let updatedTxs = rawTxs.map(mapFailedItem);
+
+        if (!found) {
+          const newFailedTx = {
+            id: transid,
+            transid: transid,
+            amount: amount,
+            a: amount,
+            status: 'failed',
+            s: 'failed',
+            readiness: 'فاشلة',
+            r: 'فاشلة',
+            refunded: true,
+            providerMessage: cleanReason,
+            notes: updatedNotes,
+            failedAt: new Date().toISOString()
+          };
+          updatedList = [newFailedTx, ...updatedList];
+          updatedTxs = [...updatedTxs, newFailedTx];
+        }
+
+        batch.set(historyRef, { list: updatedList, transactions: updatedTxs, lastUpdated: new Date().toISOString() }, { merge: true });
       }
     } catch (_) {}
 
