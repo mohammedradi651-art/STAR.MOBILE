@@ -151,7 +151,13 @@ export function RecentTransactions() {
       const a = Number(item.amount ?? item.a ?? 0) || 0;
       const d = item.transactionDate || item.d || item.createdAt || item.date || new Date().toISOString();
       const s = String(item.status || item.s || 'success');
-      const r = String(item.readiness || item.r || (s === 'completed' || s === 'جاهز' ? 'جاهز' : (s === 'pending' ? 'قيد الانتظار' : 'غير جاهز')));
+      const r = String(
+        item.readiness || 
+        item.r || 
+        (s === 'completed' || s === 'جاهز' || s === 'success' || s === 'تم' ? 'جاهز' : 
+        (s === 'pending' || s === 'معلق' || s === 'قيد الانتظار' ? 'قيد الانتظار' : 
+        (s === 'failed' || s === 'rejected' || s === 'cancelled' || s === 'مرفوض' || s === 'فاشل' || s === 'فاشلة' ? 'غير جاهز' : 'جاهز')))
+      );
       const ph = String(item.recipientPhoneNumber || item.ph || item.phone || item.mobile || item.targetPhone || '');
       const notes = String(item.notes || item.note || '');
 
