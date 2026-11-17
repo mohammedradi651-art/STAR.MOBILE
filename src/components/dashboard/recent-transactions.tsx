@@ -127,9 +127,23 @@ export function RecentTransactions() {
 
   const transactions: Transaction[] = React.useMemo(() => {
     if (!historyData) return [];
-    const arr = Array.isArray(historyData.list) && historyData.list.length > 0
-      ? historyData.list
-      : (Array.isArray(historyData.transactions) ? historyData.transactions : []);
+    const listArr = Array.isArray(historyData.list) ? historyData.list : [];
+    const txArr = Array.isArray(historyData.transactions) ? historyData.transactions : [];
+
+    const map = new Map<string, any>();
+    for (const item of txArr) {
+      const id = String(item.id || item.transid || item.operationId || '');
+      if (id) map.set(id, item);
+    }
+    for (const item of listArr) {
+      const id = String(item.id || item.transid || item.operationId || '');
+      if (id) {
+        const existing = map.get(id) || {};
+        map.set(id, { ...existing, ...item });
+      }
+    }
+
+    const arr = Array.from(map.values());
 
     return arr.map((item: any) => {
       const id = String(item.id || item.transid || item.operationId || '');

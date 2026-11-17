@@ -443,8 +443,21 @@ export default function CombinedNetworksPage() {
                 status: 'completed',
                 readiness: 'جاهزة'
             };
+            const compactBuyerTx = {
+                id: buyerTx.id,
+                t: buyerTx.transactionType,
+                a: buyerTx.amount,
+                d: buyerTx.transactionDate,
+                s: buyerTx.status,
+                r: buyerTx.readiness,
+                net: selectedNetwork.name,
+                cat: selectedCategory.name,
+                card: finalCardID,
+                note: buyerTx.notes,
+            };
             batch.set(userHistoryRef, {
                 transactions: arrayUnion(buyerTx),
+                list: arrayUnion(compactBuyerTx),
                 lastUpdated: now
             }, { merge: true });
 
@@ -464,8 +477,20 @@ export default function CombinedNetworksPage() {
                     status: 'completed',
                     readiness: 'جاهزة'
                 };
+                const compactOwnerTx = {
+                    id: ownerTx.id,
+                    t: ownerTx.transactionType,
+                    a: ownerTx.amount,
+                    d: ownerTx.transactionDate,
+                    s: ownerTx.status,
+                    r: ownerTx.readiness,
+                    net: selectedNetwork.name,
+                    cat: selectedCategory.name,
+                    note: ownerTx.notes,
+                };
                 batch.set(ownerHistoryRef, {
                     transactions: arrayUnion(ownerTx),
+                    list: arrayUnion(compactOwnerTx),
                     lastUpdated: now
                 }, { merge: true });
             }

@@ -129,12 +129,21 @@ export default function TransactionsPage() {
     const map = new Map<string, any>();
 
     if (historyData) {
-      const arr = Array.isArray(historyData.list) && historyData.list.length > 0 
-        ? historyData.list 
-        : (Array.isArray(historyData.transactions) ? historyData.transactions : []);
-      for (const item of arr) {
+      const listArr = Array.isArray(historyData.list) ? historyData.list : [];
+      const txArr = Array.isArray(historyData.transactions) ? historyData.transactions : [];
+      
+      // دمج مصفوفتي list و transactions معاً لضمان عدم سقوط أي عملية مهما كان مصدرها
+      for (const item of txArr) {
         const id = String(item.id || item.transid || item.operationId || '');
         if (id) map.set(id, item);
+      }
+      for (const item of listArr) {
+        const id = String(item.id || item.transid || item.operationId || '');
+        if (id) {
+          // دمج الخصائص
+          const existing = map.get(id) || {};
+          map.set(id, { ...existing, ...item });
+        }
       }
     }
 
