@@ -1220,7 +1220,7 @@ export async function POST(request: Request) {
       } else {
         // رفض مؤكد من المزود -> إرجاع الفلوس فوراً وإظهار سبب الرفض فقط (دون أي عبارات استرجاع أو بادئات تقنية)
         const failReason = formatProviderErrorMessage(data.resultDesc || data.message || data.reason || 'تم رفض العملية من قبل مزود الخدمة.');
-        if (shouldPerformImmediateDeduction && clientUserId) {
+        if (shouldPerformImmediateDeduction && clientUserId && !isInternalHandled) {
           await refundUser(firestore, clientUserId, transid, requiredCost, failReason);
           initialBalance += requiredCost;
         }
@@ -1230,7 +1230,7 @@ export async function POST(request: Request) {
           resultCode: data.resultCode || "-1",
           status: "failed",
           readiness: "فاشلة",
-          refunded: Boolean(shouldPerformImmediateDeduction && requiredCost > 0),
+          refunded: Boolean(shouldPerformImmediateDeduction && !isInternalHandled && requiredCost > 0),
           transid: transid,
           currentBalance: initialBalance,
           message: failReason,

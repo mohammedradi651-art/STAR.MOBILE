@@ -386,10 +386,11 @@ export async function markPaymentFailedAndRefund(
     const userTxRef = doc(firestore, `users/${userId}/transactions`, transid);
     const globalTxRef = doc(firestore, 'paymentTransactions', transid);
 
-    // التأكد من عدم تكرار الإرجاع
+    // التأكد الصارم من عدم تكرار الإرجاع نهائياً
     const gSnap = await getDoc(globalTxRef);
     const snap = await getDoc(userTxRef);
     if ((gSnap.exists() && gSnap.data()?.refunded) || (snap.exists() && snap.data()?.refunded)) {
+      console.warn(`[Telecom] Transaction ${transid} is ALREADY refunded. Skipping duplicate refund!`);
       return;
     }
 
