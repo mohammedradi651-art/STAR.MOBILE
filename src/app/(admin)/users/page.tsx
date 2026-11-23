@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { collection, doc, updateDoc, increment, query, orderBy, writeBatch, setDoc, getDocs, where, limit, getDoc, getCountFromServer, getAggregateFromServer, sum, count } from 'firebase/firestore';
+import { collection, doc, updateDoc, increment, query, orderBy, writeBatch, setDoc, getDocs, where, limit, getDoc, getCountFromServer, getAggregateFromServer, sum, count, arrayUnion } from 'firebase/firestore';
 import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking, useDoc, useUser, addDocumentNonBlocking, updateDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
 import { useOrderDocArray } from '@/lib/order-unified';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -167,7 +167,7 @@ export default function UsersPage() {
   );
   const { data: rawUsersWithBalance, isLoading: isLoadingUsersWithBalance } = useCollection<User>(usersWithBalanceQuery);
 
-  // استبعاد حساب المدير وترتيب أصحاب الرصيد تنازلياً (الأعلى رصيداً أولاً)
+  // استبعاد حساب المدير وحساب الـ API وترتيب أصحاب الرصيد تنازلياً (الأعلى رصيداً أولاً)
   const customersWithBalance = useMemo(() => {
     if (!rawUsersWithBalance) return [];
     return rawUsersWithBalance
@@ -176,6 +176,8 @@ export default function UsersPage() {
         u.id !== 'wsy8bUcULSYX2J9Q9WyisiFX5ki2' && 
         u.phoneNumber !== '770326828' && 
         u.email !== '770326828@shabakat.com' &&
+        u.phoneNumber !== '773232323' &&
+        u.email !== '773232323@shabakat.com' &&
         (u.balance ?? 0) > 0
       )
       .sort((a, b) => (b.balance ?? 0) - (a.balance ?? 0));
@@ -201,21 +203,32 @@ export default function UsersPage() {
         setTotalUsersCount(data.totalCount ?? 0);
       })
       .catch((err) => {
-        console.error("Aggregation error:", err);
+        console.error('Aggregation error:', err);
       });
   }, [firestore, isUserAdmin]);
 
-  // جلب رصيد حساب المدير (770326828) لخصمه من إجمالي رصيد العملاء
+  // جلب رصيد حساب المدير (770326828) وحساب الـ API (773232323) لخصمهما من إجمالي رصيد العملاء
   const adminDocRef = useMemoFirebase(
     () => (firestore ? doc(firestore, 'users', user?.uid || 'wsy8bUcULSYX2J9Q9WyisiFX5ki2') : null),
     [firestore, user]
   );
   const { data: adminData } = useDoc<User>(adminDocRef);
 
-  const adminBalance = adminData?.balance ?? 0;
-  const effectiveCustomerBalance = Math.max(0, (totalUsersBalance ?? 0) - adminBalance);
-  const effectiveCustomerCount = Math.max(0, (totalUsersCount ?? 0) - (adminData ? 1 : 0));
+  const apiWalletQuery = useMemoFirebase(
+    () => (firestore && isUserAdmin ? query(
+      collection(firestore, 'users'),
+      where('phoneNumber', '==', '773232323'),
+      limit(1)
+    ) : null),
+    [firestore, isUserAdmin]
+  );
+  const { data: apiWalletUsers } = useCollection<User>(apiWalletQuery);
+  const apiWalletUser = apiWalletUsers?.[0];
 
+  const adminBalance = adminData?.balance ?? 0;
+  const apiWalletBalance = apiWalletUser?.balance ?? 0;
+  const effectiveCustomerBalance = Math.max(0, (totalUsersBalance ?? 0) - adminBalance - apiWalletBalance);
+  const effectiveCustomerCount = Math.max(0, (totalUsersCount ?? 0) - (adminData ? 1 : 0) - (apiWalletUser ? 1 : 0));
 
   // دالة تنظيف وتوحيد الأحرف العربية (الهمزات، الياء، الهاء، إزالة التشكيل)
   const normalizeArabic = (text?: string): string => {

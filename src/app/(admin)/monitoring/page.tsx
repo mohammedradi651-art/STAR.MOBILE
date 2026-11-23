@@ -248,6 +248,7 @@ export default function MonitoringPage() {
         if (parent === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2' || parent === user?.uid) return true;
         if (tx.userId === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2' || tx.userId === user?.uid) return true;
         if (phone.includes('770326828')) return true;
+        if (phone.includes('773232323')) return true;
         if (name.includes('مدير النظام')) return true;
         
         return false;
