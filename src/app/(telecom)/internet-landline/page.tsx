@@ -156,8 +156,6 @@ export default function LandlinePage() {
             }
             if (!cleaned.startsWith('0')) {
                 toast({ variant: 'destructive', title: 'رقم غير صحيح', description: 'الرقم الأرضي يجب أن يبدأ بـ 0' });
-            } else {
-                handleSearch(cleaned);
             }
         }
     };
@@ -385,7 +383,6 @@ export default function LandlinePage() {
                     if (typeof navigator !== 'undefined' && navigator.vibrate) {
                         navigator.vibrate(50);
                     }
-                    handleSearch(num);
                 }
             }
         } catch (err) { console.error(err); }
@@ -495,7 +492,7 @@ export default function LandlinePage() {
                         <button onClick={handleContactPick} className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-xl transition-colors" style={{ color: currentTheme.primary }}><Users className="h-5 w-5" /></button>
                     </div>
 
-                    {phone.length === 8 && phone.startsWith('0') && (
+                    {activeTab === 'internet' && phone.length === 8 && phone.startsWith('0') && (
                         <div className="animate-in fade-in zoom-in duration-300">
                             <Button 
                                 className="w-full h-12 rounded-2xl font-bold mt-4 shadow-sm text-white" 
@@ -510,10 +507,10 @@ export default function LandlinePage() {
                     )}
                 </div>
 
-                {!isSearching && queryResult && (
+                {!isSearching && phone.length === 8 && phone.startsWith('0') && (
                     <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500">
                         
-                        {queryResult && (
+                        {activeTab === 'internet' && queryResult && (
                             <div className="rounded-3xl overflow-hidden shadow-lg p-1 animate-in zoom-in-95" style={currentTheme.gradient}>
                                 {typeof queryResult === 'object' ? (
                                     <div className="bg-white/10 backdrop-blur-md rounded-[22px] grid grid-cols-3 text-center text-white">

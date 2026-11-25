@@ -6,19 +6,29 @@ import { SimpleHeader } from '@/components/layout/simple-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useFirestore, useUser, useDoc } from '@/firebase';
-import { doc, writeBatch, increment, collection, updateDoc, onSnapshot } from 'firebase/firestore';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Calendar, CheckCircle, Copy, AlertCircle, Database, MessageSquare, Smartphone, Loader2, Clock } from 'lucide-react';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  doc,
+  getDoc,
+  writeBatch,
+  increment,
+  onSnapshot,
+  arrayUnion,
+} from 'firebase/firestore';
+import {
+  CheckCircle,
+  Copy,
+  AlertCircle,
+  Database,
+  MessageSquare,
+  Smartphone,
+  Loader2,
+  Clock,
+  Wifi,
+  WifiOff,
+  ShieldCheck,
+  Wallet,
+  Sparkles,
+} from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -29,58 +39,83 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
-import { Separator } from '@/components/ui/separator';
 import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useServicesConfig } from '@/hooks/use-services-config';
 import { roundCurrency, isUserApiCustomer } from '@/lib/services-config';
-import { Sparkles, Loader2 as SpinnerIcon } from 'lucide-react';
+import { useOnlineStatus } from '@/hooks/use-online-status';
+
+export const dynamic = 'force-dynamic';
 
 type CardCategory = {
-    id: number;
-    name: string;
-    price: number;
-    dataLimit?: string;
-    expirationDate?: string;
-    count?: number;
+  id: string | number;
+  name: string;
+  price: number;
+  capacity?: string;
+  dataLimit?: string;
+  storage?: string;
+  size?: string;
+  data_limit?: string;
+  notes?: string;
+  validity?: string;
+  expirationDate?: string;
+  duration?: string;
+  count?: number;
 };
 
 type NetworkCard = {
-    cardID: string;
-    cardPass: string;
+  cardID: string;
+  cardPass?: string;
 };
 
-type OrderResponse = {
-    data: {
-        order: {
-            uuidOrder: string;
-            card: NetworkCard;
-        }
-    }
-};
+const CARD_GRADIENTS = [
+  'from-sky-500 to-blue-600 shadow-blue-500/20',
+  'from-emerald-500 to-teal-600 shadow-teal-500/20',
+  'from-indigo-500 to-purple-600 shadow-purple-500/20',
+  'from-amber-500 to-orange-600 shadow-orange-500/20',
+  'from-rose-500 to-pink-600 shadow-pink-500/20',
+];
 
-type UserProfile = {
-  balance?: number;
-  displayName?: string;
-  phoneNumber?: string;
-  apiKey?: string | null;
-};
+function getCategoryCapacity(cat?: CardCategory | null): string {
+  if (!cat) return '-';
+  const val =
+    cat.capacity ||
+    cat.dataLimit ||
+    cat.storage ||
+    cat.size ||
+    cat.data_limit ||
+    cat.notes;
+  return val && String(val).trim() ? String(val).trim() : '-';
+}
+
+function getCategoryValidity(cat?: CardCategory | null): string {
+  if (!cat) return '-';
+  const val = cat.validity || cat.expirationDate || cat.duration;
+  return val && String(val).trim() ? String(val).trim() : '-';
+}
 
 function NetworkPurchasePageComponent() {
   const params = useParams();
   const networkId = params.networkId as string;
   const searchParams = useSearchParams();
-  const networkName = searchParams.get('name') || 'شراء كروت';
-  
+  const networkName = searchParams.get('name') || 'فئات الكروت';
+  const networkLocation = searchParams.get('location') || '';
+  const isLocal = searchParams.get('local') === '1';
+  const ownerId = searchParams.get('ownerId') || networkId;
+
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
   const router = useRouter();
+  const isOnline = useOnlineStatus();
+  const isOffline = !isOnline;
 
-  const userDocRef = useMemo(() => (user && firestore ? doc(firestore, 'users', user.uid) : null), [firestore, user]);
+  const userDocRef = useMemo(
+    () => (user && firestore ? doc(firestore, 'users', user.uid) : null),
+    [firestore, user]
+  );
   const { data: userProfile } = useDoc<any>(userDocRef);
   const { config } = useServicesConfig();
   const isApiUser = isUserApiCustomer(userProfile);
@@ -106,579 +141,908 @@ function NetworkPurchasePageComponent() {
 
   useEffect(() => {
     const fetchCategories = async () => {
-        if (!networkId) return;
-        setIsLoadingCategories(true);
-        setError(null);
-        try {
-            const response = await fetch(`/services/networks-api/${networkId}/classes`);
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Failed to fetch categories');
-            }
-            const data = await response.json();
-            setCategories(data);
-        } catch (err: any) {
-            setError(err.message || 'لا يمكن تحميل الفئات حالياً.');
-            console.error(err);
-        } finally {
-            setIsLoadingCategories(false);
-        }
-    };
-    fetchCategories();
-  }, [networkId]);
+      if (!networkId) return;
+      setError(null);
 
-  useEffect(() => {
-    if (purchasedCard) {
-        audioRef.current?.play().catch(e => console.error("Audio playback failed:", e));
+      const catCacheKey = `star_cache_cats_${networkId}`;
+      const cachedCats = localStorage.getItem(catCacheKey);
+      let hasValidCache = false;
+
+      if (cachedCats) {
+        try {
+          const parsed = JSON.parse(cachedCats);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setCategories(parsed);
+            setIsLoadingCategories(false);
+            hasValidCache = true;
+          }
+        } catch {
+          setCategories([]);
+        }
+      } else {
+        setCategories([]);
+        setIsLoadingCategories(true);
+      }
+
+      if (isOffline) {
+        if (!hasValidCache) {
+          setCategories([]);
+          setIsLoadingCategories(false);
+          setError('uncached_offline');
+        }
+        return;
+      }
+
+      try {
+        if (isLocal) {
+          if (!firestore) return;
+          const localNetRef = doc(firestore, `users/${ownerId}/local_networks`, ownerId);
+          const snap = await getDoc(localNetRef);
+          const catsData: CardCategory[] =
+            snap.exists() && Array.isArray(snap.data()?.categories)
+              ? snap.data()?.categories
+              : [];
+          setCategories(catsData);
+          localStorage.setItem(catCacheKey, JSON.stringify(catsData));
+        } else {
+          const response = await fetch(`/services/networks-api/${networkId}/classes`);
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || 'فشل تحميل الفئات');
+          }
+          const data = await response.json();
+          const mapped: CardCategory[] = data.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            price: c.price,
+            capacity: c.dataLimit || c.capacity || c.storage,
+            validity: c.expirationDate || c.validity,
+            dataLimit: c.dataLimit,
+            expirationDate: c.expirationDate,
+          }));
+          setCategories(mapped);
+          localStorage.setItem(catCacheKey, JSON.stringify(mapped));
+        }
+      } catch (err: any) {
+        if (!hasValidCache) {
+          setError(err?.message || 'حدث خطأ أثناء جلب الفئات');
+        }
+      } finally {
+        setIsLoadingCategories(false);
+      }
+    };
+
+    fetchCategories();
+  }, [networkId, isLocal, ownerId, firestore, isOffline]);
+
+  const sortedCategories = useMemo(() => {
+    if (!categories) return [];
+    if (isLocal) {
+      return [...categories].sort((a, b) => Number(a.price) - Number(b.price));
     }
-  }, [purchasedCard]);
+    return categories;
+  }, [categories, isLocal]);
+
+  const handleSelectCategory = (category: CardCategory) => {
+    setSelectedCategory(category);
+    setIsConfirming(true);
+  };
 
   const handlePurchase = async () => {
-    if (!selectedCategory || !user || !userProfile || !firestore || !userDocRef) return;
+    if (!selectedCategory || !user || !userDocRef) return;
 
-    const categoryPrice = selectedCategory.price;
-    const effectivePrice = getEffectiveCardPrice(categoryPrice);
-    const userBalance = userProfile?.balance ?? 0;
+    const effectivePrice = getEffectiveCardPrice(selectedCategory.price);
 
-    if (userBalance < effectivePrice) {
-        toast({
-            variant: "destructive",
-            title: "رصيد غير كافٍ",
-            description: "رصيدك الحالي لا يكفي لإتمام عملية الشراء.",
-        });
-        setIsProcessing(false);
-        setIsConfirming(false);
-        return;
+    if ((userProfile?.balance ?? 0) < effectivePrice) {
+      toast({
+        variant: 'destructive',
+        title: 'رصيد غير كافٍ',
+        description: 'رصيدك الحالي لا يكفي لشراء هذا الكرت.',
+      });
+      setIsConfirming(false);
+      return;
     }
 
-    setIsProcessing(true);
-    const externalRef = `SM-BN-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
-    const txId = `baity_${Date.now()}`;
-    const now = new Date().toISOString();
-    const formattedDate = new Date().toLocaleDateString('ar-YE');
-    const userHistoryRef = doc(firestore, `users/${user.uid}/transactions`, 'history');
-    const baityOrderRef = doc(firestore, 'baityOrders', externalRef);
+    if (isOffline) {
+      const smsMsg = `${networkName} - ${selectedCategory.name} - ${effectivePrice}`;
+      window.location.href = `sms:770326828?body=${encodeURIComponent(smsMsg)}`;
+      setIsConfirming(false);
+      return;
+    }
 
-    const pendingTx = {
+    if (!firestore) return;
+
+    setIsConfirming(false);
+    setIsProcessing(true);
+
+    let isExternalOrderDeducted = false;
+    let purchaseSuccessfullyCommitted = false;
+    const now = new Date().toISOString();
+
+    try {
+      if (isLocal) {
+        const cardsDocRef = doc(
+          firestore,
+          `users/${ownerId}/local_networks/${ownerId}/cards_data`,
+          'cards'
+        );
+        const cardsSnap = await getDoc(cardsDocRef);
+
+        if (!cardsSnap.exists()) {
+          throw new Error('لا توجد كروت متاحة حالياً في هذه الشبكة.');
+        }
+
+        const allCards: any[] = cardsSnap.data()?.cards || [];
+        const cardIndex = allCards.findIndex(
+          (c: any) =>
+            (c.cat === selectedCategory.id || c.categoryId === selectedCategory.id) &&
+            c.isUsed !== true &&
+            c.u !== true
+        );
+
+        if (cardIndex === -1) {
+          throw new Error('نفدت الكروت المتاحة حالياً لهذه الفئة.');
+        }
+
+        const cardData = allCards[cardIndex];
+        const finalCardID = cardData.c || cardData.cardNumber;
+        const finalCardPass = cardData.p || cardData.cardPass || '';
+
+        allCards[cardIndex] = {
+          ...cardData,
+          isUsed: true,
+          u: true,
+          soldAt: now,
+        };
+
+        const commission = Math.ceil(selectedCategory.price * 0.1);
+        const payoutAmount = selectedCategory.price - commission;
+
+        const batch = writeBatch(firestore);
+        batch.update(userDocRef, { balance: increment(-effectivePrice) });
+        batch.update(cardsDocRef, { cards: allCards, updatedAt: now });
+
+        const userHistoryRef = doc(firestore, `users/${user.uid}/transactions`, 'history');
+        const buyerTx = {
+          id: `card_${Date.now()}`,
+          userId: user.uid,
+          transactionDate: now,
+          amount: effectivePrice,
+          transactionType: `شراء كرت ${selectedCategory.name}`,
+          notes: `شبكة: ${networkName}`,
+          cardNumber: finalCardID,
+          status: 'completed',
+          readiness: 'جاهزة',
+        };
+        const compactBuyerTx = {
+          id: buyerTx.id,
+          t: buyerTx.transactionType,
+          a: buyerTx.amount,
+          d: buyerTx.transactionDate,
+          s: buyerTx.status,
+          r: buyerTx.readiness,
+          net: networkName,
+          cat: selectedCategory.name,
+          card: finalCardID,
+          note: buyerTx.notes,
+        };
+        batch.set(
+          userHistoryRef,
+          {
+            transactions: arrayUnion(buyerTx),
+            list: arrayUnion(compactBuyerTx),
+            lastUpdated: now,
+          },
+          { merge: true }
+        );
+
+        if (ownerId && ownerId !== 'admin') {
+          const ownerRef = doc(firestore, 'users', ownerId);
+          batch.update(ownerRef, { balance: increment(payoutAmount) });
+
+          const ownerHistoryRef = doc(firestore, `users/${ownerId}/transactions`, 'history');
+          const ownerTx = {
+            id: `payout_${Date.now()}`,
+            userId: ownerId,
+            transactionDate: now,
+            amount: payoutAmount,
+            transactionType: 'أرباح مبيعات الكروت',
+            notes: `أرباح كرت ${selectedCategory.name} - شبكة: ${networkName} (صافي بعد خصم 10% عمولة)`,
+            status: 'completed',
+            readiness: 'جاهزة',
+          };
+          const compactOwnerTx = {
+            id: ownerTx.id,
+            t: ownerTx.transactionType,
+            a: ownerTx.amount,
+            d: ownerTx.transactionDate,
+            s: ownerTx.status,
+            r: ownerTx.readiness,
+            net: networkName,
+            cat: selectedCategory.name,
+            note: ownerTx.notes,
+          };
+          batch.set(
+            ownerHistoryRef,
+            {
+              transactions: arrayUnion(ownerTx),
+              list: arrayUnion(compactOwnerTx),
+              lastUpdated: now,
+            },
+            { merge: true }
+          );
+        }
+
+        await batch.commit();
+        purchaseSuccessfullyCommitted = true;
+
+        // إظهار الكرت فوراً بمجرد اعتماد الحفظ
+        setPurchasedCard({ cardID: finalCardID, cardPass: finalCardPass });
+        setIsProcessing(false);
+        audioRef.current?.play().catch(() => {});
+        return;
+      }
+
+      // شبكات بيتي الخارجية: خصم المبلغ ثم استدعاء المزود، وإظهار الكرت فور وصوله
+      const externalRef = `SM-BN-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .substring(2, 7)}`;
+      const txId = `baity_${Date.now()}`;
+      const baityOrderRef = doc(firestore, 'baityOrders', externalRef);
+      const userHistoryRef = doc(firestore, `users/${user.uid}/transactions`, 'history');
+      const globalTxRef = doc(firestore, 'paymentTransactions', txId);
+
+      const pendingBuyerTx = {
         id: txId,
         userId: user.uid,
         transactionDate: now,
         amount: effectivePrice,
         transactionType: `شراء كرت ${selectedCategory.name}`,
-        notes: `شبكة: ${networkName}`,
+        notes: `شبكة: ${networkName} (قيد المعالجة)`,
+        cardNumber: '',
         status: 'pending',
         readiness: 'قيد الانتظار',
-        externalRef: externalRef,
-        networkName: networkName,
-        className: selectedCategory.name,
+        externalRef,
+      };
+      const pendingCompactTx = {
+        id: txId,
+        t: pendingBuyerTx.transactionType,
+        a: effectivePrice,
+        d: now,
+        s: 'pending',
+        r: 'قيد الانتظار',
+        net: networkName,
+        cat: selectedCategory.name,
+        card: '',
+        note: pendingBuyerTx.notes,
+        externalRef,
+      };
+
+      const initBatch = writeBatch(firestore);
+      initBatch.update(userDocRef, { balance: increment(-effectivePrice) });
+      initBatch.set(baityOrderRef, {
+        externalRef,
+        txId,
+        userId: user.uid,
+        amount: effectivePrice,
+        networkName,
+        categoryName: selectedCategory.name,
         classId: selectedCategory.id,
-    };
+        status: 'pending',
+        createdAt: now,
+        refunded: false,
+      });
+      initBatch.set(
+        userHistoryRef,
+        {
+          transactions: arrayUnion(pendingBuyerTx),
+          list: arrayUnion(pendingCompactTx),
+          lastUpdated: now,
+        },
+        { merge: true }
+      );
+      initBatch.set(globalTxRef, { ...pendingBuyerTx, serviceCategory: 'الشبكات' });
 
-    try {
-        // 1. خصم المبلغ فوراً من العميل بمجرد تأكيد الشراء
-        const initBatch = writeBatch(firestore);
-        initBatch.update(userDocRef!, { balance: increment(-effectivePrice) });
-        initBatch.set(userHistoryRef, {
-            transactions: arrayUnion(pendingTx),
-            list: arrayUnion(pendingTx),
-            lastUpdated: now
-        }, { merge: true });
-        initBatch.set(baityOrderRef, {
-            externalRef: externalRef,
-            userId: user.uid,
-            transactionId: txId,
-            classId: selectedCategory.id,
-            className: selectedCategory.name,
-            networkName: networkName,
-            networkId: String(networkId),
-            price: effectivePrice,
-            status: 'pending',
-            phoneNumber: userProfile?.phoneNumber || '',
-            displayName: userProfile?.displayName || '',
-            createdAt: now,
-        });
-        await initBatch.commit();
+      await initBatch.commit();
+      isExternalOrderDeducted = true;
 
-        let isHandled = false;
-        let timeoutId: any = null;
-        let unsubscribe: (() => void) | null = null;
+      let isHandled = false;
+
+      await new Promise<void>((resolve) => {
+        let unsubscribe = () => {};
+        let timeoutId: ReturnType<typeof setTimeout>;
+
+        const cleanup = () => {
+          clearTimeout(timeoutId);
+          unsubscribe();
+        };
 
         const handleOrderFailure = async (reason: string, isStockOutArg?: boolean) => {
-            if (isHandled) return;
-            isHandled = true;
-            if (timeoutId) clearTimeout(timeoutId);
-            if (unsubscribe) unsubscribe();
+          if (isHandled) return;
+          isHandled = true;
+          cleanup();
 
-            try {
-                const refundBatch = writeBatch(firestore);
-                refundBatch.update(userDocRef!, { balance: increment(effectivePrice) });
-                refundBatch.update(baityOrderRef, {
-                    status: 'failed',
-                    failedAt: new Date().toISOString(),
-                    errorReason: reason || 'فشل الشراء من المزود'
-                });
-
-                // تحديث في history
-                const hSnap = await getDoc(userHistoryRef);
-                if (hSnap.exists()) {
-                    const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
-                    const updatedList = rawList.map((item: any) => {
-                        if (item.id === txId || item.externalRef === externalRef) {
-                            return {
-                                ...item,
-                                status: 'failed',
-                                s: 'failed',
-                                readiness: 'فاشلة',
-                                r: 'فاشلة',
-                                notes: `شبكة: ${networkName} (فشل الشراء)`,
-                                failedAt: new Date().toISOString()
-                            };
-                        }
-                        return item;
-                    });
-                    refundBatch.set(userHistoryRef, { list: updatedList, transactions: updatedList, lastUpdated: new Date().toISOString() }, { merge: true });
-                }
-
-                await refundBatch.commit();
-            } catch (refErr) {
-                console.error("Refund commit error:", refErr);
-            }
-
-            setIsConfirming(false);
-            setIsProcessing(false);
-
-            const isStockOut = isStockOutArg || /مخزون|نفاد|انتهى/i.test(reason);
-            const failureMsg = isStockOut 
-                ? "فشل الشراء: انتهى المخزون\nيرجى التواصل مع الادارة 770326828" 
-                : "فشل الشراء\nيرجى التواصل مع الادارة 770326828";
-
-            toast({
-                variant: "destructive",
-                title: "فشل الشراء",
-                description: failureMsg,
-                duration: 9000
+          try {
+            const refundBatch = writeBatch(firestore);
+            refundBatch.update(userDocRef, { balance: increment(effectivePrice) });
+            refundBatch.update(baityOrderRef, {
+              status: 'failed',
+              refunded: true,
+              errorReason: reason,
+              failedAt: new Date().toISOString(),
             });
+
+            const hSnap = await getDoc(userHistoryRef);
+            if (hSnap.exists()) {
+              const rawTxs = hSnap.data()?.transactions || [];
+              const rawList = hSnap.data()?.list || [];
+              const failNote = isStockOutArg
+                ? `فشل الشراء (نفاد المخزون) وتم إرجاع ${effectivePrice} ر.ي`
+                : `فشل الشراء وتم إرجاع ${effectivePrice} ر.ي`;
+
+              refundBatch.update(userHistoryRef, {
+                transactions: rawTxs.map((item: any) =>
+                  item.id === txId
+                    ? { ...item, status: 'failed', readiness: 'فاشلة', notes: failNote }
+                    : item
+                ),
+                list: rawList.map((item: any) =>
+                  item.id === txId
+                    ? { ...item, s: 'failed', r: 'فاشلة', note: failNote }
+                    : item
+                ),
+                lastUpdated: new Date().toISOString(),
+              });
+            }
+            refundBatch.update(globalTxRef, {
+              status: 'failed',
+              readiness: 'فاشلة',
+              notes: reason || 'فشل الشراء من المزود',
+            });
+            await refundBatch.commit();
+            isExternalOrderDeducted = false;
+          } catch (e) {
+            console.error('Error refunding baityOrder:', e);
+          }
+
+          setIsProcessing(false);
+          const errorTitle = isStockOutArg ? 'انتهى المخزون' : 'فشل الشراء';
+          const errorDesc = isStockOutArg
+            ? 'فشل الشراء: انتهى المخزون — تم إرجاع المبلغ لحسابك'
+            : reason || 'فشل الشراء — تم إرجاع المبلغ لحسابك';
+
+          toast({ variant: 'destructive', title: errorTitle, description: errorDesc });
+          resolve();
         };
 
-        const handleOrderSuccess = async (cardData: { cardID: string; cardPass?: string }, uuidOrder?: string) => {
-            if (isHandled) return;
-            isHandled = true;
-            if (timeoutId) clearTimeout(timeoutId);
-            if (unsubscribe) unsubscribe();
+        const handleOrderSuccess = (cardData: NetworkCard, uuidOrder?: string) => {
+          if (isHandled) return;
+          isHandled = true;
+          cleanup();
+          purchaseSuccessfullyCommitted = true;
+          isExternalOrderDeducted = false;
 
+          // إظهار منبثق الكرت فوراً للمستخدم بدون انتظار كتابة السجلات
+          setPurchasedCard(cardData);
+          setIsProcessing(false);
+          audioRef.current?.play().catch(() => {});
+          resolve();
+
+          // تحديث السجلات في الخلفية فوراً دون تعطيل الشاشة
+          const doneNow = new Date().toISOString();
+          (async () => {
             try {
-                const finishBatch = writeBatch(firestore);
-                finishBatch.update(baityOrderRef, {
-                    status: 'completed',
-                    cardNumber: cardData.cardID,
-                    cardPass: cardData.cardPass || '',
-                    uuidOrder: uuidOrder || '',
-                    completedAt: new Date().toISOString(),
-                });
+              const finishBatch = writeBatch(firestore);
+              finishBatch.update(baityOrderRef, {
+                status: 'completed',
+                cardNumber: cardData.cardID,
+                cardPass: cardData.cardPass || '',
+                uuidOrder: uuidOrder || '',
+                completedAt: doneNow,
+              });
 
-                // تحديث في history
-                const hSnap = await getDoc(userHistoryRef);
-                if (hSnap.exists()) {
-                    const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
-                    const updatedList = rawList.map((item: any) => {
-                        if (item.id === txId || item.externalRef === externalRef) {
-                            return {
-                                ...item,
-                                status: 'completed',
-                                s: 'completed',
-                                readiness: 'جاهزة',
-                                r: 'جاهزة',
-                                cardNumber: cardData.cardID,
-                                cardPassword: cardData.cardPass || cardData.cardID,
-                                completedAt: new Date().toISOString()
-                            };
+              const hSnap = await getDoc(userHistoryRef);
+              if (hSnap.exists()) {
+                const rawTxs = hSnap.data()?.transactions || [];
+                const rawList = hSnap.data()?.list || [];
+                finishBatch.update(userHistoryRef, {
+                  transactions: rawTxs.map((item: any) =>
+                    item.id === txId
+                      ? {
+                          ...item,
+                          status: 'completed',
+                          readiness: 'جاهزة',
+                          cardNumber: cardData.cardID,
+                          notes: `شبكة: ${networkName} - رقم الكرت: ${cardData.cardID}`,
                         }
-                        return item;
-                    });
-                    finishBatch.set(userHistoryRef, { list: updatedList, transactions: updatedList, lastUpdated: new Date().toISOString() }, { merge: true });
-                }
+                      : item
+                  ),
+                  list: rawList.map((item: any) =>
+                    item.id === txId
+                      ? {
+                          ...item,
+                          s: 'completed',
+                          r: 'جاهزة',
+                          card: cardData.cardID,
+                          note: `شبكة: ${networkName} - رقم الكرت: ${cardData.cardID}`,
+                        }
+                      : item
+                  ),
+                  lastUpdated: doneNow,
+                });
+              }
 
-                await finishBatch.commit().catch(() => {});
+              finishBatch.update(globalTxRef, {
+                status: 'completed',
+                readiness: 'جاهزة',
+                cardNumber: cardData.cardID,
+                notes: `شبكة: ${networkName} - رقم الكرت: ${cardData.cardID}`,
+              });
+              await finishBatch.commit();
             } catch (e) {
-                console.error("Finish batch error:", e);
+              console.warn('Background finishBatch error:', e);
             }
-
-            setPurchasedCard(cardData as NetworkCard);
-            setIsConfirming(false);
-            setIsProcessing(false);
-
-            // --- نظام إرسال الواتساب/SMS التلقائي ---
-            if (userProfile?.phoneNumber) {
-                const waMsg = `⭐ ستار موبايل\n\nمرحباً ${userProfile.displayName || 'عميلنا'}\n\nتم شراء الكرت بنجاح ✅\n\nالشبكة: ${networkName}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardData.cardID}\nالتاريخ: ${formattedDate}\n\nشكراً لاستخدام ستار موبايل`;
-                fetch('/api/send-whatsapp', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        phone: userProfile.phoneNumber.trim(),
-                        message: waMsg
-                    })
-                }).catch(() => {});
-
-                const smsMsg = `ستار موبايل\nمرحباً ${userProfile.displayName ? userProfile.displayName.split(' ')[0] : 'عميلنا'}،\n\nتم شراء كرت الإنترنت الخاص بك بنجاح.\n\nالشبكة: ${networkName}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${cardData.cardID}`;
-                fetch('/api/sms', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        phoneNumber: userProfile.phoneNumber.trim(),
-                        message: smsMsg
-                    })
-                }).catch(() => {});
-            }
+          })();
         };
 
-        // ننتظر الرد المباشر أو الويب هوك أو 50 ثانية
-        await new Promise<void>((resolve) => {
-            // 1) مؤقت 50 ثانية: إذا تأخر الرد تظهر المنبثقة للعميل
-            timeoutId = setTimeout(() => {
-                if (!isHandled) {
-                    isHandled = true;
-                    if (unsubscribe) unsubscribe();
-                    setIsConfirming(false);
-                    setIsProcessing(false);
-                    setDelayedOrderPopupOpen(true);
-                    resolve();
-                }
-            }, 50000);
+        timeoutId = setTimeout(() => {
+          if (!isHandled) {
+            isHandled = true;
+            cleanup();
+            setIsProcessing(false);
+            setDelayedOrderPopupOpen(true);
+            resolve();
+          }
+        }, 50000);
 
-            // 2) الاستماع اللحظي للويب هوك في حال رد المزود خلال الثواني الأولى
-            unsubscribe = onSnapshot(baityOrderRef, (snap) => {
-                if (!snap.exists() || isHandled) return;
-                const data = snap.data();
-                if (data?.status === 'completed' && data?.cardNumber) {
-                    handleOrderSuccess({ cardID: data.cardNumber, cardPass: data.cardPass || '' }, data.uuidOrder);
-                    resolve();
-                } else if (data?.status === 'failed') {
-                    handleOrderFailure(data.errorReason || '');
-                    resolve();
-                }
-            });
-
-            // 3) إرسال الطلب المباشر للمزود
-            fetch(`/services/networks-api/order`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    classId: selectedCategory.id,
-                    externalRef: externalRef,
-                })
-            })
-            .then(async (response) => {
-                const result: any = await response.json().catch(() => ({}));
-                if (isHandled) return;
-
-                if (response.ok && result?.status === 200 && result?.data?.order?.card?.cardID) {
-                    // أ) نجاح فوري واستلام الكرت
-                    handleOrderSuccess(result.data.order.card, result.data.order.uuidOrder);
-                    resolve();
-                } else if (response.ok && result?.status === 200 && result?.data?.order?.uuidOrder && !result?.data?.order?.card) {
-                    // ب) الطلب قيد الانتظار الفعلي لدى المزود - لا نظهر رسالة استلام بل نستمر بالانتظار حتى الويب هوك أو 50 ثانية
-                } else {
-                    // ج) فشل الشراء مباشرة من المزود (مثل عدم كفاية رصيد الأدمن أو نفاد المخزون)
-                    const errMsg = result?.message || 'فشل الشراء من المزود';
-                    handleOrderFailure(errMsg, result?.isStockOut);
-                    resolve();
-                }
-            })
-            .catch((err) => {
-                if (!isHandled) {
-                    handleOrderFailure(err?.message || 'خطأ في الاتصال بالمزود');
-                    resolve();
-                }
-            });
+        unsubscribe = onSnapshot(baityOrderRef, (snap) => {
+          if (!snap.exists() || isHandled) return;
+          const data = snap.data();
+          if (data?.status === 'completed' && data?.cardNumber) {
+            handleOrderSuccess(
+              { cardID: data.cardNumber, cardPass: data.cardPass || '' },
+              data.uuidOrder
+            );
+          } else if (data?.status === 'failed') {
+            handleOrderFailure(data.errorReason || '');
+          }
         });
-    } catch (error: any) {
-        console.error("Order execution error:", error);
-        // في حال حدوث خطأ استثنائي: إعادة المبلغ فوراً للعميل بصمت
-        if (userDocRef) {
-            try {
-                const refundBatch = writeBatch(firestore);
-                refundBatch.update(userDocRef!, { balance: increment(effectivePrice) });
-                refundBatch.update(txRef, {
-                    status: 'failed',
-                    readiness: 'فاشلة',
-                    notes: `شبكة: ${networkName} (فشل الاتصال)`,
-                    failedAt: new Date().toISOString()
-                });
-                refundBatch.update(baityOrderRef, {
-                    status: 'failed',
-                    failedAt: new Date().toISOString(),
-                    errorReason: error?.message || 'خطأ اتصال'
-                });
-                await refundBatch.commit();
-            } catch (refErr) {
-                console.error("Refund commit error on catch:", refErr);
+
+        fetch(`/services/networks-api/order`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            classId: selectedCategory.id,
+            externalRef,
+          }),
+        })
+          .then(async (response) => {
+            const result = await response.json().catch(() => ({}));
+            if (isHandled) return;
+
+            if (response.ok && result?.status === 200 && result?.data?.order?.card?.cardID) {
+              handleOrderSuccess(result.data.order.card, result.data.order.uuidOrder);
+            } else if (
+              response.ok &&
+              result?.status === 200 &&
+              result?.data?.order?.uuidOrder &&
+              !result?.data?.order?.card
+            ) {
+              // الطلب قيد الانتظار لدى المزود وسيصل عبر الويب هوك
+            } else {
+              const errMsg = result?.message || 'فشل الشراء من المزود';
+              handleOrderFailure(errMsg, result?.isStockOut);
             }
+          })
+          .catch((err) => {
+            if (!isHandled) {
+              handleOrderFailure(err?.message || 'خطأ في الاتصال بالمزود');
+            }
+          });
+      });
+    } catch (err: any) {
+      console.error('Purchase execution error:', err);
+      if (!purchaseSuccessfullyCommitted && isExternalOrderDeducted && userDocRef) {
+        try {
+          const fallbackBatch = writeBatch(firestore);
+          fallbackBatch.update(userDocRef, { balance: increment(effectivePrice) });
+          await fallbackBatch.commit();
+        } catch (refundErr) {
+          console.error('Fallback refund failed:', refundErr);
         }
-
-        setIsConfirming(false);
-        toast({
-            variant: "destructive",
-            title: "فشل الشراء",
-            description: "فشل الشراء\nيرجى التواصل مع الادارة 770326828",
-            duration: 9000
-        });
+      }
+      toast({
+        variant: 'destructive',
+        title: 'فشل عملية الشراء',
+        description: err?.message || 'حدث خطأ غير متوقع.',
+      });
     } finally {
-        setIsProcessing(false);
+      setIsProcessing(false);
     }
   };
 
   const handleCopyCardDetails = () => {
-    if (purchasedCard) {
-        navigator.clipboard.writeText(purchasedCard.cardID);
-        toast({
-            title: "تم النسخ",
-            description: "تم نسخ رقم الكرت بنجاح.",
-        });
-    }
+    if (!purchasedCard) return;
+    const text = purchasedCard.cardPass
+      ? `رقم الكرت: ${purchasedCard.cardID}\nكلمة المرور: ${purchasedCard.cardPass}`
+      : purchasedCard.cardID;
+    navigator.clipboard.writeText(text);
+    toast({ title: 'تم النسخ', description: 'تم نسخ بيانات الكرت بنجاح.' });
   };
-  
-  const handleSendSms = () => {
-    if (!purchasedCard || !selectedCategory || !smsRecipient || !networkName) return;
 
+  const handleSendSms = () => {
+    if (!purchasedCard || !smsRecipient) {
+      toast({ variant: 'destructive', title: 'خطأ', description: 'يرجى إدخال رقم الزبون.' });
+      return;
+    }
     const name = userProfile?.displayName || 'عميلنا';
     const balance = (userProfile?.balance ?? 0).toLocaleString('en-US');
+    const cardInfo = purchasedCard.cardPass
+      ? `${purchasedCard.cardID} (كلمة المرور: ${purchasedCard.cardPass})`
+      : purchasedCard.cardID;
 
-    const messageBody = `${name} 🖐️\nنشكرك على طلبك من ستار موبايل 💙\n\n*معلومات الكرت:*\nالشبكة : ${networkName}\nالفئة: ${selectedCategory.name}\nرقم الكرت: ${purchasedCard.cardID}\n\n*رصيدك:* ${balance} ريال\n\nتطبيق ستار موبايل :\nhttps://star26.vercel.app\n\nجهّزنا لك هالكرت، تقدر تشحن فيه وتستانس 🔥`;
-    
-    window.location.href = `sms:${smsRecipient}?body=${encodeURIComponent(messageBody)}`;
+    const msg = `${name} 🖐️\nنشكرك على طلبك من ستار موبايل 💙\n\n*معلومات الكرت:*\nالشبكة : ${networkName}\nالفئة: ${selectedCategory?.name || ''}\nرقم الكرت: ${cardInfo}\n\n*رصيدك:* ${balance} ريال\n\nتطبيق ستار موبايل :\nhttps://star26.vercel.app\n\nجهّزنا لك هالكرت، تقدر تشحن فيه وتستانس 🔥`;
+
+    window.location.href = `sms:${smsRecipient}?body=${encodeURIComponent(msg)}`;
     setIsSmsDialogOpen(false);
   };
 
-  const renderContent = () => {
-    if (isLoadingCategories) {
-        return (
-            <div className="space-y-4">
-                {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-             <div className="flex flex-col items-center justify-center text-center h-64">
-                <AlertCircle className="h-16 w-16 text-destructive" />
-                <h3 className="mt-4 text-lg font-semibold">حدث خطأ</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{error}</p>
-            </div>
-        );
-    }
-
-    if (!categories || categories.length === 0) {
-        return (
-             <div className="flex flex-col items-center justify-center text-center h-64">
-                <AlertCircle className="h-16 w-16 text-muted-foreground" />
-                <h3 className="mt-4 text-lg font-semibold">لا توجد فئات كروت</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                    لم يتم العثور على فئات لهذه الشبكة.
-                </p>
-            </div>
-        );
-    }
-
-    return (
-        <div className="space-y-4">
-            {categories.map((category, index) => {
-                return (
-                    <Card key={category.id} className="overflow-hidden animate-in fade-in-0" style={{ animationDelay: `${index * 100}ms` }}>
-                        <CardContent className="p-0 flex">
-                            <div className="flex-none w-1/4 bg-accent/50 flex flex-col items-center justify-center p-4 text-accent-foreground">
-                            <Database className="w-8 h-8 text-primary/80" />
-                            {category.dataLimit && (
-                                    <span className="font-bold text-sm text-center text-primary/80 mt-2">{category.dataLimit}</span>
-                            )}
-                            </div>
-                            <div className="flex-grow p-3">
-                                <div className='flex items-start justify-between gap-2'>
-                                    <div className='space-y-1 text-right'>
-                                        <h3 className="font-bold text-base">{category.name}</h3>
-                                        {(() => {
-                                            const finalPrice = getEffectiveCardPrice(category.price);
-                                            return (
-                                                <div className="flex items-center gap-2">
-                                                    <p className="font-black text-primary text-base">{finalPrice.toLocaleString('en-US')}</p>
-                                                </div>
-                                            );
-                                        })()}
-                                    </div>
-                                    <Button 
-                                        size="default" 
-                                        className="h-auto py-2 px-5 text-sm font-bold rounded-lg"
-                                        onClick={() => {
-                                            setSelectedCategory(category);
-                                            setIsConfirming(true);
-                                        }}
-                                    >
-                                        شراء
-                                    </Button>
-                                </div>
-                                <Separator className="my-2" />
-                                <div className="text-xs text-muted-foreground flex items-center justify-start gap-x-4 gap-y-1">
-                                    {category.expirationDate && <span className="flex items-center gap-1.5"><Calendar className="w-3 h-3" /> الصلاحية: {category.expirationDate}</span>}
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                );
-            })}
-        </div>
-    );
-  };
-  
-  if (isProcessing) {
-    return <ProcessingOverlay message="جاري تجهيز طلبك..." />;
-  }
-
-  if (purchasedCard) {
-    return (
-      <>
-        <audio ref={audioRef} src="/ashar.mp3" preload="auto" />
-        <div className="fixed inset-0 bg-transparent backdrop-blur-sm z-50 flex items-center justify-center animate-in fade-in-0 p-4">
-            <Card className="w-full max-w-sm text-center shadow-2xl rounded-[40px] border-none bg-card">
-                <CardContent className="p-8">
-                    <div className="flex flex-col items-center justify-center gap-6">
-                        <div className="bg-green-500 p-6 rounded-full animate-bounce">
-                            <CheckCircle className="h-16 w-16 text-white" />
-                        </div>
-                        <h2 className="text-2xl font-black text-green-600">تم الشراء بنجاح</h2>
-                        <p className="text-sm text-muted-foreground">هذا هو رقم الكرت الخاص بك.</p>
-                        
-                        <div className="w-full text-center space-y-2 bg-muted p-6 rounded-3xl border-2 border-dashed border-primary/20 font-mono text-3xl font-black tracking-widest">
-                           <p>{purchasedCard.cardID}</p>
-                        </div>
-                        
-                         <div className="w-full grid grid-cols-2 gap-3 pt-2">
-                             <Button className="w-full h-12 rounded-2xl font-bold" onClick={handleCopyCardDetails}>
-                                 <Copy className="ml-2 h-4 w-4" />
-                                 نسخ
-                             </Button>
-                             <Button variant="outline" className="w-full h-12 rounded-2xl font-black" onClick={() => setIsSmsDialogOpen(true)}>
-                                <MessageSquare className="ml-2 h-4 w-4" />
-                                ارسال SMS
-                            </Button>
-                         </div>
-
-                        <div className="w-full pt-4">
-                            <Button variant="ghost" className="w-full text-muted-foreground font-bold" onClick={() => {
-                                setPurchasedCard(null);
-                                router.push('/login');
-                            }}>إغلاق</Button>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
-        <Dialog open={isSmsDialogOpen} onOpenChange={setIsSmsDialogOpen}>
-            <DialogContent className="rounded-[32px] max-sm p-6 z-[10000] border-none shadow-2xl">
-                <DialogHeader>
-                    <div className="bg-primary/10 w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                        <Smartphone className="text-primary h-6 w-6" />
-                    </div>
-                    <DialogTitle className="text-center text-xl font-black">إرسال كرت لزبون</DialogTitle>
-                    <DialogDescription className="text-center">
-                        أدخل رقم جوال الزبون لفتح تطبيق الرسائل وإرسال بيانات الكرت.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="py-6">
-                    <div className="space-y-2">
-                        <Label htmlFor="sms-phone" className="text-sm font-bold text-muted-foreground pr-1">رقم جوال الزبون</Label>
-                        <Input 
-                            id="sms-phone"
-                            placeholder="7xxxxxxxx" 
-                            type="tel" 
-                            value={smsRecipient} 
-                            onChange={e => setSmsRecipient(e.target.value.replace(/\D/g, '').slice(0, 9))} 
-                            className="text-center text-2xl font-black h-14 rounded-2xl border-2 focus-visible:ring-primary tracking-widest bg-muted/20" 
-                        />
-                    </div>
-                </div>
-                <DialogFooter className="grid grid-cols-2 gap-3">
-                    <Button onClick={handleSendSms} className="w-full h-12 rounded-2xl font-bold" disabled={!smsRecipient || smsRecipient.length < 9}>إرسال الآن</Button>
-                    <Button variant="outline" className="w-full h-12 rounded-2xl font-bold mt-0" onClick={() => setIsSmsDialogOpen(false)}>إلغاء</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-      </>
-    );
-  }
+  const finalConfirmPrice = selectedCategory
+    ? getEffectiveCardPrice(selectedCategory.price)
+    : 0;
+  const currentBalance = userProfile?.balance ?? 0;
 
   return (
     <>
-        <div className="flex flex-col h-full bg-background">
-            <SimpleHeader title={networkName} />
-            <div className="flex-1 overflow-y-auto p-4">{renderContent()}</div>
-        </div>
-        <Toaster />
+      <audio ref={audioRef} src="/ashar.mp3" preload="auto" />
+      <div className="flex flex-col h-full bg-[#F4F7F9] dark:bg-slate-950">
+        <SimpleHeader title={networkName} />
 
-        <AlertDialog open={isConfirming} onOpenChange={setIsConfirming}>
-            {selectedCategory && (
-                <AlertDialogContent className="rounded-[32px]">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="text-center font-black">تأكيد عملية الشراء</AlertDialogTitle>
-                        <AlertDialogDescription className="text-center pt-2">
-                            {(() => {
-                                const finalPrice = getEffectiveCardPrice(selectedCategory.price);
-                                return (
-                                    <>
-                                        هل أنت متأكد من رغبتك في شراء كرت "{selectedCategory.name}"؟ سيتم خصم{' '}
-                                        <span className="font-bold text-primary dark:text-primary-foreground">
-                                            {finalPrice.toLocaleString('en-US')} ريال
-                                        </span>{' '}
-                                        من رصيدك.
-                                    </>
-                                );
-                            })()}
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-4 sm:space-x-0">
-                        <AlertDialogAction className="w-full rounded-2xl h-12 font-bold" onClick={handlePurchase} disabled={isProcessing}>
-                            {isProcessing ? <Loader2 className="animate-spin h-4 w-4" /> : 'تأكيد'}
-                        </AlertDialogAction>
-                        <AlertDialogCancel className="w-full rounded-2xl h-12 mt-0" disabled={isProcessing}>إلغاء</AlertDialogCancel>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            )}
-        </AlertDialog>
+        <div className="flex-1 overflow-y-auto no-scrollbar pb-24">
+          {/* Hero Header */}
+          <div className="bg-mesh-gradient pt-5 pb-8 px-6 rounded-b-[40px] shadow-xl relative overflow-hidden">
+            <div className="absolute -top-10 -right-10 w-36 h-36 bg-white/10 rounded-full blur-3xl" />
+            <div className="absolute -bottom-10 -left-10 w-36 h-36 bg-white/10 rounded-full blur-3xl" />
 
-        {/* Delayed Order Dialog (50s timeout) */}
-        <Dialog open={delayedOrderPopupOpen} onOpenChange={setDelayedOrderPopupOpen}>
-          <DialogContent className="rounded-[32px] max-w-sm p-6 z-[10002] bg-white dark:bg-slate-900 border-none shadow-2xl text-center" dir="rtl">
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-16 h-16 rounded-full bg-amber-500/15 flex items-center justify-center text-amber-500 mb-1">
-                <Clock className="w-8 h-8 animate-pulse text-amber-500" />
+            <div className="relative flex flex-col items-center text-center space-y-3 animate-in fade-in-0 zoom-in-95 duration-500">
+              <div className="bg-white/20 p-3.5 rounded-[22px] backdrop-blur-md border border-white/25 shadow-xl">
+                <Wifi className="h-8 w-8 text-white" />
               </div>
-              <DialogTitle className="text-xl font-black text-slate-800 dark:text-white">
-                سنقوم بإرسال الكرت إليك بعد لحظات
-              </DialogTitle>
-              <DialogDescription className="text-sm font-bold text-slate-600 dark:text-slate-300 leading-relaxed">
-                طلبك قيد المعالجة لدى المزود وسيصلك الكرت وتجده في سجل العمليات فور صدوره.
-              </DialogDescription>
-              <Button 
-                className="w-full mt-3 h-12 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black text-base shadow-lg"
-                onClick={() => setDelayedOrderPopupOpen(false)}
-              >
-                حسناً
-              </Button>
+              <div className="space-y-1">
+                <h2 className="text-xl font-black text-white drop-shadow-sm">{networkName}</h2>
+                {networkLocation && (
+                  <p className="text-[11px] text-white/85 font-bold bg-white/15 py-1 px-3.5 rounded-full border border-white/10 inline-block">
+                    {networkLocation}
+                  </p>
+                )}
+              </div>
             </div>
-          </DialogContent>
-        </Dialog>
+          </div>
 
-        {isProcessing && <ProcessingOverlay message="جاري تجهيز واستخراج الكرت من المزود... يرجى الانتظار" />}
+          {/* Categories List */}
+          <div className="px-4 mt-5 space-y-3">
+            {isLoadingCategories && categories.length === 0 ? (
+              <div className="flex justify-center py-16">
+                <ProcessingOverlay />
+              </div>
+            ) : error === 'uncached_offline' ? (
+              <div className="text-center p-6 bg-amber-500/10 border border-amber-500/20 rounded-[28px] space-y-3 my-4">
+                <div className="w-14 h-14 rounded-full bg-amber-500/20 text-amber-600 flex items-center justify-center mx-auto">
+                  <WifiOff className="w-7 h-7 animate-pulse" />
+                </div>
+                <h3 className="text-base font-black text-foreground">الفئات غير محملة مسبقاً</h3>
+                <p className="text-xs font-bold text-muted-foreground leading-relaxed">
+                  يرجى الاتصال بالإنترنت وفتح هذه الشبكة مرة واحدة فقط ليتم حفظ فئاتها تلقائياً في هاتفك.
+                </p>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center text-center p-8 bg-destructive/5 rounded-[28px] border border-destructive/15 my-4">
+                <AlertCircle className="w-10 h-10 text-destructive mb-3" />
+                <p className="font-black text-destructive text-sm">{error}</p>
+              </div>
+            ) : sortedCategories.length === 0 ? (
+              <div className="text-center py-16 text-muted-foreground font-bold">
+                لا توجد فئات متاحة حالياً لهذه الشبكة.
+              </div>
+            ) : (
+              sortedCategories.map((cat, idx) => {
+                const gradient = CARD_GRADIENTS[idx % CARD_GRADIENTS.length];
+                const finalPrice = getEffectiveCardPrice(cat.price);
+                const capacityText = getCategoryCapacity(cat);
+                const validityText = getCategoryValidity(cat);
+
+                return (
+                  <Card
+                    key={cat.id}
+                    onClick={() => handleSelectCategory(cat)}
+                    style={{ animationDelay: `${Math.min(idx * 65, 500)}ms` }}
+                    className="group relative overflow-hidden cursor-pointer border border-black/5 dark:border-white/10 bg-white dark:bg-slate-900 rounded-[26px] shadow-sm hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-300 animate-in fade-in-0 slide-in-from-bottom-4 fill-mode-both"
+                  >
+                    <CardContent className="p-4 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                        <div
+                          className={cn(
+                            'h-12 w-12 rounded-[18px] flex items-center justify-center shrink-0 shadow-lg bg-gradient-to-br text-white group-hover:scale-110 transition-transform duration-300',
+                            gradient
+                          )}
+                        >
+                          <Wifi className="h-6 w-6" />
+                        </div>
+
+                        <div className="text-right space-y-1.5 min-w-0 flex-1">
+                          <h4 className="text-sm font-black text-foreground group-hover:text-primary transition-colors truncate">
+                            {cat.name}
+                          </h4>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-black text-primary bg-primary/10 px-2.5 py-0.5 rounded-full">
+                              <Database className="h-3 w-3" />
+                              <span>التخزين: {capacityText}</span>
+                            </span>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">
+                              <Clock className="h-3 w-3" />
+                              <span>الصلاحية: {validityText}</span>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                        <div className="flex items-baseline gap-1 leading-none">
+                          <span className="text-xl font-black tracking-tight text-primary">
+                            {finalPrice.toLocaleString('en-US')}
+                          </span>
+                          <span className="text-[10px] font-bold text-muted-foreground">ر.ي</span>
+                        </div>
+                        <Button
+                          size="sm"
+                          className="h-8 rounded-xl text-[11px] font-black px-4 bg-mesh-gradient text-white shadow-md shadow-primary/20 border-none"
+                        >
+                          شراء
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+
+      <Toaster />
+
+      {/* منبثق تأكيد الشراء الفخم */}
+      <Dialog
+        open={isConfirming}
+        onOpenChange={(open) => !open && !isProcessing && setIsConfirming(false)}
+      >
+        <DialogContent className="rounded-[34px] max-w-[92%] sm:max-w-sm p-0 overflow-hidden bg-white dark:bg-slate-900 z-[10000] border-none shadow-2xl outline-none [&>button]:hidden">
+          {selectedCategory && (
+            <div>
+              <div className="bg-mesh-gradient px-6 pt-7 pb-6 text-center text-white relative overflow-hidden">
+                <div className="absolute -top-8 -right-8 w-28 h-28 bg-white/10 rounded-full blur-2xl" />
+                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md border border-white/25 flex items-center justify-center mx-auto mb-3 shadow-lg">
+                  {isOffline ? (
+                    <MessageSquare className="h-7 w-7 text-white animate-pulse" />
+                  ) : (
+                    <ShieldCheck className="h-8 w-8 text-white" />
+                  )}
+                </div>
+                <DialogTitle className="text-lg font-black text-white">
+                  {isOffline ? 'طلب كرت بدون إنترنت (SMS)' : 'تأكيد شراء الكرت'}
+                </DialogTitle>
+                <DialogDescription className="text-xs font-bold text-white/85 mt-1">
+                  {networkName}
+                </DialogDescription>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <div className="bg-slate-50 dark:bg-slate-800/70 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-muted-foreground">الفئة المختارة</span>
+                    <span className="text-sm font-black text-foreground">
+                      {selectedCategory.name}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <div className="bg-white dark:bg-slate-900 rounded-xl p-2.5 text-center border border-slate-100 dark:border-slate-800">
+                      <p className="text-[10px] font-bold text-muted-foreground mb-0.5">التخزين</p>
+                      <p className="text-xs font-black text-primary">
+                        {getCategoryCapacity(selectedCategory)}
+                      </p>
+                    </div>
+                    <div className="bg-white dark:bg-slate-900 rounded-xl p-2.5 text-center border border-slate-100 dark:border-slate-800">
+                      <p className="text-[10px] font-bold text-muted-foreground mb-0.5">الصلاحية</p>
+                      <p className="text-xs font-black text-foreground">
+                        {getCategoryValidity(selectedCategory)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-primary/5 dark:bg-primary/10 rounded-2xl p-4 border border-primary/15 flex items-center justify-between">
+                  <div className="text-right">
+                    <p className="text-[10px] font-black text-muted-foreground">المبلغ المطلوب</p>
+                    <p className="text-2xl font-black text-primary leading-tight">
+                      {finalConfirmPrice.toLocaleString('en-US')}{' '}
+                      <span className="text-xs font-bold">ريال</span>
+                    </p>
+                  </div>
+                  <div className="text-left bg-white dark:bg-slate-900 px-3 py-2 rounded-xl border border-black/5 dark:border-white/10">
+                    <p className="text-[9px] font-bold text-muted-foreground flex items-center gap-1 justify-end">
+                      <Wallet className="h-3 w-3 text-primary" />
+                      رصيدك الحالي
+                    </p>
+                    <p className="text-xs font-black text-foreground">
+                      {currentBalance.toLocaleString('en-US')} ر.ي
+                    </p>
+                  </div>
+                </div>
+
+                <DialogFooter className="grid grid-cols-2 gap-3 pt-1">
+                  <Button
+                    className={cn(
+                      'w-full h-12 rounded-2xl font-black text-sm shadow-lg border-none',
+                      isOffline
+                        ? 'bg-[#0048ad] hover:bg-[#003887] text-white gap-2'
+                        : 'bg-mesh-gradient text-white shadow-primary/25'
+                    )}
+                    onClick={handlePurchase}
+                    disabled={isProcessing}
+                  >
+                    {isProcessing ? (
+                      <Loader2 className="animate-spin h-5 w-5" />
+                    ) : isOffline ? (
+                      <>
+                        <MessageSquare className="h-4 w-4" />
+                        <span>إرسال (SMS)</span>
+                      </>
+                    ) : (
+                      'تأكيد الشراء'
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full h-12 rounded-2xl font-black text-sm mt-0"
+                    onClick={() => setIsConfirming(false)}
+                    disabled={isProcessing}
+                  >
+                    إلغاء
+                  </Button>
+                </DialogFooter>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* منبثق الكرت الفوري بعد الشراء */}
+      {purchasedCard && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10001] flex items-center justify-center p-4 animate-in fade-in-0 duration-150">
+          <Card className="w-full max-w-sm text-center shadow-2xl rounded-[38px] overflow-hidden border-none bg-background">
+            <CardContent className="p-7 space-y-5">
+              <div className="bg-green-500 p-7 flex justify-center mb-2 rounded-t-[38px] -m-7">
+                <div className="bg-white/20 p-3.5 rounded-full animate-bounce">
+                  <CheckCircle className="h-14 w-14 text-white" />
+                </div>
+              </div>
+              <div className="pt-2 space-y-1">
+                <h2 className="text-2xl font-black text-green-600">تم الشراء بنجاح</h2>
+                <p className="text-xs font-bold text-muted-foreground">
+                  {networkName} — {selectedCategory?.name}
+                </p>
+              </div>
+
+              <div className="p-5 bg-muted rounded-[24px] border-2 border-dashed border-primary/20 font-mono text-center space-y-2">
+                <p className="text-[10px] font-sans font-bold text-muted-foreground uppercase">
+                  رقم الكرت
+                </p>
+                <p className="text-2xl font-black tracking-widest text-foreground select-all">
+                  {purchasedCard.cardID}
+                </p>
+              </div>
+
+              <Button className="w-full rounded-2xl h-12 font-black" onClick={handleCopyCardDetails}>
+                <Copy className="ml-2 h-4 w-4" /> نسخ
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full text-muted-foreground font-bold"
+                onClick={() => {
+                  setPurchasedCard(null);
+                  setSelectedCategory(null);
+                }}
+              >
+                إغلاق
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* منبثق إرسال SMS للزبون */}
+      <Dialog open={isSmsDialogOpen} onOpenChange={setIsSmsDialogOpen}>
+        <DialogContent className="rounded-[32px] max-w-sm p-6 z-[10002] bg-white dark:bg-slate-900 border-none shadow-2xl">
+          <DialogHeader>
+            <div className="bg-primary/10 w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Smartphone className="text-primary h-6 w-6" />
+            </div>
+            <DialogTitle className="text-center text-xl font-black">إرسال كرت لزبون</DialogTitle>
+            <DialogDescription className="text-center font-bold">
+              أدخل رقم جوال الزبون لإرسال بيانات الكرت عبر الرسائل.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              placeholder="7xxxxxxxx"
+              type="tel"
+              value={smsRecipient}
+              onChange={(e) => setSmsRecipient(e.target.value.replace(/\D/g, '').slice(0, 9))}
+              className="text-center text-2xl font-black h-14 rounded-2xl border-2 focus-visible:ring-primary tracking-widest bg-muted/20"
+            />
+          </div>
+          <DialogFooter className="grid grid-cols-2 gap-3">
+            <Button
+              onClick={handleSendSms}
+              className="w-full h-12 rounded-2xl font-black text-base"
+              disabled={!smsRecipient || smsRecipient.length < 9}
+            >
+              إرسال
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full h-12 rounded-2xl font-black text-base mt-0"
+              onClick={() => setIsSmsDialogOpen(false)}
+            >
+              إلغاء
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* منبثق التأخير (50 ثانية) */}
+      <Dialog open={delayedOrderPopupOpen} onOpenChange={setDelayedOrderPopupOpen}>
+        <DialogContent
+          className="rounded-[32px] max-w-sm p-6 z-[10002] bg-white dark:bg-slate-900 border-none shadow-2xl text-center"
+          dir="rtl"
+        >
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-16 h-16 rounded-full bg-amber-500/15 flex items-center justify-center text-amber-500 mb-1">
+              <Clock className="w-8 h-8 animate-pulse text-amber-500" />
+            </div>
+            <DialogTitle className="text-xl font-black text-slate-800 dark:text-white">
+              سنقوم بإرسال الكرت إليك بعد لحظات
+            </DialogTitle>
+            <DialogDescription className="text-sm font-bold text-slate-600 dark:text-slate-300 leading-relaxed">
+              طلبك قيد المعالجة لدى المزود وسيصلك الكرت وتجده في سجل العمليات فور صدوره.
+            </DialogDescription>
+            <Button
+              className="w-full mt-3 h-12 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black text-base shadow-lg"
+              onClick={() => setDelayedOrderPopupOpen(false)}
+            >
+              حسناً
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {isProcessing && <ProcessingOverlay message="جاري استخراج الكرت..." />}
     </>
   );
 }
 
-
 export default function NetworkPurchasePage() {
-    return (
-      <Suspense fallback={<div>Loading...</div>}>
-        <NetworkPurchasePageComponent />
-      </Suspense>
-    );
+  return (
+    <Suspense
+      fallback={
+        <div className="flex justify-center py-20">
+          <ProcessingOverlay />
+        </div>
+      }
+    >
+      <NetworkPurchasePageComponent />
+    </Suspense>
+  );
 }

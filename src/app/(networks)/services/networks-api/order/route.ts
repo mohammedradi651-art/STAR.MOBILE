@@ -48,7 +48,8 @@ export async function POST(
         'User-Agent': 'StarMobileApp/1.0',
       },
       body: JSON.stringify(externalApiBody),
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: AbortSignal.timeout(45000),
     });
 
     const contentType = response.headers.get("content-type") || "";

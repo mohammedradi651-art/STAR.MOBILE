@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -115,6 +116,7 @@ const CARD_GRADIENTS = [
 ];
 
 export default function CombinedNetworksPage() {
+  const router = useRouter();
   const firestore = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
@@ -277,7 +279,18 @@ export default function CombinedNetworksPage() {
   const { data: favorites } = useCollection<Favorite>(favoritesQuery);
   const favoriteNetworkIds = useMemo(() => new Set(favorites?.map(f => f.targetId)), [favorites]);
 
-  const handleNetworkClick = async (network: CombinedNetwork) => {
+  const handleNetworkClick = (network: CombinedNetwork) => {
+    const params = new URLSearchParams();
+    params.set('name', network.name);
+    if (network.location) params.set('location', network.location);
+    if (network.isLocal) {
+      params.set('local', '1');
+      params.set('ownerId', network.ownerId || network.id);
+    }
+    router.push(`/services/${encodeURIComponent(network.id)}?${params.toString()}`);
+  };
+
+  const _unusedHandleNetworkClick = async (network: CombinedNetwork) => {
     setSelectedNetwork(network);
     setCategoryError(null);
     setPurchasedCard(null);
