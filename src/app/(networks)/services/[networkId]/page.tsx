@@ -9,6 +9,8 @@ import { useFirestore, useUser, useDoc } from '@/firebase';
 import {
   doc,
   getDoc,
+  getDocs,
+  collection,
   writeBatch,
   increment,
   onSnapshot,
@@ -173,15 +175,31 @@ function NetworkPurchasePageComponent() {
         return;
       }
 
+      const treatAsLocal = isLocal || !/^\d+$/.test(String(networkId));
+
+      if (treatAsLocal && !firestore) {
+        return;
+      }
+
       try {
-        if (isLocal) {
-          if (!firestore) return;
+        if (treatAsLocal && firestore) {
           const localNetRef = doc(firestore, `users/${ownerId}/local_networks`, ownerId);
           const snap = await getDoc(localNetRef);
-          const catsData: CardCategory[] =
+          let catsData: CardCategory[] =
             snap.exists() && Array.isArray(snap.data()?.categories)
               ? snap.data()?.categories
               : [];
+
+          if (catsData.length === 0) {
+            const colSnap = await getDocs(collection(firestore, `users/${ownerId}/local_networks`));
+            if (!colSnap.empty) {
+              const firstData = colSnap.docs[0].data();
+              if (Array.isArray(firstData?.categories)) {
+                catsData = firstData.categories;
+              }
+            }
+          }
+
           setCategories(catsData);
           localStorage.setItem(catCacheKey, JSON.stringify(catsData));
         } else {
@@ -260,7 +278,8 @@ function NetworkPurchasePageComponent() {
     const now = new Date().toISOString();
 
     try {
-      if (isLocal) {
+      const treatAsLocal = isLocal || !/^\d+$/.test(String(networkId));
+      if (treatAsLocal) {
         const cardsDocRef = doc(
           firestore,
           `users/${ownerId}/local_networks/${ownerId}/cards_data`,

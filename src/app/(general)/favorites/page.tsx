@@ -156,7 +156,8 @@ export default function FavoritesPage() {
     const params = new URLSearchParams();
     params.set('name', fav.name);
     if (fav.location) params.set('location', fav.location);
-    if (fav.isLocal) {
+    const inferredLocal = fav.isLocal ?? !/^\d+$/.test(String(fav.targetId || ''));
+    if (inferredLocal) {
       params.set('local', '1');
       params.set('ownerId', fav.targetId);
     }
