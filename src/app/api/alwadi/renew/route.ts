@@ -1,14 +1,9 @@
 import { NextResponse } from 'next/server';
-import xmlrpc from 'xmlrpc';
 import { initializeServerFirebase } from '@/firebase/server-init';
 import { doc, getDoc, writeBatch, increment, collection, query, where, getDocs, arrayUnion } from 'firebase/firestore';
+import { executeAlwadiKw } from '@/lib/alwadi-client';
 
 export const dynamic = 'force-dynamic';
-
-const url = "api.alwaadi.net";
-const db = "alwaadi_DB";
-const USERNAME = "770326M";
-const PASSWORD = "770326828moh";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,16 +21,6 @@ const ALWADI_PRICES: Record<string, number> = {
   '7': 9000,
   '9': 15000,
 };
-
-function xmlrpcCall(client: any, method: string, params: any[]): Promise<any> {
-  return new Promise((resolve, reject) => {
-    client.methodCall(method, params, (err: any, value: any) => {
-      if (err) return reject(err);
-      if (value && value.faultCode) return reject(new Error(value.faultString));
-      resolve(value);
-    });
-  });
-}
 
 /**
  * التحقق الأمني المزدوج من هوية المتصل (Firebase ID Token أو API Key)
@@ -217,27 +202,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // 3. الاتصال بسيرفر منظومة الوادي عبر XML-RPC
-    const common = xmlrpc.createSecureClient({ host: url, port: 443, path: '/xmlrpc/2/common' });
-    let uid: any;
-    try {
-      uid = await xmlrpcCall(common, "authenticate", [db, USERNAME, PASSWORD, {}]);
-    } catch (authErr: any) {
-      if (didDeductOnServer && effectiveUserId) {
-        await refundAlwadi(firestore, effectiveUserId, serverTransId, finalCost, 'فشل التوثيق مع سيرفر منظومة الوادي');
-      }
-      return NextResponse.json({ success: false, message: "فشل التوثيق مع سيرفر منظومة الوادي." }, { status: 502, headers: corsHeaders });
-    }
-
-    if (!uid || typeof uid !== 'number') {
-      if (didDeductOnServer && effectiveUserId) {
-        await refundAlwadi(firestore, effectiveUserId, serverTransId, finalCost, 'خطأ في بيانات التوثيق مع المزود');
-      }
-      return NextResponse.json({ success: false, message: "فشل التوثيق مع السيرفر." }, { status: 401, headers: corsHeaders });
-    }
-
-    const models = xmlrpc.createSecureClient({ host: url, port: 443, path: '/xmlrpc/2/object' });
-
+    // 3. الاتصال بسيرفر منظومة الوادي عبر XML-RPC (باستخدام الجلسة والاتصال المستمر)
     const createData: any = {
       "num_card": cardNumber,
       "renewal_categories": parseInt(packageId)
@@ -249,10 +214,7 @@ export async function POST(req: Request) {
 
     let createResult: any;
     try {
-      createResult = await xmlrpcCall(models, "execute_kw", [
-        db, uid, PASSWORD, "renewal.proces", "create",
-        [createData]
-      ]);
+      createResult = await executeAlwadiKw("renewal.proces", "create", [createData]);
     } catch (execErr: any) {
       if (didDeductOnServer && effectiveUserId) {
         await refundAlwadi(firestore, effectiveUserId, serverTransId, finalCost, execErr.message || 'فشل التجديد في المنظومة');

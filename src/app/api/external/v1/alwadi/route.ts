@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
 import { collection, query, where, getDocs, doc, writeBatch, increment, getDoc, arrayUnion } from 'firebase/firestore';
 import { DEFAULT_SERVICES_CONFIG, SystemServicesConfig, calculateFinalServicePrice } from '@/lib/services-config';
+import { lookupAlwadiCard } from '@/lib/alwadi-client';
 
 /**
  * @fileOverview نقطة نهاية منظومة الوادي v1.7.5 (نسخة الذكاء والحماية القصوى)
@@ -117,12 +118,7 @@ export async function POST(req: Request) {
 
     // --- 1. عملية الاستعلام (Lookup) ---
     if (action === 'lookup') {
-        const response = await fetch(`${origin}/api/alwadi/lookup`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ number })
-        });
-        const result = await response.json();
+        const result = await lookupAlwadiCard(number);
         
         if (result.success) {
             return NextResponse.json({
@@ -187,12 +183,7 @@ export async function POST(req: Request) {
         // ج. المطابقة الذكية: التحقق من أن subscriberId المرسل يطابق رقم الكرت فعلياً
         let resolvedSubscriberName = '';
         try {
-            const checkRes = await fetch(`${origin}/api/alwadi/lookup`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ number })
-            });
-            const checkData = await checkRes.json();
+            const checkData = await lookupAlwadiCard(number);
             
             if (!checkData.success || String(checkData.data.id) !== String(subscriberId)) {
                 return NextResponse.json({ 

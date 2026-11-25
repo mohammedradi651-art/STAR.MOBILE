@@ -55,18 +55,40 @@ const PROVIDER_OPTIONS: RenewalOption[] = [
   { id: '9', title: 'تجديد سنة كاملة', price: 15000 },
 ];
 
+let cachedThAnimation: any = null;
+let thAnimationPromise: Promise<any> | null = null;
+
+function preloadThAnimation() {
+  if (cachedThAnimation) return Promise.resolve(cachedThAnimation);
+  if (!thAnimationPromise) {
+    thAnimationPromise = fetch('/TH.json')
+      .then(res => res.json())
+      .then(data => {
+        cachedThAnimation = data;
+        return data;
+      })
+      .catch(err => {
+        console.error("Lottie load error:", err);
+        thAnimationPromise = null;
+        return null;
+      });
+  }
+  return thAnimationPromise;
+}
+
 const AlwadiMovingLoader = () => {
-  const [animationData, setAnimationData] = useState<any>(null);
+  const [animationData, setAnimationData] = useState<any>(() => cachedThAnimation);
 
   useEffect(() => {
-    fetch('/TH.json')
-      .then(res => res.json())
-      .then(data => setAnimationData(data))
-      .catch(err => console.error("Lottie load error:", err));
+    if (!cachedThAnimation) {
+      preloadThAnimation().then(data => {
+        if (data) setAnimationData(data);
+      });
+    }
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-xl animate-in fade-in-0 duration-500">
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/55 backdrop-blur-sm animate-in fade-in-0 duration-75">
       <div className="relative w-28 h-28 flex items-center justify-center overflow-hidden">
           {animationData && (
             <Lottie 
@@ -115,6 +137,10 @@ export default function AlwadiPage() {
     }
     return roundCurrency(price * rate);
   };
+
+  useEffect(() => {
+    preloadThAnimation();
+  }, []);
 
   useEffect(() => {
     if (showSuccess && audioRef.current) {
