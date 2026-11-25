@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { useCollection, useFirestore, useMemoFirebase, useUser, deleteDocumentNonBlocking, useDoc } from '@/firebase';
 import { collection, query, where, doc, getDocs, getDoc, writeBatch, increment, limit as firestoreLimit, updateDoc, onSnapshot } from 'firebase/firestore';
@@ -87,6 +88,7 @@ const CARD_GRADIENTS = [
 ];
 
 export default function FavoritesPage() {
+  const router = useRouter();
   const firestore = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
@@ -150,7 +152,18 @@ export default function FavoritesPage() {
     toast({ title: "تمت الإزالة من المفضلة" });
   };
 
-  const handleNetworkClick = async (fav: Favorite) => {
+  const handleNetworkClick = (fav: Favorite) => {
+    const params = new URLSearchParams();
+    params.set('name', fav.name);
+    if (fav.location) params.set('location', fav.location);
+    if (fav.isLocal) {
+      params.set('local', '1');
+      params.set('ownerId', fav.targetId);
+    }
+    router.push(`/services/${encodeURIComponent(fav.targetId)}?${params.toString()}`);
+  };
+
+  const _unusedHandleNetworkClick = async (fav: Favorite) => {
     setSelectedNetwork({ id: fav.targetId, name: fav.name, location: fav.location, isLocal: !!fav.isLocal });
     setCategoryError(null);
     setPurchasedCard(null);
