@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useRouter } from 'next/navigation';
-import Lottie from 'lottie-react';
+import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,34 +41,6 @@ type UserProfile = {
     displayName?: string;
     phoneNumber?: string;
     balance?: number;
-};
-
-/**
- * مكون التحميل بالشعار المتحرك المعتمد
- */
-const TopUpMovingLoader = () => {
-  const [animationData, setAnimationData] = useState<any>(null);
-
-  useEffect(() => {
-    fetch('/TH.json')
-      .then(res => res.json())
-      .then(data => setAnimationData(data))
-      .catch(err => console.error("Lottie load error:", err));
-  }, []);
-
-  return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/10 backdrop-blur-[2px] pointer-events-auto animate-in fade-in duration-300">
-      <div className="relative w-32 h-32 flex items-center justify-center overflow-hidden animate-in zoom-in-95 duration-500">
-          {animationData && (
-            <Lottie 
-                animationData={animationData} 
-                loop={true} 
-                style={{ width: '100%', height: '100%' }} 
-            />
-          )}
-      </div>
-    </div>
-  );
 };
 
 const getLogoSrc = (url?: string, name?: string) => {
@@ -464,7 +436,7 @@ export default function TopUpPage() {
         <div className="flex flex-col h-full bg-[#F8FAFC] dark:bg-slate-950">
             <SimpleHeader title="تغذية الحساب" />
             
-            {isVerifyingBank && <TopUpMovingLoader />}
+            {isVerifyingBank && <ProcessingOverlay />}
 
             <div className="flex-1 overflow-y-auto pb-32 no-scrollbar">
                 

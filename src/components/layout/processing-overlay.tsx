@@ -1,35 +1,76 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { cn } from '@/lib/utils';
+
+let cachedLottieComponent: any = null;
+let cachedAnimationData: any = null;
+let preloadPromise: Promise<{ Lottie: any; animationData: any }> | null = null;
 
 /**
- * مؤشر تحميل عالمي فخم يستخدم نظام التحميل اليدوي لتجنب أخطاء الموديلات.
+ * Preloads lottie-react and /TH.json once in memory so ProcessingOverlay
+ * renders the animated logo immediately on frame 1 without network or import delay.
+ */
+export function preloadProcessingAssets() {
+  if (cachedLottieComponent && cachedAnimationData) {
+    return Promise.resolve({
+      Lottie: cachedLottieComponent,
+      animationData: cachedAnimationData,
+    });
+  }
+
+  if (!preloadPromise) {
+    preloadPromise = Promise.all([
+      import('lottie-react'),
+      fetch('/TH.json').then((res) => res.json()),
+    ])
+      .then(([lottieMod, animData]) => {
+        cachedLottieComponent = lottieMod.default;
+        cachedAnimationData = animData;
+        return {
+          Lottie: cachedLottieComponent,
+          animationData: cachedAnimationData,
+        };
+      })
+      .catch((err) => {
+        console.error('Lottie load error:', err);
+        preloadPromise = null;
+        return { Lottie: null, animationData: null };
+      });
+  }
+
+  return preloadPromise;
+}
+
+// Start preloading automatically on the client as soon as any page imports ProcessingOverlay
+if (typeof window !== 'undefined') {
+  preloadProcessingAssets();
+}
+
+/**
+ * مؤشر تحميل عالمي فخم يستخدم التحميل المسبق للذاكرة لضمان الظهور الفوري.
  */
 export const ProcessingOverlay = ({ message }: { message?: string }) => {
-  const [LottieComponent, setLottieComponent] = useState<any>(null);
-  const [animationData, setAnimationData] = useState<any>(null);
+  const [LottieComponent, setLottieComponent] = useState<any>(() => cachedLottieComponent);
+  const [animationData, setAnimationData] = useState<any>(() => cachedAnimationData);
 
   useEffect(() => {
-    // تحميل الأصول ديناميكياً
-    const loadAssets = async () => {
-        try {
-            const [lottieMod, animRes] = await Promise.all([
-                import('lottie-react'),
-                fetch('/TH.json')
-            ]);
-            setLottieComponent(() => lottieMod.default);
-            setAnimationData(await animRes.json());
-        } catch (err) {
-            console.error("Lottie load error:", err);
-        }
-    };
+    if (!cachedLottieComponent || !cachedAnimationData) {
+      let active = true;
+      preloadProcessingAssets().then(({ Lottie, animationData: data }) => {
+        if (!active) return;
+        if (Lottie) setLottieComponent(() => Lottie);
+        if (data) setAnimationData(data);
+      });
+      return () => {
+        active = false;
+      };
+    }
+  }, []);
 
-    loadAssets();
-
+  useEffect(() => {
     const originalStyle = window.getComputedStyle(document.body).overflow;
     document.body.style.overflow = 'hidden';
-    
+
     const preventDefault = (e: Event) => e.preventDefault();
     document.addEventListener('touchmove', preventDefault, { passive: false });
 
@@ -42,18 +83,18 @@ export const ProcessingOverlay = ({ message }: { message?: string }) => {
   const Lottie = LottieComponent;
 
   return (
-    <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center animate-in fade-in-0 pointer-events-auto backdrop-blur-[40px] bg-black/75">
-      <div className="relative w-28 h-28 flex items-center justify-center overflow-hidden animate-in zoom-in-95 duration-500">
-          {Lottie && animationData && (
-            <Lottie 
-                animationData={animationData} 
-                loop={true} 
-                style={{ width: '100%', height: '100%' }} 
-            />
-          )}
+    <div className="fixed inset-0 z-[10000] flex flex-col items-center justify-center animate-in fade-in-0 duration-75 pointer-events-auto backdrop-blur-sm bg-black/60">
+      <div className="relative w-28 h-28 flex items-center justify-center overflow-hidden animate-in zoom-in-95 duration-75">
+        {Lottie && animationData && (
+          <Lottie
+            animationData={animationData}
+            loop={true}
+            style={{ width: '100%', height: '100%' }}
+          />
+        )}
       </div>
       {message && (
-          <p className="mt-4 text-white/80 font-black text-sm animate-pulse tracking-widest">{message}</p>
+        <p className="mt-4 text-white/80 font-black text-sm animate-pulse tracking-widest">{message}</p>
       )}
     </div>
   );

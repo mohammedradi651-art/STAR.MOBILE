@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,46 +26,6 @@ type AlsafaResult = {
     subscriberName: string;
     cardNumber: string;
     subscriptionStatus: string;
-};
-
-/**
- * مكون التحميل المطور - تم إصلاح الاستيراد لتجنب الأخطاء
- */
-const AlsafaaMovingLoader = () => {
-  const [LottieComponent, setLottieComponent] = useState<any>(null);
-  const [animationData, setAnimationData] = useState<any>(null);
-
-  useEffect(() => {
-    const loadAssets = async () => {
-        try {
-            const [lottieMod, animRes] = await Promise.all([
-                import('lottie-react'),
-                fetch('/TH.json')
-            ]);
-            setLottieComponent(() => lottieMod.default);
-            setAnimationData(await animRes.json());
-        } catch (err) {
-            console.error("Lottie load error:", err);
-        }
-    };
-    loadAssets();
-  }, []);
-
-  const Lottie = LottieComponent;
-
-  return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-xl animate-in fade-in-0 duration-500">
-      <div className="relative w-28 h-28 flex items-center justify-center overflow-hidden">
-          {Lottie && animationData && (
-            <Lottie 
-                animationData={animationData} 
-                loop={true} 
-                style={{ width: '100%', height: '100%' }} 
-            />
-          )}
-      </div>
-    </div>
-  );
 };
 
 export default function AlsafaaPage() {
@@ -152,7 +113,7 @@ export default function AlsafaaPage() {
     <div className="flex flex-col h-full bg-[#F4F7F9] dark:bg-slate-950">
       <SimpleHeader title="شبكة الصفاء الرقمية" />
       
-      {isInquiring && <AlsafaaMovingLoader />}
+      {isInquiring && <ProcessingOverlay />}
       
       <div className="flex-1 overflow-y-auto no-scrollbar pb-10">
         <div className="bg-mesh-gradient pt-8 pb-12 px-6 rounded-b-[50px] shadow-xl relative overflow-hidden">

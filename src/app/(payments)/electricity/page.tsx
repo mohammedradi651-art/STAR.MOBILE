@@ -29,37 +29,9 @@ import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import Image from 'next/image';
-import Lottie from 'lottie-react';
+import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 
 export const dynamic = 'force-dynamic';
-
-/**
- * مكون التحميل بالشعار المتحرك الموحد
- */
-const ElectricityMovingLoader = () => {
-  const [animationData, setAnimationData] = useState<any>(null);
-
-  useEffect(() => {
-    fetch('/TH.json')
-      .then(res => res.json())
-      .then(data => setAnimationData(data))
-      .catch(err => console.error("Lottie load error:", err));
-  }, []);
-
-  return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-xl animate-in fade-in-0 duration-500">
-      <div className="relative w-28 h-28 flex items-center justify-center overflow-hidden">
-          {animationData && (
-            <Lottie 
-                animationData={animationData} 
-                loop={true} 
-                style={{ width: '100%', height: '100%' }} 
-            />
-          )}
-      </div>
-    </div>
-  );
-};
 
 export default function ElectricityPage() {
   const router = useRouter();
@@ -237,7 +209,7 @@ export default function ElectricityPage() {
     <div className="flex flex-col h-full bg-[#F4F7F9] dark:bg-slate-950">
       <SimpleHeader title="سداد الكهرباء" />
 
-      {(isSearching || isProcessing) && <ElectricityMovingLoader />}
+      {(isSearching || isProcessing) && <ProcessingOverlay />}
 
       <div className="flex-1 overflow-y-auto no-scrollbar pb-10">
         <div className="bg-mesh-gradient pt-8 pb-12 px-6 rounded-b-[50px] shadow-xl relative overflow-hidden">
