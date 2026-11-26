@@ -219,7 +219,10 @@ export async function POST(req: Request) {
       if (didDeductOnServer && effectiveUserId) {
         await refundAlwadi(firestore, effectiveUserId, serverTransId, finalCost, execErr.message || 'فشل التجديد في المنظومة');
       }
-      return NextResponse.json({ success: false, message: execErr.message || "حدث خطأ غير متوقع أثناء الاتصال بالمنظومة." }, { status: 500, headers: corsHeaders });
+      return NextResponse.json(
+        { success: false, message: execErr.message || "حدث خطأ غير متوقع أثناء الاتصال بالمنظومة." },
+        { status: execErr?.statusCode || 500, headers: corsHeaders }
+      );
     }
 
     if (createResult) {

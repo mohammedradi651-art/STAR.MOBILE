@@ -135,6 +135,14 @@ export async function POST(req: Request) {
                 timestamp
             }, { headers: corsHeaders });
         }
+        if (result.status === 503) {
+            return NextResponse.json({
+                success: false,
+                code: 'SM_PROVIDER_UNAVAILABLE',
+                message: result.message,
+                timestamp
+            }, { status: 503, headers: corsHeaders });
+        }
         return NextResponse.json({ 
             success: false, 
             code: 'SM_NOT_FOUND', 
@@ -185,6 +193,14 @@ export async function POST(req: Request) {
         try {
             const checkData = await lookupAlwadiCard(number);
             
+            if (!checkData.success && checkData.status === 503) {
+                return NextResponse.json({ 
+                    success: false, 
+                    code: 'SM_PROVIDER_UNAVAILABLE', 
+                    message: checkData.message, 
+                    timestamp 
+                }, { status: 503, headers: corsHeaders });
+            }
             if (!checkData.success || String(checkData.data.id) !== String(subscriberId)) {
                 return NextResponse.json({ 
                     success: false, 

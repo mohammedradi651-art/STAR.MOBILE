@@ -44,10 +44,36 @@ function getModelsClient() {
   return modelsClient;
 }
 
+export const ALWADI_MAINTENANCE_MSG =
+  'الخدمة قيد الصيانة المؤقتة من مزود منظومة الوادي، يرجى المحاولة لاحقاً.';
+
+export function isAlwadiProviderUnavailableError(err: any): boolean {
+  const status = err?.res?.statusCode || err?.statusCode;
+  if (status === 403 || status === 502 || status === 503 || status === 504) return true;
+  const msg = String(err?.message || '').toLowerCase();
+  const body = String(err?.body || '').toLowerCase();
+  return (
+    msg.includes("unknown xml-rpc tag 'title'") ||
+    msg.includes('403') ||
+    msg.includes('forbidden') ||
+    body.includes('403 forbidden') ||
+    body.includes('502 bad gateway') ||
+    body.includes('503 service')
+  );
+}
+
 export function xmlrpcCall(client: any, method: string, params: any[]): Promise<any> {
   return new Promise((resolve, reject) => {
     client.methodCall(method, params, (err: any, value: any) => {
-      if (err) return reject(err);
+      if (err) {
+        if (isAlwadiProviderUnavailableError(err)) {
+          const maintenanceErr: any = new Error(ALWADI_MAINTENANCE_MSG);
+          maintenanceErr.isProviderUnavailable = true;
+          maintenanceErr.statusCode = 503;
+          return reject(maintenanceErr);
+        }
+        return reject(err);
+      }
       if (value && value.faultCode) return reject(new Error(value.faultString));
       resolve(value);
     });
@@ -243,7 +269,10 @@ export async function lookupAlwadiCard(rawCardNumber: string): Promise<AlwadiLoo
         },
       };
     }
-  } catch (subError) {
+  } catch (subError: any) {
+    if (subError?.isProviderUnavailable || isAlwadiProviderUnavailableError(subError)) {
+      return { success: false, message: ALWADI_MAINTENANCE_MSG, status: 503 };
+    }
     console.error('فشل الاستعلام في subscribers:', subError);
   }
 
@@ -282,7 +311,10 @@ export async function lookupAlwadiCard(rawCardNumber: string): Promise<AlwadiLoo
         },
       };
     }
-  } catch (e) {
+  } catch (e: any) {
+    if (e?.isProviderUnavailable || isAlwadiProviderUnavailableError(e)) {
+      return { success: false, message: ALWADI_MAINTENANCE_MSG, status: 503 };
+    }
     console.warn('لم يظهر في العمليات السابقة:', e);
   }
 
