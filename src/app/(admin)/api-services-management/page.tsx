@@ -86,6 +86,7 @@ export default function ApiServicesManagementPage() {
       setConfig({
         telecomApi: { ...DEFAULT_SERVICES_CONFIG.telecomApi, ...(remoteConfig.telecomApi || {}) },
         yemen_mobile: { ...DEFAULT_SERVICES_CONFIG.yemen_mobile, ...(remoteConfig.yemen_mobile || {}) },
+        yemen_mobile_north: { ...DEFAULT_SERVICES_CONFIG.yemen_mobile_north, ...(remoteConfig.yemen_mobile_north || {}) },
         you: { ...DEFAULT_SERVICES_CONFIG.you, ...(remoteConfig.you || {}) },
         sabafon: { 
           ...DEFAULT_SERVICES_CONFIG.sabafon, 
@@ -223,7 +224,7 @@ export default function ApiServicesManagementPage() {
   };
 
   const updateServiceSetting = (
-    service: 'yemen_mobile' | 'you' | 'sabafon' | 'why' | 'yemen_4g' | 'aden_net' | 'landline_adsl' | 'alwadi' | 'networks',
+    service: 'yemen_mobile' | 'yemen_mobile_north' | 'you' | 'sabafon' | 'why' | 'yemen_4g' | 'aden_net' | 'landline_adsl' | 'alwadi' | 'networks',
     key: string,
     val: any
   ) => {
@@ -430,6 +431,18 @@ export default function ApiServicesManagementPage() {
               setting={config.yemen_mobile}
               onToggle={(enabled) => updateServiceSetting('yemen_mobile', 'enabled', enabled)}
               onRateChange={(val) => updateServiceSetting('yemen_mobile', 'rate', val)}
+            />
+
+            {/* يمن موبايل - بوابة الشمال (زود رصيدك) */}
+            <SingleFieldTelecomCard
+              name="يمن موبايل - بوابة الشمال (زود رصيدك)"
+              badge="شمال 77"
+              logo={LOGOS.yemen_mobile}
+              setting={config.yemen_mobile_north || DEFAULT_SERVICES_CONFIG.yemen_mobile_north!}
+              onToggle={(enabled) => updateServiceSetting('yemen_mobile_north', 'enabled', enabled)}
+              onRateChange={(val) => updateServiceSetting('yemen_mobile_north', 'rate', val)}
+              isHighCurrency={true}
+              presetButtons={[2.98, 3.0]}
             />
 
             {/* شركة يو (سعرين: باقات السعر الموحد + رصيد وفوري عملة مرتفعة) */}

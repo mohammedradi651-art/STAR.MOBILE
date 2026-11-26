@@ -56,7 +56,8 @@ import { ProcessingOverlay } from '@/components/layout/processing-overlay';
 import Image from 'next/image';
 import { initiateTelecomPayment, executeTelecomRequestWithTimeout } from '@/lib/telecom-order';
 import { useServicesConfig } from '@/hooks/use-services-config';
-import { roundCurrency, isUserApiCustomer, getUserServicePrice } from '@/lib/services-config';
+import { roundCurrency, isUserApiCustomer, getUserServicePrice, getYemenNorthGatePrice } from '@/lib/services-config';
+import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -368,6 +369,7 @@ export default function YemenMobilePage() {
   const [activeOffers, setActiveOffers] = useState<ActiveOffer[]>([]);
   const [selectedOffer, setSelectedOffer] = useState<Offer | null>(null);
   const [amount, setAmount] = useState('');
+  const [isNorthGate, setIsNorthGate] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isActivatingOffer, setIsActivatingOffer] = useState(false);
@@ -384,13 +386,29 @@ export default function YemenMobilePage() {
   const { data: userProfile } = useDoc<any>(userDocRef);
   const { config } = useServicesConfig();
   const isApiUser = isUserApiCustomer(userProfile);
+  const northGateEnabledInAdmin = config.yemen_mobile_north?.enabled !== false;
+  const northGateActive = Boolean(isNorthGate && northGateEnabledInAdmin);
+  const northGateRate = config.yemen_mobile_north?.rate ?? 2.98;
 
   const getEffectiveOfferPrice = (basePrice: number) => {
+    if (northGateActive) {
+      return getYemenNorthGatePrice(basePrice, config.yemen_mobile_north);
+    }
     return getUserServicePrice(basePrice, config.yemen_mobile, isApiUser);
   };
 
   const getEffectiveCreditCost = (amountVal: number) => {
+    if (northGateActive) {
+      return getYemenNorthGatePrice(amountVal, config.yemen_mobile_north);
+    }
     return getUserServicePrice(amountVal, config.yemen_mobile, isApiUser);
+  };
+
+  const getOfferTotalWithLoan = (basePrice: number, loanAmt: number) => {
+    if (northGateActive) {
+      return getYemenNorthGatePrice(basePrice + loanAmt, config.yemen_mobile_north);
+    }
+    return getEffectiveOfferPrice(basePrice) + loanAmt;
   };
 
   const parseTelecomDate = (dateStr: string) => {
@@ -576,6 +594,9 @@ export default function YemenMobilePage() {
   const handlePhoneChange = (val: string, element: HTMLInputElement) => {
     const cleaned = val.replace(/\D/g, '').slice(0, 9);
     setPhone(cleaned);
+    if (cleaned.length < 9) {
+        setIsNorthGate(false);
+    }
     if (cleaned.length === 9) {
         element.blur();
         if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -605,6 +626,7 @@ export default function YemenMobilePage() {
             if (selectedNumber.startsWith('0')) selectedNumber = selectedNumber.substring(1);
             if (selectedNumber.length > 9) selectedNumber = selectedNumber.slice(-9);
             setPhone(selectedNumber);
+            setIsNorthGate(false);
             if (selectedNumber.length === 9) handleSearch(selectedNumber);
         }
     } catch (err) { console.error("Contacts selection failed:", err); }
@@ -625,26 +647,35 @@ export default function YemenMobilePage() {
     }
     setIsProcessing(true);
     try {
+        const txType = northGateActive ? 'يمن موبايل (بوابة الشمال) - سداد رصيد' : 'يمن موبايل - سداد رصيد';
+        const txNotes = northGateActive
+            ? `سداد رصيد بوابة الشمال للرقم: ${phone} بمبلغ: ${val} ريال`
+            : `سداد رصيد للرقم: ${phone} بمبلغ: ${val} ريال`;
+
         // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
         const { transid, backpass } = await initiateTelecomPayment({
             firestore,
             userId: user.uid,
             amount: costToDeduct,
-            transactionType: 'يمن موبايل - سداد رصيد',
+            transactionType: txType,
             recipientPhoneNumber: phone,
-            notes: `سداد رصيد للرقم: ${phone} بمبلغ: ${val} ريال`,
-            serviceCategory: 'يمن موبايل'
+            notes: txNotes,
+            serviceCategory: 'يمن موبايل',
+            provider: northGateActive ? 'zawd' : 'ishanli',
+            northGate: northGateActive
         });
 
-        setLastTxDetails({ type: 'يمن موبايل - سداد رصيد', phone: phone, amount: costToDeduct, transid: transid });
+        setLastTxDetails({ type: txType, phone: phone, amount: costToDeduct, transid: transid });
 
-        // 2. إرسال الطلب للمزود مع مؤقت 45 ثانية
+        // 2. إرسال الطلب للمزود (بوابة الشمال تذهب حصراً إلى زود رصيدك، والعادي يذهب لاشحن لي)
         await executeTelecomRequestWithTimeout({
             firestore,
             userId: user.uid,
             transid,
             amount: costToDeduct,
-            telecomPayload: { mobile: phone, amount: val, action: 'bill' },
+            telecomPayload: northGateActive
+                ? { service: 'yemen_north', gate: 'north', northGate: true, mobile: phone, amount: val, action: 'bill' }
+                : { mobile: phone, amount: val, action: 'bill' },
             backpass
         });
 
@@ -661,8 +692,7 @@ export default function YemenMobilePage() {
     if (!selectedOffer || !phone || !user || !userDocRef || !firestore) return;
     const isNumberLoaned = Boolean(billingInfo?.isLoan);
     const loanAmt = isNumberLoaned ? (billingInfo?.loanAmount || 0) : 0;
-    const effectiveOfferPrice = getEffectiveOfferPrice(selectedOffer.price);
-    const totalToDeduct = effectiveOfferPrice + loanAmt;
+    const totalToDeduct = getOfferTotalWithLoan(selectedOffer.price, loanAmt);
     if ((userProfile?.balance ?? 0) < totalToDeduct) {
         toast({ variant: 'destructive', title: 'رصيد غير كافٍ', description: 'رصيدك الحالي لا يكفي لتفعيل الباقة شاملة سداد السلفة.' });
         return;
@@ -670,20 +700,24 @@ export default function YemenMobilePage() {
     setIsActivatingOffer(true);
     try {
         // 1. تسجيل العملية فوراً وخصم الرصيد مع وضع الحالة قيد الانتظار
-        const pkgTitle = `يمن موبايل - ${selectedOffer.offerName}`;
+        const pkgTitle = northGateActive
+            ? `يمن موبايل (بوابة الشمال) - ${selectedOffer.offerName}`
+            : `يمن موبايل - ${selectedOffer.offerName}`;
         const { transid, backpass } = await initiateTelecomPayment({
             firestore,
             userId: user.uid,
             amount: totalToDeduct,
             transactionType: pkgTitle,
             recipientPhoneNumber: phone,
-            notes: `تفعيل ${selectedOffer.offerName} للرقم: ${phone}${isNumberLoaned ? ` (شامل سداد سلفة: ${loanAmt > 0 ? loanAmt : 'نعم'})` : ''}`,
-            serviceCategory: 'يمن موبايل'
+            notes: `تفعيل ${selectedOffer.offerName}${northGateActive ? ' (بوابة الشمال)' : ''} للرقم: ${phone}${isNumberLoaned ? ` (شامل سداد سلفة: ${loanAmt > 0 ? loanAmt : 'نعم'})` : ''}`,
+            serviceCategory: 'يمن موبايل',
+            provider: northGateActive ? 'zawd' : 'ishanli',
+            northGate: northGateActive
         });
 
         setLastTxDetails({ type: pkgTitle, phone: phone, amount: totalToDeduct, transid: transid });
 
-        // 2. إرسال الطلب للمزود مع مؤقت 10 ثوانٍ (إذا تأخر الرد تظهر نفس المنبثق تماماً)
+        // 2. إرسال الطلب للمزود (بوابة الشمال إلى زود رصيدك حصراً، والعادي إلى اشحن لي)
         await executeTelecomRequestWithTimeout({
             firestore,
             userId: user.uid,
@@ -692,11 +726,13 @@ export default function YemenMobilePage() {
             telecomPayload: { 
                 mobile: phone, 
                 action: 'billoffer', 
-                service: 'yemen',
+                service: northGateActive ? 'yemen_north' : 'yemen',
+                ...(northGateActive ? { gate: 'north', northGate: true } : {}),
                 offerid: selectedOffer.offertype, 
                 method: 'Renew',
                 solfa: isNumberLoaned ? 'Y' : 'N',
-                amount: selectedOffer.price
+                amount: selectedOffer.price,
+                ...(loanAmt > 0 ? { loanAmount: loanAmt } : {})
             },
             backpass
         });
@@ -761,6 +797,48 @@ export default function YemenMobilePage() {
             </div>
         </div>
 
+        {phone.length === 9 && (phone.startsWith('77') || phone.startsWith('78')) && northGateEnabledInAdmin && (
+            <div className="animate-in fade-in zoom-in-95 duration-200">
+                <button
+                    type="button"
+                    onClick={() => setIsNorthGate((prev) => !prev)}
+                    className={cn(
+                        "w-full rounded-2xl p-3.5 border-2 transition-all flex items-center justify-between shadow-sm active:scale-[0.99]",
+                        northGateActive
+                            ? "bg-amber-500/15 border-amber-500 text-amber-900 dark:text-amber-300 shadow-amber-500/10"
+                            : "bg-white dark:bg-slate-900 border-dashed border-[#B32C4C]/30 text-foreground hover:border-[#B32C4C]"
+                    )}
+                >
+                    <div className="flex items-center gap-2.5">
+                        <div className={cn(
+                            "p-2 rounded-xl",
+                            northGateActive ? "bg-amber-500 text-white" : "bg-[#B32C4C]/10 text-[#B32C4C]"
+                        )}>
+                            <Globe className="w-4 h-4" />
+                        </div>
+                        <div className="text-right">
+                            <span className="font-black text-sm block">بوابة الشمال</span>
+                            <span className="text-[10px] font-bold opacity-80 block">
+                                {northGateActive
+                                    ? `مفعّلة الآن — تسعيرة الشمال (× ${northGateRate})`
+                                    : 'اضغط للتفعيل عند السداد لأرقام الشمال'}
+                            </span>
+                        </div>
+                    </div>
+                    <Badge
+                        className={cn(
+                            "font-black text-[10px] px-2.5 py-1 rounded-xl border-none",
+                            northGateActive
+                                ? "bg-amber-500 text-white"
+                                : "bg-muted text-muted-foreground"
+                        )}
+                    >
+                        {northGateActive ? 'مفعّلة ✓' : 'غير مفعّلة'}
+                    </Badge>
+                </button>
+            </div>
+        )}
+
         {phone.length === 9 && (phone.startsWith('77') || phone.startsWith('78')) && !isSearching && !billingInfo && (
             <div className="animate-in fade-in zoom-in duration-300">
                 <Button 
@@ -815,6 +893,14 @@ export default function YemenMobilePage() {
                                 <Input type="number" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="text-center font-black text-3xl h-16 rounded-2xl bg-muted/20 border-none text-[#B32C4C] placeholder:text-[#B32C4C]/10 focus-visible:ring-[#B32C4C]" />
                                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#B32C4C]/30 font-black text-sm">ر.ي</div>
                             </div>
+                            {northGateActive && parseFloat(amount || '0') > 0 && (
+                                <div className="mt-4 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between max-w-[280px] mx-auto animate-in fade-in zoom-in-95">
+                                    <span className="text-xs font-black text-amber-900 dark:text-amber-300">المبلغ المطلوب (بوابة الشمال):</span>
+                                    <span className="text-xl font-black text-[#B32C4C]">
+                                        {getEffectiveCreditCost(parseFloat(amount || '0')).toLocaleString('en-US')} <span className="text-xs">ريال</span>
+                                    </span>
+                                </div>
+                            )}
                             <Button className="w-full h-14 rounded-2xl text-lg font-black mt-8 shadow-lg shadow-[#B32C4C]/20" onClick={() => setIsConfirming(true)} disabled={!amount} style={{ backgroundColor: '#B32C4C' }}>تنفيذ السداد</Button>
                         </div>
                     </TabsContent>
@@ -907,8 +993,15 @@ export default function YemenMobilePage() {
       <AlertDialog open={isConfirming} onOpenChange={setIsConfirming}>
         <AlertDialogContent className="rounded-[32px]">
             <AlertDialogHeader>
-                <AlertDialogTitle className="text-center font-black">تأكيد سداد رصيد</AlertDialogTitle>
+                <AlertDialogTitle className="text-center font-black">
+                    {northGateActive ? 'تأكيد سداد رصيد (بوابة الشمال)' : 'تأكيد سداد رصيد'}
+                </AlertDialogTitle>
                 <div className="space-y-3 pt-4 text-right text-sm">
+                    {northGateActive && (
+                        <div className="flex justify-center pb-1">
+                            <Badge className="bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30 font-black">بوابة الشمال (× {northGateRate})</Badge>
+                        </div>
+                    )}
                     <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">رقم الهاتف:</span><span className="font-bold">{phone}</span></div>
                     <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-muted-foreground">المبلغ:</span><span className="font-bold">{parseFloat(amount || '0').toLocaleString()} ريال</span></div>
                     <div className="flex justify-between items-center py-3 bg-muted/50 rounded-xl px-2">
@@ -929,8 +1022,15 @@ export default function YemenMobilePage() {
       <AlertDialog open={!!selectedOffer} onOpenChange={() => setSelectedOffer(null)}>
           <AlertDialogContent className="rounded-[32px]">
               <AlertDialogHeader>
-                  <AlertDialogTitle className="text-center font-black">تأكيد تفعيل الباقة</AlertDialogTitle>
+                  <AlertDialogTitle className="text-center font-black">
+                      {northGateActive ? 'تأكيد تفعيل الباقة (بوابة الشمال)' : 'تأكيد تفعيل الباقة'}
+                  </AlertDialogTitle>
                   <div className="py-4 space-y-3 text-right text-sm">
+                      {northGateActive && (
+                        <div className="flex justify-center">
+                            <Badge className="bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30 font-black">بوابة الشمال (× {northGateRate})</Badge>
+                        </div>
+                      )}
                       <p className="text-center text-lg font-black text-[#B32C4C] mb-2">{selectedOffer?.offerName}</p>
                       <div className="flex justify-between items-center py-2 border-b border-dashed">
                         <span className="text-muted-foreground">سعر الباقة:</span>
@@ -939,13 +1039,20 @@ export default function YemenMobilePage() {
                         </div>
                       </div>
                       {billingInfo?.isLoan && (
-                        <div className="flex justify-between items-center py-2 border-b border-dashed"><span className="text-destructive font-bold flex items-center gap-1"><AlertCircle className="w-3 h-3" /> سداد سلفة الرقم:</span><span className="font-black text-destructive">{(billingInfo.loanAmount && billingInfo.loanAmount > 0) ? `${billingInfo.loanAmount.toLocaleString()} ريال` : 'سداد سلفة'}</span></div>
+                        <div className="flex justify-between items-center py-2 border-b border-dashed">
+                          <span className="text-destructive font-bold flex items-center gap-1"><AlertCircle className="w-3 h-3" /> سداد سلفة الرقم:</span>
+                          <span className="font-black text-destructive">
+                            {(billingInfo.loanAmount && billingInfo.loanAmount > 0)
+                              ? `${(northGateActive ? getYemenNorthGatePrice(billingInfo.loanAmount, config.yemen_mobile_north) : billingInfo.loanAmount).toLocaleString()} ريال`
+                              : 'سداد سلفة'}
+                          </span>
+                        </div>
                       )}
                       <div className="flex justify-between items-center py-3 bg-muted/50 rounded-xl px-3 mt-4">
                         <span className="font-black">إجمالي الخصم النهائي:</span>
                         <div className="flex items-baseline gap-1">
                           <p className="text-2xl font-black text-[#B32C4C]">
-                            {(getEffectiveOfferPrice(selectedOffer?.price || 0) + (billingInfo?.isLoan ? (billingInfo?.loanAmount || 0) : 0)).toLocaleString()}
+                            {getOfferTotalWithLoan(selectedOffer?.price || 0, billingInfo?.isLoan ? (billingInfo?.loanAmount || 0) : 0).toLocaleString()}
                           </p>
                           <span className="text-[10px] font-black text-[#B32C4C]">ريال</span>
                         </div>

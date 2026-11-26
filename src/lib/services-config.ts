@@ -74,6 +74,7 @@ export const FREEFIRE_BASE_PACKAGES: GamePackage[] = [
 export interface SystemServicesConfig {
   telecomApi: TelecomApiCredentials;
   yemen_mobile: ServicePricingSetting;
+  yemen_mobile_north: ServicePricingSetting;
   you: ServicePricingSetting;
   sabafon: SabafonPricingSetting;
   why: ServicePricingSetting & { multiplier?: number };
@@ -109,6 +110,13 @@ export const DEFAULT_SERVICES_CONFIG: SystemServicesConfig = {
   yemen_mobile: {
     enabled: true,
     rate: 1,
+    percentage: 0,
+    fixedFee: 0,
+    notice: ''
+  },
+  yemen_mobile_north: {
+    enabled: true,
+    rate: 2.98,
     percentage: 0,
     fixedFee: 0,
     notice: ''
@@ -277,6 +285,40 @@ export function getUserServicePrice(
     return roundCurrency(basePrice);
   }
   return calculateFinalServicePrice(basePrice, setting);
+}
+
+/**
+ * التحقق الصريح من توجيه العملية لبوابة الشمال (زود رصيدك) فقط
+ */
+export function isYemenMobileNorthGate(payload?: {
+  service?: string;
+  gate?: string;
+  northGate?: boolean | string;
+} | null): boolean {
+  if (!payload) return false;
+  const s = String(payload.service || '').toLowerCase().trim();
+  const gate = String(payload.gate || '').toLowerCase().trim();
+  return (
+    s === 'yemen_north' ||
+    s === 'yem_north' ||
+    gate === 'north' ||
+    payload.northGate === true ||
+    payload.northGate === 'true'
+  );
+}
+
+/**
+ * تسعيرة بوابة الشمال: تُطبق على جميع المستخدمين (العاديين وعملاء الـ API)
+ */
+export function getYemenNorthGatePrice(
+  basePrice: number,
+  setting?: ServicePricingSetting
+): number {
+  if (!basePrice || isNaN(basePrice) || basePrice <= 0) return 0;
+  return calculateFinalServicePrice(
+    basePrice,
+    setting || DEFAULT_SERVICES_CONFIG.yemen_mobile_north
+  );
 }
 
 /**
@@ -723,7 +765,21 @@ export function calculateApiTransactionCost(
     0
   )) || 0;
 
-  // 1. يمن موبايل
+  // 1.أ يمن موبايل - بوابة الشمال (زود رصيدك) - فحص صريح ومعزول تماماً
+  if (isYemenMobileNorthGate(payload as any)) {
+    const northSetting = config.yemen_mobile_north || DEFAULT_SERVICES_CONFIG.yemen_mobile_north;
+    const isOffer =
+      action === 'billoffer' ||
+      Boolean((payload as any).offerid || (payload as any).offerId || (payload as any).packageid || (payload as any).packageId || (payload as any).offertype);
+    if (isOffer) {
+      const basePackagePrice = (KNOWN_PACKAGE_PRICES[packageKey] || 0) || rawAmount;
+      const totalBase = basePackagePrice + (extraLoanAmount > 0 ? extraLoanAmount : 0);
+      return calculateFinalServicePrice(totalBase, northSetting);
+    }
+    return calculateFinalServicePrice(rawAmount, northSetting);
+  }
+
+  // 1. يمن موبايل (النظام الحالي / اشحن لي بدون أي تغيير)
   if (service === 'yemen' || service === 'yem') {
     if (action === 'billoffer') {
       const basePackagePrice = (KNOWN_PACKAGE_PRICES[packageKey] || 0) || rawAmount;

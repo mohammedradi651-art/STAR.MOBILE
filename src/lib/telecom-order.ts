@@ -1,4 +1,5 @@
 import { doc, getDoc, updateDoc, increment, setDoc, writeBatch, runTransaction, arrayUnion, type Firestore } from 'firebase/firestore';
+import { isYemenMobileNorthGate } from './services-config';
 
 /**
  * الخدمات الثمان المعتمدة التي تظهر لها الجاهزية ونظام الـ Webhook:
@@ -172,6 +173,8 @@ export interface InitiatePaymentParams {
   recipientPhoneNumber: string;
   notes?: string;
   serviceCategory: string;
+  provider?: 'ishanli' | 'zawd';
+  northGate?: boolean;
 }
 
 /**
@@ -184,7 +187,9 @@ export async function initiateTelecomPayment({
   transactionType,
   recipientPhoneNumber,
   notes,
-  serviceCategory
+  serviceCategory,
+  provider = 'ishanli',
+  northGate = false
 }: InitiatePaymentParams): Promise<{ transid: string; backpass: string; txId: string }> {
   const transid = generateTransId();
   const backpass = generateBackpass();
@@ -211,7 +216,9 @@ export async function initiateTelecomPayment({
     readiness: 'قيد الانتظار',
     balanceProcessed: true,
     refunded: false,
-    serviceCategory: serviceCategory
+    serviceCategory: serviceCategory,
+    provider: provider,
+    northGate: Boolean(northGate)
   };
 
   // حماية صارمة لمنع الرصيد السالب نهائياً باستخدام runTransaction
@@ -1098,6 +1105,29 @@ export function resolveTelecomDetails(input: TelecomDetailsInput): {
   const pkgKey = String(input.offerid || input.packageid || input.num || input.amount || '').trim();
   const knownPkg = KNOWN_PACKAGE_NAMES[pkgKey] || KNOWN_PACKAGE_NAMES[String(input.offerid || '')] || KNOWN_PACKAGE_NAMES[String(input.packageid || '')] || KNOWN_PACKAGE_NAMES[String(input.num || '')] || KNOWN_PACKAGE_NAMES[String(input.amount || '')];
 
+  // 1.أ يمن موبايل - بوابة الشمال (زود رصيدك)
+  if (isYemenMobileNorthGate(input as any)) {
+    const isOffer = act === 'billoffer' || Boolean(knownPkg) || Boolean(input.offerid);
+    if (isOffer) {
+      const pkgName = knownPkg || `باقة (${pkgKey})`;
+      const loanAmt = parseFloat(String(input.loanAmount ?? input.loan_amount ?? input.solfaAmount ?? input.solfa_amount ?? 0)) || 0;
+      const loanText = loanAmt > 0 ? ` (شامل سلفة ${loanAmt} ر.ي)` : '';
+      return {
+        serviceName: 'يمن موبايل (بوابة الشمال)',
+        packageName: pkgName,
+        transactionType: `يمن موبايل (بوابة الشمال) - ${pkgName}`,
+        notes: `تفعيل ${pkgName} عبر بوابة الشمال للرقم: ${cleanPhone}${loanText}`,
+        recipientPhoneNumber: cleanPhone
+      };
+    }
+    return {
+      serviceName: 'يمن موبايل (بوابة الشمال)',
+      transactionType: 'يمن موبايل (بوابة الشمال) - سداد رصيد',
+      notes: `سداد رصيد بوابة الشمال للرقم: ${cleanPhone} بمبلغ: ${input.amount || '0'} ريال`,
+      recipientPhoneNumber: cleanPhone
+    };
+  }
+
   // 1. يمن موبايل
   if (s === 'yemen' || s === 'yem' || s === 'offeryem') {
     const isOffer = act === 'billoffer' || Boolean(knownPkg) || Boolean(input.offerid);
@@ -1428,8 +1458,15 @@ export function validateTelecomRequest(input: {
   const amt = parseFloat(String(input.amount || '0')) || 0;
   const numVal = parseFloat(String(input.num || '0')) || 0;
 
-  // 1. يمن موبايل: إذا سدد أقل من 21 ريال يتم الرفض مباشرة
-  if ((s === 'yemen' || s === 'yem' || s === 'offeryem') && act !== 'billoffer' && !input.offerid) {
+  // 1. يمن موبايل (العادي + بوابة الشمال): إذا سدد أقل من 21 ريال يتم الرفض مباشرة
+  const isNorthGateReq = isYemenMobileNorthGate(input as any);
+  if (isNorthGateReq) {
+    const phoneNum = String(input.mobile || (input as any).phone || '').replace(/\D/g, '').slice(-9);
+    if (phoneNum && (phoneNum.length !== 9 || (!phoneNum.startsWith('77') && !phoneNum.startsWith('78')))) {
+      return { valid: false, error: 'رقم يمن موبايل لبوابة الشمال يجب أن يتكون من 9 أرقام ويبدأ بـ 77 أو 78.' };
+    }
+  }
+  if ((isNorthGateReq || s === 'yemen' || s === 'yem' || s === 'offeryem') && act !== 'billoffer' && !input.offerid) {
     const checkAmt = amt > 0 ? amt : numVal;
     if (checkAmt < 21) {
       return { valid: false, error: 'أقل مبلغ سداد مسموح به في يمن موبايل هو 21 ريال.' };

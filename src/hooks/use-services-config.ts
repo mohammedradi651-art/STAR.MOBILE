@@ -25,6 +25,7 @@ export function useServicesConfig() {
       ...remoteConfig,
       telecomApi: { ...DEFAULT_SERVICES_CONFIG.telecomApi, ...(remoteConfig.telecomApi || {}) },
       yemen_mobile: { ...DEFAULT_SERVICES_CONFIG.yemen_mobile, ...(remoteConfig.yemen_mobile || {}) },
+      yemen_mobile_north: { ...DEFAULT_SERVICES_CONFIG.yemen_mobile_north, ...(remoteConfig.yemen_mobile_north || {}) },
       you: { ...DEFAULT_SERVICES_CONFIG.you, ...(remoteConfig.you || {}) },
       sabafon: { ...DEFAULT_SERVICES_CONFIG.sabafon, ...(remoteConfig.sabafon || {}) },
       why: { ...DEFAULT_SERVICES_CONFIG.why, ...(remoteConfig.why || {}) },

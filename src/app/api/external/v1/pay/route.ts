@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
 import { collection, query, where, getDocs, doc, writeBatch, increment, getDoc, runTransaction, arrayUnion } from 'firebase/firestore';
-import { DEFAULT_SERVICES_CONFIG, SystemServicesConfig, calculateApiTransactionCost } from '@/lib/services-config';
+import { DEFAULT_SERVICES_CONFIG, SystemServicesConfig, calculateApiTransactionCost, isYemenMobileNorthGate, KNOWN_PACKAGE_PRICES } from '@/lib/services-config';
 import { 
   validateTelecomRequest, 
   resolveTelecomDetails, 
@@ -168,10 +168,28 @@ export async function POST(req: Request) {
     try {
       const configSnap = await getDoc(doc(firestore, 'system_settings', 'telecom_config'));
       if (configSnap.exists()) {
-        systemConfig = { ...DEFAULT_SERVICES_CONFIG, ...(configSnap.data() as any) };
+        const cfg = configSnap.data() as any;
+        systemConfig = {
+          ...DEFAULT_SERVICES_CONFIG,
+          ...cfg,
+          yemen_mobile: { ...DEFAULT_SERVICES_CONFIG.yemen_mobile, ...(cfg?.yemen_mobile || {}) },
+          yemen_mobile_north: { ...DEFAULT_SERVICES_CONFIG.yemen_mobile_north, ...(cfg?.yemen_mobile_north || {}) },
+        };
       }
     } catch (e) {
       console.warn("Could not read telecom_config in v1/pay:", e);
+    }
+
+    const isNorthGate = isYemenMobileNorthGate(body);
+    if (isNorthGate && systemConfig.yemen_mobile_north?.enabled === false) {
+      return NextResponse.json({
+        success: false,
+        code: 'SM_SERVICE_DISABLED',
+        message: 'خدمة يمن موبايل (بوابة الشمال) معطلة حالياً في النظام',
+        transactionId: null,
+        data: null,
+        timestamp
+      }, { status: 403, headers: corsHeaders });
     }
 
     // 3. توجيه الخصم (إذا كان الطالب مديراً، نبحث عن العميل صاحب الرقم "mobile" لنخصم منه)
@@ -202,7 +220,7 @@ export async function POST(req: Request) {
 
     // فحص ومعالجة السلفة التلقائية لباقات يمن موبايل
     const sLower = String(service || 'yemen').toLowerCase().trim();
-    const isYemenMobile = sLower === 'yemen' || sLower === 'yem' || sLower === 'offeryem';
+    const isYemenMobile = sLower === 'yemen' || sLower === 'yem' || sLower === 'offeryem' || isNorthGate;
     const isYemenPackage = isYemenMobile && (effectiveAction === 'billoffer' || isExplicitPackage);
 
     let detectedLoanAmount = parseFloat(String(body.loanAmount ?? body.loan_amount ?? body.solfaAmount ?? body.solfa_amount ?? 0)) || 0;
@@ -310,6 +328,8 @@ export async function POST(req: Request) {
       r: 'قيد الانتظار',
       refunded: false,
       serviceCategory: telecomDetails.serviceName,
+      provider: isNorthGate ? 'zawd' : 'ishanli',
+      northGate: isNorthGate,
       clientBackUrl: clientBackUrl,
       loanAmount: detectedLoanAmount
     };
@@ -360,6 +380,11 @@ export async function POST(req: Request) {
     let telecomResponse: Response;
     let result: any = {};
 
+    const pkgCodeForProvider = String(body.offerid || body.offerId || body.packageid || body.packageId || body.offertype || body.num || '').trim();
+    const baseProviderAmount = body.amount
+      ? body.amount
+      : (isExplicitPackage ? (KNOWN_PACKAGE_PRICES[pkgCodeForProvider] || payAmount) : payAmount);
+
     try {
       telecomResponse = await fetch(`${origin}/api/telecom`, {
         method: 'POST',
@@ -371,7 +396,9 @@ export async function POST(req: Request) {
         body: JSON.stringify({
           ...body,
           action: effectiveAction,
-          amount: body.amount || payAmount,
+          amount: baseProviderAmount,
+          northGate: isNorthGate,
+          gate: isNorthGate ? 'north' : body.gate,
           transid: transactionId,
           backpass: backpass,
           solfa: body.solfa || (detectedLoanAmount > 0 ? 'Y' : undefined),

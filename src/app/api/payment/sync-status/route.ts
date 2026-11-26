@@ -48,7 +48,8 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         action: 'status',
         transid: cleanTransId,
-        mobile: txData.recipientPhoneNumber || txData.phoneNumber
+        mobile: txData.recipientPhoneNumber || txData.phoneNumber,
+        northGate: Boolean(txData.northGate || txData.provider === 'zawd')
       })
     });
 

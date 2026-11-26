@@ -6,6 +6,7 @@ import {
   DEFAULT_SERVICES_CONFIG, 
   SystemServicesConfig, 
   calculateApiTransactionCost,
+  isYemenMobileNorthGate,
   KNOWN_PACKAGE_PRICES,
   SABAFON_NORTH_INSTANT_PRICES,
   SABAFON_SOUTH_INSTANT_PRICES
@@ -87,6 +88,7 @@ export async function POST(request: Request) {
           ...configData,
           telecomApi: { ...DEFAULT_SERVICES_CONFIG.telecomApi, ...(configData?.telecomApi || {}) },
           yemen_mobile: { ...DEFAULT_SERVICES_CONFIG.yemen_mobile, ...(configData?.yemen_mobile || {}) },
+          yemen_mobile_north: { ...DEFAULT_SERVICES_CONFIG.yemen_mobile_north, ...(configData?.yemen_mobile_north || {}) },
           you: { ...DEFAULT_SERVICES_CONFIG.you, ...(configData?.you || {}) },
           sabafon: { ...DEFAULT_SERVICES_CONFIG.sabafon, ...(configData?.sabafon || {}) },
           why: { ...DEFAULT_SERVICES_CONFIG.why, ...(configData?.why || {}) },
@@ -133,6 +135,19 @@ export async function POST(request: Request) {
 
     // استعلامات مجانية (لا تكلف رصيداً ولا تتطلب مفتاح API لعملاء التطبيق)
     const isQueryAction = ['query', 'solfa', 'queryoffer', 'check', 'status', 'queryadsl', 'queryphone'].includes(action) || action?.startsWith('query');
+
+    // تحديد بوابة الشمال بشكل صريح ومعزول تماماً:
+    // الاستعلام (query / solfa / queryoffer) يبقى دائماً على اشحن لي، أما السداد الفعلي لبوابة الشمال فيتجه حصراً إلى زود رصيدك
+    const isExplicitNorthGate = isYemenMobileNorthGate({ service, ...payload });
+    const isNorthGateBilling = isExplicitNorthGate && !isQueryAction;
+
+    if (isNorthGateBilling && systemConfig.yemen_mobile_north?.enabled === false) {
+      return NextResponse.json({
+        resultCode: "-403",
+        status: "failed",
+        message: "خدمة يمن موبايل (بوابة الشمال) معطلة حالياً من الإدارة."
+      }, { status: 403 });
+    }
 
     // التمييز القاطع والصارم:
     // 1. إذا وجد incomingApiKey -> فهو مستخدم API ربط خارجي إلزامي ويجب فحص رصيده وحسمه بدقة.
@@ -193,6 +208,7 @@ export async function POST(request: Request) {
     // 4. معالجة طلب فحص الرصيد أو فحص حالة عملية محددة للعميل
     let checkTxUserId: string | null = null;
     let checkTxAmount = 0;
+    let statusUsesZawad = Boolean(payload.northGate === true || payload.northGate === 'true' || isExplicitNorthGate);
     if ((action === 'status' || action === 'check') && payload.transid) {
       try {
         const checkTransId = String(payload.transid).trim();
@@ -202,6 +218,11 @@ export async function POST(request: Request) {
           const tx = txSnap.data();
           checkTxUserId = tx.userId || null;
           checkTxAmount = Number(tx.amount || 0);
+          if (tx.provider === 'zawd' || tx.northGate === true) {
+            statusUsesZawad = true;
+          } else if (tx.provider === 'ishanli') {
+            statusUsesZawad = false;
+          }
           if (!payload.mobile && (tx.recipientPhoneNumber || tx.phoneNumber)) {
             payload.mobile = tx.recipientPhoneNumber || tx.phoneNumber;
           }
@@ -327,7 +348,7 @@ export async function POST(request: Request) {
       }
 
       const txData = txSnap.data();
-      // التحقق الصارم من أن backpass مطابق وأن العملية قيد الانتظار وخُصم رصيدها
+      // التحقق الصارم من أن backpass مطابق وأن العملية قيد الانتظار وخُصم رصيدها ومطابقة المزود
       if (txData.backpass !== checkBackpass || txData.status !== 'pending' || !txData.balanceProcessed) {
         return NextResponse.json({
           resultCode: "-403",
@@ -335,11 +356,18 @@ export async function POST(request: Request) {
           message: "طلب غير مصرح به: بيانات المعاملة غير متطابقة أو تمت معالجتها مسبقاً."
         }, { status: 403 });
       }
+      if (isNorthGateBilling !== Boolean(txData.northGate || txData.provider === 'zawd')) {
+        return NextResponse.json({
+          resultCode: "-403",
+          status: "failed",
+          message: "طلب غير مصرح به: تعارض في بوابة التنفيذ المسجلة للمعاملة."
+        }, { status: 403 });
+      }
     }
 
     if (shouldPerformImmediateDeduction && clientUserId) {
       // فحص ومعالجة السلفة التلقائية لعملاء الـ API عند طلب باقات يمن موبايل
-      const isYemenMobileService = !service || sLower === 'yemen' || sLower === 'yem' || sLower === 'offeryem';
+      const isYemenMobileService = !service || sLower === 'yemen' || sLower === 'yem' || sLower === 'offeryem' || isExplicitNorthGate;
       const isYemenPackage = isYemenMobileService && (action === 'billoffer' || isBillingAction);
 
       const isSolfaExplicitlyDisabled = payload.solfa === 'N' || payload.solfa === 'n' || payload.solfa === '0' || payload.solfa === 0 || payload.solfa === false || payload.solfa === 'no';
@@ -426,6 +454,8 @@ export async function POST(request: Request) {
           readiness: 'قيد الانتظار',
           refunded: false,
           serviceCategory: telecomDetails.serviceName || service || 'اتصالات',
+          provider: isNorthGateBilling ? 'zawd' : 'ishanli',
+          northGate: isNorthGateBilling,
           clientBackUrl: clientBackUrl,
           loanAmount: detectedLoanAmount
         };
@@ -498,23 +528,63 @@ export async function POST(request: Request) {
       }
     }
 
-    // 6. التحقق من بيانات الاتصال بالمزود
-    if (!userId || !username || !password) {
-      // إذا فشلت بيانات الاعتماد، نعيد المبلغ فوراً إذا تم الخصم
-      if (shouldPerformImmediateDeduction && clientUserId) {
-        await refundUser(firestore, clientUserId, transid, requiredCost, 'بيانات اتصال الـ API غير مهيأة بالسيرفر');
+    // 6. التحقق من بيانات الاتصال بالمزود وعزل بوابة الشمال (زود رصيدك) عن اشحن لي بشكل صارم
+    const useZawadProvider = Boolean(isNorthGateBilling || ((action === 'status' || action === 'check') && statusUsesZawad));
+
+    let activeApiBaseUrl = apiBaseUrl;
+    let activeUserId = userId;
+    let activeUsername = username;
+    let activePassword = password;
+
+    if (useZawadProvider) {
+      activeApiBaseUrl = (process.env.ZAWAD_API_BASE_URL || 'https://zawadrasidak.yrbso.app/api/yr/').trim();
+      if (!activeApiBaseUrl.endsWith('/')) activeApiBaseUrl += '/';
+      activeUserId = (process.env.ZAWAD_USERID || '').trim();
+      activeUsername = (process.env.ZAWAD_USERNAME || '').trim();
+      activePassword = (process.env.ZAWAD_PASSWORD || '').trim();
+
+      // صمام أمان قاطع: يمنع نهائياً السداد عبر اشحن لي إذا كانت بيانات زود رصيدك ناقصة
+      if (!activeUserId || !activeUsername || !activePassword || activeApiBaseUrl.includes('echehanly')) {
+        if (shouldPerformImmediateDeduction && clientUserId) {
+          await refundUser(firestore, clientUserId, transid, requiredCost, 'بيانات اتصال بوابة الشمال (زود رصيدك) غير مهيأة');
+        }
+        return NextResponse.json({
+          resultCode: "-1",
+          status: "failed",
+          refunded: shouldPerformImmediateDeduction,
+          message: 'إعدادات مزود بوابة الشمال (زود رصيدك) غير مهيأة في السيرفر. تم رفض العملية حفاظاً على الرصيد ولم تُرسل لأي مزود آخر.'
+        }, { status: 500 });
       }
-      return NextResponse.json({ 
-        resultCode: "-1", 
-        status: "failed",
-        refunded: shouldPerformImmediateDeduction,
-        message: 'بيانات اتصال الـ API غير مهيأة في السيرفر. يرجى التأكد من إعدادات الربط في لوحة تحكم المدير.' 
-      }, { status: 400 });
+    } else {
+      if (!activeUserId || !activeUsername || !activePassword) {
+        // إذا فشلت بيانات الاعتماد، نعيد المبلغ فوراً إذا تم الخصم
+        if (shouldPerformImmediateDeduction && clientUserId) {
+          await refundUser(firestore, clientUserId, transid, requiredCost, 'بيانات اتصال الـ API غير مهيأة بالسيرفر');
+        }
+        return NextResponse.json({ 
+          resultCode: "-1", 
+          status: "failed",
+          refunded: shouldPerformImmediateDeduction,
+          message: 'بيانات اتصال الـ API غير مهيأة في السيرفر. يرجى التأكد من إعدادات الربط في لوحة تحكم المدير.' 
+        }, { status: 400 });
+      }
+      // صمام أمان عكسي: يمنع نهائياً إرسال أي عملية عادية/جنوبية إلى سيرفر زود رصيدك
+      if (activeApiBaseUrl.includes('zawadrasidak')) {
+        if (shouldPerformImmediateDeduction && clientUserId) {
+          await refundUser(firestore, clientUserId, transid, requiredCost, 'تعارض إعدادات مسار المزود العادي');
+        }
+        return NextResponse.json({
+          resultCode: "-1",
+          status: "failed",
+          refunded: shouldPerformImmediateDeduction,
+          message: 'خطأ في إعدادات مزود الخدمة الرئيسي (توجيه غير صحيح).'
+        }, { status: 500 });
+      }
     }
 
     // المعرف المستخدم في التوكن (الرقم أو رقم اللاعب أو اسم المستخدم)
-    const identifier = targetMobile || username;
-    const token = generateToken(password, username, transid, identifier);
+    const identifier = targetMobile || activeUsername;
+    const token = generateToken(activePassword, activeUsername, transid, identifier);
 
     const sanitizedBackUrl = (customBackUrl || 'https://star26.vercel.app/api/payment/webhook')
       .trim()
@@ -524,7 +594,7 @@ export async function POST(request: Request) {
     let endpoint = '';
     let apiRequestParams: any = {
       ...payload,
-      userid: userId,
+      userid: activeUserId,
       transid: transid,
       token: token,
       backurl: payload.backurl ? String(payload.backurl).trim().replace(/\/+$/, '').replace(/\?+$/, '') : sanitizedBackUrl,
@@ -751,7 +821,7 @@ export async function POST(request: Request) {
       }
     } else if (service === 'games') {
       endpoint = 'gameswcards';
-    } else if (service === 'yemen' || service === 'yem' || !service) {
+    } else if (service === 'yemen' || service === 'yem' || service === 'yemen_north' || service === 'yem_north' || !service) {
       if (action === 'billoffer') {
         endpoint = 'offeryem';
         apiRequestParams.action = 'billoffer';
@@ -772,6 +842,8 @@ export async function POST(request: Request) {
     }
 
     delete apiRequestParams.service;
+    delete apiRequestParams.northGate;
+    delete apiRequestParams.gate;
     delete apiRequestParams.apiKey;
     delete apiRequestParams.loanAmount;
     delete apiRequestParams.loan_amount;
@@ -784,7 +856,7 @@ export async function POST(request: Request) {
       }
     });
 
-    const fullUrl = `${apiBaseUrl}${endpoint}?${params.toString()}`;
+    const fullUrl = `${activeApiBaseUrl}${endpoint}?${params.toString()}`;
 
     // 7. إرسال الطلب للمزود مع مهلة 45 ثانية متوافقة مع أنظمة الاتصالات ومزود اشحن لي
     // - إذا استجاب بالنجاح -> اعتماد العملية وإرجاع النتيجة
@@ -816,7 +888,7 @@ export async function POST(request: Request) {
           directErr.cause?.name === 'ConnectTimeoutError'
         );
 
-        if (isLocalHost && isConnErr && !request.headers.get('x-from-proxy')) {
+        if (!useZawadProvider && isLocalHost && isConnErr && !request.headers.get('x-from-proxy')) {
           console.warn('[Telecom API] Local direct connection to provider blocked. Routing through production Vercel proxy...');
           const proxyRes = await fetch('https://star26.vercel.app/api/telecom', {
             method: 'POST',
@@ -1524,6 +1596,7 @@ export async function GET(request: Request) {
     pricingEngine: 'Dynamic System Services Configuration',
     supportedServices: {
       yemen_mobile: ['query', 'bill', 'solfa', 'queryoffer', 'billoffer'],
+      yemen_north: ['bill', 'billoffer (بوابة الشمال - زود رصيدك)'],
       you: ['bill', 'billoffer', 'queryoffer'],
       sabafon: ['sabaphone (شمال)', 'sbay (جنوب)', 'sabaunits (وحدات)', 'sabaoffer (باقات) - يدعم 71 و 72'],
       why: ['bill (رصيد وباقات كرم)'],
