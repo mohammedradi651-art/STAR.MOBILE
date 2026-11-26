@@ -259,64 +259,94 @@ export async function markPaymentSuccess(
   providerMessage?: string
 ) {
   try {
-    const userTxRef = doc(firestore, `users/${userId}/transactions`, transid);
     const globalTxRef = doc(firestore, 'paymentTransactions', transid);
+    const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
+    const nowIso = new Date().toISOString();
+
+    const [gSnap, hSnap] = await Promise.all([
+      getDoc(globalTxRef),
+      getDoc(historyRef)
+    ]);
+    const gData = gSnap.exists() ? gSnap.data() : null;
+
     const updateData = {
       status: 'success',
       readiness: 'جاهزة',
       providerMessage: providerMessage || 'تم تنفيذ العملية بنجاح',
-      completedAt: new Date().toISOString()
+      completedAt: nowIso
     };
     const batch = writeBatch(firestore);
-    // إلغاء التحديث على المستند المنفصل - التحديث في paymentTransactions و history
-    // batch.update(userTxRef, updateData);
-    batch.update(globalTxRef, updateData);
+    batch.set(globalTxRef, updateData, { merge: true });
 
     try {
-      const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
-      const hSnap = await getDoc(historyRef);
-      if (hSnap.exists()) {
-        const rawList = hSnap.data()?.list || [];
-        const rawTxs = hSnap.data()?.transactions || [];
-        
-        let found = false;
-        const mapItem = (item: any) => {
-          if (item.id === transid || item.transid === transid) {
-            found = true;
-            return {
-              ...item,
-              status: 'success',
-              s: 'completed',
-              readiness: 'جاهزة',
-              r: 'جاهزة',
-              providerMessage: providerMessage || 'تم تنفيذ العملية بنجاح',
-              completedAt: new Date().toISOString()
-            };
-          }
-          return item;
-        };
-
-        let updatedList = rawList.map(mapItem);
-        let updatedTxs = rawTxs.map(mapItem);
-
-        // إذا لم تكن موجودة في المصفوفات (مثلاً بسبب عدم اكتمال الكتابة الأولى)، نضيفها فوراً
-        if (!found) {
-          const newTx = {
-            id: transid,
-            transid: transid,
+      const rawList = hSnap.exists() ? (hSnap.data()?.list || []) : [];
+      const rawTxs = hSnap.exists() ? (hSnap.data()?.transactions || []) : [];
+      
+      let found = false;
+      const mapItem = (item: any) => {
+        if (item.id === transid || item.transid === transid) {
+          found = true;
+          const resolvedAmount = item.amount ?? item.a ?? gData?.amount ?? 0;
+          const resolvedType = item.transactionType || item.t || gData?.transactionType || 'سداد اتصالات';
+          const resolvedPhone = item.recipientPhoneNumber || item.ph || gData?.recipientPhoneNumber || '';
+          const resolvedDate = item.transactionDate || item.d || gData?.transactionDate || gData?.createdAt || nowIso;
+          return {
+            ...item,
+            amount: resolvedAmount,
+            a: resolvedAmount,
+            transactionType: resolvedType,
+            t: resolvedType,
+            recipientPhoneNumber: resolvedPhone,
+            ph: resolvedPhone,
+            transactionDate: resolvedDate,
+            d: resolvedDate,
             status: 'success',
             s: 'completed',
             readiness: 'جاهزة',
             r: 'جاهزة',
             providerMessage: providerMessage || 'تم تنفيذ العملية بنجاح',
-            completedAt: new Date().toISOString()
+            completedAt: nowIso
           };
-          updatedList = [newTx, ...updatedList];
-          updatedTxs = [...updatedTxs, newTx];
         }
+        return item;
+      };
 
-        batch.set(historyRef, { list: updatedList, transactions: updatedTxs, lastUpdated: new Date().toISOString() }, { merge: true });
+      let updatedList = rawList.map(mapItem);
+      let updatedTxs = rawTxs.map(mapItem);
+
+      // إذا لم تكن موجودة في المصفوفات، ننسخ كافة بياناتها الكاملة من paymentTransactions حتى لا تظهر كعملية مالية بقيمة 0
+      if (!found) {
+        const resolvedAmount = gData?.amount ?? 0;
+        const resolvedType = gData?.transactionType || 'سداد اتصالات';
+        const resolvedPhone = gData?.recipientPhoneNumber || gData?.phoneNumber || '';
+        const resolvedDate = gData?.transactionDate || gData?.createdAt || nowIso;
+        const newTx = {
+          id: transid,
+          transid: transid,
+          userId: userId,
+          amount: resolvedAmount,
+          a: resolvedAmount,
+          transactionType: resolvedType,
+          t: resolvedType,
+          recipientPhoneNumber: resolvedPhone,
+          ph: resolvedPhone,
+          notes: gData?.notes || '',
+          transactionDate: resolvedDate,
+          d: resolvedDate,
+          createdAt: resolvedDate,
+          serviceCategory: gData?.serviceCategory || 'اتصالات',
+          status: 'success',
+          s: 'completed',
+          readiness: 'جاهزة',
+          r: 'جاهزة',
+          providerMessage: providerMessage || 'تم تنفيذ العملية بنجاح',
+          completedAt: nowIso
+        };
+        updatedList = [newTx, ...updatedList];
+        updatedTxs = [...updatedTxs, newTx];
       }
+
+      batch.set(historyRef, { list: updatedList, transactions: updatedTxs, lastUpdated: nowIso }, { merge: true });
     } catch (_) {}
 
     await batch.commit();
@@ -450,11 +480,25 @@ export async function markPaymentFailedAndRefund(
         let updatedTxs = rawTxs.map(mapFailedItem);
 
         if (!found) {
+          const gData = gSnap.exists() ? gSnap.data() : (snap.exists() ? snap.data() : null);
+          const resolvedAmount = amount || gData?.amount || 0;
+          const resolvedType = gData?.transactionType || 'سداد اتصالات';
+          const resolvedPhone = gData?.recipientPhoneNumber || gData?.phoneNumber || '';
+          const resolvedDate = gData?.transactionDate || gData?.createdAt || new Date().toISOString();
           const newFailedTx = {
             id: transid,
             transid: transid,
-            amount: amount,
-            a: amount,
+            userId: userId,
+            amount: resolvedAmount,
+            a: resolvedAmount,
+            transactionType: resolvedType,
+            t: resolvedType,
+            recipientPhoneNumber: resolvedPhone,
+            ph: resolvedPhone,
+            transactionDate: resolvedDate,
+            d: resolvedDate,
+            createdAt: resolvedDate,
+            serviceCategory: gData?.serviceCategory || 'اتصالات',
             status: 'failed',
             s: 'failed',
             readiness: 'فاشلة',
