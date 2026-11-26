@@ -164,7 +164,7 @@ export default function TransactionsPage() {
       const id = String(item.id || item.transid || item.operationId || '');
       const t = String(item.transactionType || item.t || item.operationType || item.notes || 'عملية مالية');
       const a = Number(item.amount ?? item.a ?? 0) || 0;
-      const d = item.transactionDate || item.d || item.createdAt || item.date || new Date().toISOString();
+      const d = item.transactionDate || item.d || item.createdAt || item.date || item.completedAt || item.failedAt || '1970-01-01T00:00:00.000Z';
       const s = String(item.status || item.s || 'success');
       const rawR = String(item.readiness || item.r || '');
       let r = rawR;
