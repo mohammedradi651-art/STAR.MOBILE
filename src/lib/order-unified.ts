@@ -80,3 +80,48 @@ export async function updateOrderItemInDoc(
     updatedAt: new Date().toISOString()
   });
 }
+
+/**
+ * دالة لحذف عنصر محدد من مصفوفة مستند في Order (مثل حذف طلب مؤرشف)
+ */
+export async function deleteOrderItemFromDoc(
+  firestore: any,
+  docName: string,
+  itemId: string,
+  arrayField: string = 'requests'
+) {
+  if (!firestore) return;
+  const orderDocRef = doc(firestore, 'Order', docName);
+  const snap = await getDoc(orderDocRef);
+  if (!snap.exists()) return;
+
+  const currentList = snap.data()[arrayField] || [];
+  const filteredList = currentList.filter((item: any) => item.id !== itemId);
+
+  await updateDoc(orderDocRef, {
+    [arrayField]: filteredList,
+    updatedAt: new Date().toISOString()
+  });
+}
+
+/**
+ * دالة لحذف جميع الطلبات المؤرشفة دفعة واحدة مع الإبقاء على الطلبات المعلقة (pending)
+ */
+export async function clearArchivedOrderItemsInDoc(
+  firestore: any,
+  docName: string,
+  arrayField: string = 'requests'
+) {
+  if (!firestore) return;
+  const orderDocRef = doc(firestore, 'Order', docName);
+  const snap = await getDoc(orderDocRef);
+  if (!snap.exists()) return;
+
+  const currentList = snap.data()[arrayField] || [];
+  const activeOnly = currentList.filter((item: any) => item.status === 'pending');
+
+  await updateDoc(orderDocRef, {
+    [arrayField]: activeOnly,
+    updatedAt: new Date().toISOString()
+  });
+}

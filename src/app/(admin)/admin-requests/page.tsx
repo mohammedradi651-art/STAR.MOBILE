@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { collection, doc, query, orderBy, updateDoc, increment, writeBatch, getDocs, getDoc, where, limit, serverTimestamp } from 'firebase/firestore';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { useOrderDocArray, updateOrderItemInDoc } from '@/lib/order-unified';
+import { useOrderDocArray, updateOrderItemInDoc, deleteOrderItemFromDoc, clearArchivedOrderItemsInDoc } from '@/lib/order-unified';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,6 +43,7 @@ import {
   CheckCircle2, 
   Building,
   AlertCircle,
+  Trash2,
   Loader2
 } from 'lucide-react';
 import { SimpleHeader } from '@/components/layout/simple-header';
@@ -719,6 +720,48 @@ export default function AdminRequestsPage() {
     }
   };
 
+  // --- HANDLER: DELETE ARCHIVED ITEM ---
+  const [archiveDeleteTarget, setArchiveDeleteTarget] = useState<{
+    docName: 'electricityRequests' | 'waterRequests' | 'withdrawalRequests' | 'depositRequests';
+    id: string;
+    label: string;
+  } | null>(null);
+  const [isDeletingArchive, setIsDeletingArchive] = useState(false);
+
+  const [clearArchiveTarget, setClearArchiveTarget] = useState<{
+    docName: 'electricityRequests' | 'waterRequests' | 'withdrawalRequests' | 'depositRequests';
+    label: string;
+  } | null>(null);
+  const [isClearingArchive, setIsClearingArchive] = useState(false);
+
+  const handleConfirmDeleteArchive = async () => {
+    if (!firestore || !archiveDeleteTarget) return;
+    setIsDeletingArchive(true);
+    try {
+      await deleteOrderItemFromDoc(firestore, archiveDeleteTarget.docName, archiveDeleteTarget.id);
+      toast({ title: 'تم الحذف', description: 'تم حذف السجل من الأرشيف بنجاح.' });
+      setArchiveDeleteTarget(null);
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'خطأ', description: e?.message || 'تعذر حذف السجل من الأرشيف.' });
+    } finally {
+      setIsDeletingArchive(false);
+    }
+  };
+
+  const handleConfirmClearArchive = async () => {
+    if (!firestore || !clearArchiveTarget) return;
+    setIsClearingArchive(true);
+    try {
+      await clearArchivedOrderItemsInDoc(firestore, clearArchiveTarget.docName);
+      toast({ title: 'تم الحذف', description: `تم حذف جميع سجلات ${clearArchiveTarget.label} من الأرشيف بنجاح.` });
+      setClearArchiveTarget(null);
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'خطأ', description: e?.message || 'تعذر حذف الأرشيف.' });
+    } finally {
+      setIsClearingArchive(false);
+    }
+  };
+
   // --- HANDLERS: DEPOSITS ---
   const handleDepActionConfirm = async () => {
     if (!selectedDep || !depAction || !firestore) return;
@@ -813,23 +856,19 @@ export default function AdminRequestsPage() {
           console.error("Error updating user deposit_requests:", e);
         }
 
-        // إرسال إشعار سحابي FCM مباشر للعميل وحفظه في الإشعارات
-        try {
-          await fetch('/api/notifications/send-push', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: selectedDep.userId,
-              title: notifTitle,
-              body: notifBody,
-              transid: txIdText,
-              status: 'completed',
-              amount: selectedDep.amount,
-            }),
-          });
-        } catch (err) {
-          console.error("Push notification error:", err);
-        }
+        // إرسال إشعار سحابي FCM مباشر للعميل بدون انتظار الرد لتسريع الاستجابة
+        fetch('/api/notifications/send-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: selectedDep.userId,
+            title: notifTitle,
+            body: notifBody,
+            transid: txIdText,
+            status: 'completed',
+            amount: selectedDep.amount,
+          }),
+        }).catch(err => console.error("Push notification error:", err));
       } else {
         const failReason = depRejectNote.trim() || 'لم يتم العثور على إيداع مطابق في البنك';
         await updateOrderItemInDoc(firestore, 'depositRequests', selectedDep.id, {
@@ -901,23 +940,19 @@ export default function AdminRequestsPage() {
           console.error("Error updating user deposit_requests rejection:", e);
         }
 
-        // إرسال إشعار سحابي FCM مباشر للعميل
-        try {
-          await fetch('/api/notifications/send-push', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: selectedDep.userId,
-              title: 'تعذر قبول طلب التغذية ❌',
-              body: `تم رفض طلب تغذية رصيدك بمبلغ ${selectedDep.amount.toLocaleString()} ر.ي. السبب: ${failReason}`,
-              transid: selectedDep.transactionId || selectedDep.id,
-              status: 'failed',
-              amount: selectedDep.amount,
-            }),
-          });
-        } catch (err) {
-          console.error("Push notification error:", err);
-        }
+        // إرسال إشعار سحابي FCM مباشر للعميل بدون انتظار الرد لتسريع الاستجابة
+        fetch('/api/notifications/send-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: selectedDep.userId,
+            title: 'تعذر قبول طلب التغذية ❌',
+            body: `تم رفض طلب تغذية رصيدك بمبلغ ${selectedDep.amount.toLocaleString()} ر.ي. السبب: ${failReason}`,
+            transid: selectedDep.transactionId || selectedDep.id,
+            status: 'failed',
+            amount: selectedDep.amount,
+          }),
+        }).catch(err => console.error("Push notification error:", err));
       }
 
       await batch.commit();
@@ -1049,6 +1084,20 @@ export default function AdminRequestsPage() {
                 )}
               </TabsContent>
               <TabsContent value="archived" className="space-y-3 mt-0">
+                {archivedElect.length > 0 && (
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      className="h-9 px-3 rounded-xl font-black text-xs gap-1.5"
+                      onClick={() => setClearArchiveTarget({ docName: 'electricityRequests', label: 'أرشيف الكهرباء' })}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>حذف الكل ({archivedElect.length})</span>
+                    </Button>
+                  </div>
+                )}
                 {archivedElect.map(req => (
                   <Card key={req.id} className="opacity-70 rounded-[24px] border-none shadow-sm cursor-pointer" onClick={() => setSelectedElect(req)}>
                     <CardContent className="p-4 flex justify-between items-center">
@@ -1059,9 +1108,28 @@ export default function AdminRequestsPage() {
                           <p className="text-[10px] text-muted-foreground">{req.subscriberNumber}</p>
                         </div>
                       </div>
-                      <Badge className={cn("text-[10px] font-black", req.status === 'completed' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
-                        {req.status === 'completed' ? 'تم السداد' : 'ملغي'}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge className={cn("text-[10px] font-black", req.status === 'completed' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
+                          {req.status === 'completed' ? 'تم السداد' : 'ملغي'}
+                        </Badge>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setArchiveDeleteTarget({
+                              docName: 'electricityRequests',
+                              id: req.id,
+                              label: `فاتورة كهرباء (${req.subscriberName || req.subscriberNumber})`,
+                            });
+                          }}
+                          title="حذف من الأرشيف"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -1104,6 +1172,20 @@ export default function AdminRequestsPage() {
                 )}
               </TabsContent>
               <TabsContent value="archived" className="space-y-3 mt-0">
+                {archivedWater.length > 0 && (
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      className="h-9 px-3 rounded-xl font-black text-xs gap-1.5"
+                      onClick={() => setClearArchiveTarget({ docName: 'waterRequests', label: 'أرشيف المياه' })}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>حذف الكل ({archivedWater.length})</span>
+                    </Button>
+                  </div>
+                )}
                 {archivedWater.map(req => (
                   <Card key={req.id} className="opacity-70 rounded-[24px] border-none shadow-sm cursor-pointer" onClick={() => setSelectedWater(req)}>
                     <CardContent className="p-4 flex justify-between items-center">
@@ -1114,9 +1196,28 @@ export default function AdminRequestsPage() {
                           <p className="text-[10px] text-muted-foreground">{req.city || ''} - {req.subscriberNumber}</p>
                         </div>
                       </div>
-                      <Badge className={cn("text-[10px] font-black", req.status === 'completed' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
-                        {req.status === 'completed' ? 'تم السداد' : 'ملغي'}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge className={cn("text-[10px] font-black", req.status === 'completed' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
+                          {req.status === 'completed' ? 'تم السداد' : 'ملغي'}
+                        </Badge>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setArchiveDeleteTarget({
+                              docName: 'waterRequests',
+                              id: req.id,
+                              label: `فاتورة مياه (${req.subscriberName || req.subscriberNumber})`,
+                            });
+                          }}
+                          title="حذف من الأرشيف"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -1159,6 +1260,20 @@ export default function AdminRequestsPage() {
                 )}
               </TabsContent>
               <TabsContent value="archived" className="space-y-3 mt-0">
+                {archivedWith.length > 0 && (
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      className="h-9 px-3 rounded-xl font-black text-xs gap-1.5"
+                      onClick={() => setClearArchiveTarget({ docName: 'withdrawalRequests', label: 'أرشيف السحب' })}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>حذف الكل ({archivedWith.length})</span>
+                    </Button>
+                  </div>
+                )}
                 {archivedWith.map(req => (
                   <Card key={req.id} className="opacity-70 rounded-[24px] border-none shadow-sm cursor-pointer" onClick={() => setSelectedWith(req)}>
                     <CardContent className="p-4 flex justify-between items-center">
@@ -1169,9 +1284,28 @@ export default function AdminRequestsPage() {
                           <p className="text-[10px] text-muted-foreground">{req.paymentMethodName}</p>
                         </div>
                       </div>
-                      <Badge className={cn("text-[10px] font-black", req.status === 'approved' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
-                        {req.status === 'approved' ? 'مقبول' : 'مرفوض'}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge className={cn("text-[10px] font-black", req.status === 'approved' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
+                          {req.status === 'approved' ? 'مقبول' : 'مرفوض'}
+                        </Badge>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setArchiveDeleteTarget({
+                              docName: 'withdrawalRequests',
+                              id: req.id,
+                              label: `طلب سحب (${req.ownerName || 'مالك شبكة'})`,
+                            });
+                          }}
+                          title="حذف من الأرشيف"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -1214,6 +1348,20 @@ export default function AdminRequestsPage() {
                 )}
               </TabsContent>
               <TabsContent value="archived" className="space-y-3 mt-0">
+                {archivedDep.length > 0 && (
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      className="h-9 px-3 rounded-xl font-black text-xs gap-1.5"
+                      onClick={() => setClearArchiveTarget({ docName: 'depositRequests', label: 'أرشيف الإيداعات' })}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>حذف الكل ({archivedDep.length})</span>
+                    </Button>
+                  </div>
+                )}
                 {archivedDep.map(req => (
                   <Card key={req.id} className="opacity-70 rounded-[24px] border-none shadow-sm cursor-pointer" onClick={() => setSelectedDep(req)}>
                     <CardContent className="p-4 flex justify-between items-center">
@@ -1224,9 +1372,28 @@ export default function AdminRequestsPage() {
                           <p className="text-[10px] text-muted-foreground">{req.bankName} - {req.refOrAccount}</p>
                         </div>
                       </div>
-                      <Badge className={cn("text-[10px] font-black", req.status === 'approved' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
-                        {req.status === 'approved' ? 'مقبول' : 'مرفوض'}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge className={cn("text-[10px] font-black", req.status === 'approved' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
+                          {req.status === 'approved' ? 'مقبول' : 'مرفوض'}
+                        </Badge>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setArchiveDeleteTarget({
+                              docName: 'depositRequests',
+                              id: req.id,
+                              label: `طلب إيداع (${req.userName || 'عميل'})`,
+                            });
+                          }}
+                          title="حذف من الأرشيف"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -1507,6 +1674,48 @@ export default function AdminRequestsPage() {
               disabled={isProcessingDep}
             >
               {isProcessingDep ? <Loader2 className="animate-spin h-4 w-4" /> : depAction === 'approve' ? 'تأكيد الشحن' : 'تأكيد الرفض'}
+            </AlertDialogAction>
+            <AlertDialogCancel className="rounded-2xl h-11 font-black">إلغاء</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!archiveDeleteTarget} onOpenChange={(open) => !open && setArchiveDeleteTarget(null)}>
+        <AlertDialogContent className="rounded-[32px] max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-center font-black">تأكيد الحذف من الأرشيف</AlertDialogTitle>
+            <AlertDialogDescription className="text-center text-xs pt-1">
+              هل أنت متأكد من حذف {archiveDeleteTarget?.label} نهائياً من الأرشيف؟
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-3">
+            <AlertDialogAction
+              className="rounded-2xl h-11 font-black bg-destructive hover:bg-destructive/90"
+              onClick={handleConfirmDeleteArchive}
+              disabled={isDeletingArchive}
+            >
+              {isDeletingArchive ? <Loader2 className="animate-spin h-4 w-4" /> : 'تأكيد الحذف'}
+            </AlertDialogAction>
+            <AlertDialogCancel className="rounded-2xl h-11 font-black">إلغاء</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!clearArchiveTarget} onOpenChange={(open) => !open && setClearArchiveTarget(null)}>
+        <AlertDialogContent className="rounded-[32px] max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-center font-black">تأكيد حذف كل الأرشيف</AlertDialogTitle>
+            <AlertDialogDescription className="text-center text-xs pt-1">
+              هل أنت متأكد من حذف جميع سجلات {clearArchiveTarget?.label} نهائياً؟ (لن تتأثر الطلبات المعلقة الحالية)
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="grid grid-cols-2 gap-3 mt-3">
+            <AlertDialogAction
+              className="rounded-2xl h-11 font-black bg-destructive hover:bg-destructive/90"
+              onClick={handleConfirmClearArchive}
+              disabled={isClearingArchive}
+            >
+              {isClearingArchive ? <Loader2 className="animate-spin h-4 w-4" /> : 'حذف الكل'}
             </AlertDialogAction>
             <AlertDialogCancel className="rounded-2xl h-11 font-black">إلغاء</AlertDialogCancel>
           </AlertDialogFooter>

@@ -44,6 +44,7 @@ import {
   TransactionDetailsModal, 
   extractRecipientPhone, 
   getAlwadiSubscriberInfo,
+  resolveTransactionDisplay,
   generateNumericId 
 } from '@/components/layout/transaction-details-modal';
 import { useToast } from '@/hooks/use-toast';
@@ -1064,10 +1065,10 @@ function UserReportPage() {
           const phone = extractRecipientPhone(tx);
           const alwadiInfo = getAlwadiSubscriberInfo(tx);
           const readiness = getReadinessDetails(tx);
-          const cleanTitle = (tx.transactionType || '')
-            .replace(/\s*\(?api\)?/gi, '')
-            .replace(/\s*-\s*api/gi, '')
-            .trim();
+          const disp = resolveTransactionDisplay(tx);
+          const cleanTitle = disp.serviceName !== disp.categoryName
+            ? `${disp.serviceName} - ${disp.categoryName}`
+            : disp.serviceName;
 
           const isPending = tx.status === 'pending' || tx.readiness === 'قيد الانتظار' || readiness.text.includes('الانتظار');
 

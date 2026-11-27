@@ -69,6 +69,140 @@ interface TransactionDetailsModalProps {
 /**
  * دالة استخراج وتنسيق رقم الهاتف المسدد له
  */
+export function resolveTransactionDisplay(tx?: TransactionModalData | null): {
+  cleanTxType: string;
+  serviceName: string;
+  categoryName: string;
+  isNetwork: boolean;
+} {
+  const cleanTxType = (tx?.transactionType || '')
+    .replace(/\s*\(?api\)?/gi, '')
+    .replace(/\s*-\s*api/gi, '')
+    .trim();
+
+  const txCombined = `${cleanTxType} ${tx?.notes || ''}`.trim();
+  const txLower = txCombined.toLowerCase();
+
+  let serviceName = cleanTxType || 'عملية مالية';
+  let categoryName = cleanTxType || 'عملية مالية';
+  let isNetwork = false;
+
+  const detectTelecomPackageOrBalance = () => {
+    if (txLower.includes('باقة')) {
+      const pkgMatch = txCombined.match(/باقة\s*([^\n-]+(?:\s+[^\n-]+){0,4})/);
+      return pkgMatch?.[1]?.trim() ? `باقة ${pkgMatch[1].trim()}` : 'باقة';
+    }
+    return 'رصيد';
+  };
+
+  if (txLower.includes('كهرباء')) {
+    serviceName = 'الكهرباء';
+    categoryName = 'سداد فاتورة';
+  } else if (txLower.includes('مياه') || txLower.includes('ماء')) {
+    serviceName = 'المياه';
+    categoryName = 'سداد فاتورة';
+  } else if (txLower.includes('الوادي') || txLower.includes('وادي')) {
+    serviceName = 'منظومة الوادي';
+    const anyTx = tx as any;
+    const shortTierMatch = txCombined.match(/(?:فئة التجديد|فئة|باقة)\s*:?\s*([^\n,.()-]{2,25})/);
+    const rawAlwadiCat = (
+      anyTx?.packageName ||
+      anyTx?.categoryName ||
+      anyTx?.className ||
+      shortTierMatch?.[1] ||
+      ''
+    ).trim();
+    categoryName = (rawAlwadiCat && rawAlwadiCat.length <= 28)
+      ? rawAlwadiCat
+      : (tx?.amount ? `فئة ${Number(tx.amount).toLocaleString('en-US')} ريال` : 'تجديد اشتراك');
+  } else if (
+    txLower.includes('شراء كرت') ||
+    txLower.includes('شبكة:') ||
+    txLower.includes('الشبكة:') ||
+    String((tx as any)?.serviceCategory || '').includes('شبك') ||
+    Boolean((tx as any)?.networkName) ||
+    Boolean(tx?.cardNumber)
+  ) {
+    isNetwork = true;
+    const anyTx = tx as any;
+    const netNameMatch = txCombined.match(/(?:الشبكة|شبكة)\s*:?\s*([^\n-(]+)/);
+    const notesParts = (tx?.notes || '').split(/\s+-\s+/).map(s => s.trim()).filter(Boolean);
+    const extractedNet = (anyTx?.networkName || netNameMatch?.[1] || (notesParts.length >= 2 ? notesParts[0] : '') || '').trim();
+    serviceName = extractedNet || 'الشبكات المحلية';
+
+    const netCatMatch = txCombined.match(/(?:الفئة|فئة)\s*:?\s*([^\n-(]+)/);
+    const buyCardMatch = cleanTxType.match(/شراء كرت(?:\s*محلي)?(?:\s*شبكة)?\s*:?\s*([^\n-]+)/);
+    const notesCat = notesParts.length >= 2 ? notesParts[1].replace(/\(.*?\)/g, '').trim() : '';
+    const rawCat = (
+      anyTx?.categoryName ||
+      anyTx?.className ||
+      netCatMatch?.[1] ||
+      notesCat ||
+      buyCardMatch?.[1] ||
+      ''
+    ).trim();
+    categoryName = (rawCat && !/^(شبكة|شبكات|محلي)$/i.test(rawCat))
+      ? rawCat
+      : (tx?.amount ? `فئة ${Number(tx.amount).toLocaleString('en-US')} ريال` : 'كرت شبكة');
+  } else if (txLower.includes('ببجي') || txLower.includes('pubg') || txLower.includes('شدات')) {
+    serviceName = 'تسديد ببجي موبايل';
+    const pubgCatMatch = cleanTxType.match(/(?:شحن شدات\s*:?\s*|شدات\s*:?\s*)(.+)/i);
+    categoryName = pubgCatMatch?.[1]?.trim() || 'شدات ببجي';
+  } else if (txLower.includes('فري فاير') || txLower.includes('freefire') || txLower.includes('جواهر')) {
+    serviceName = 'تسديد فري فاير';
+    const ffCatMatch = cleanTxType.match(/(?:شحن جواهر\s*:?\s*|جواهر\s*:?\s*)(.+)/i);
+    categoryName = ffCatMatch?.[1]?.trim() || 'جواهر فري فاير';
+  } else if (txLower.includes('يمن موبايل') || txLower.includes('موبايل')) {
+    serviceName = 'يمن موبايل';
+    categoryName = detectTelecomPackageOrBalance();
+  } else if (txLower.includes('سبأفون') || txLower.includes('سبافون')) {
+    serviceName = 'سبأفون';
+    categoryName = detectTelecomPackageOrBalance();
+  } else if (/(?:^|\s|:)يو(?:\s|$|-)|you|إم تي إن|mtn/i.test(txLower)) {
+    serviceName = 'يو (YOU)';
+    categoryName = detectTelecomPackageOrBalance();
+  } else if (/(?:^|\s|:)واي(?:\s|$|-)|\bwhy\b|\bway\b/i.test(txLower)) {
+    serviceName = 'واي';
+    categoryName = detectTelecomPackageOrBalance();
+  } else if (txLower.includes('فورجي') || txLower.includes('4g')) {
+    serviceName = 'يمن فورجي';
+    categoryName = detectTelecomPackageOrBalance();
+  } else if (txLower.includes('عدن')) {
+    serviceName = 'عدن نت';
+    categoryName = detectTelecomPackageOrBalance();
+  } else if (txLower.includes('هاتف') || txLower.includes('ثابت')) {
+    serviceName = 'الهاتف الثابت';
+    categoryName = detectTelecomPackageOrBalance();
+  } else if (txLower.includes('انترنت') || txLower.includes('أرضي') || txLower.includes('adsl')) {
+    serviceName = 'الإنترنت الأرضي';
+    categoryName = detectTelecomPackageOrBalance();
+  } else if (txLower.includes('شبكة') || txLower.includes('شبكات')) {
+    isNetwork = true;
+    serviceName = 'الشبكات المحلية';
+    categoryName = tx?.amount ? `فئة ${Number(tx.amount).toLocaleString('en-US')} ريال` : 'كرت شبكة';
+  } else if (txLower.includes('سداد فاتورة') || txLower.includes('سداد رصيد') || txLower.includes('سداد') || txLower.includes('رصيد') || txLower.includes('باقة')) {
+    const phoneStr = extractRecipientPhone(tx).replace(/\D/g, '');
+    if (phoneStr.startsWith('77') || phoneStr.startsWith('78')) {
+      serviceName = 'يمن موبايل';
+    } else if (phoneStr.startsWith('71')) {
+      serviceName = 'سبأفون';
+    } else if (phoneStr.startsWith('73')) {
+      serviceName = 'يو (YOU)';
+    } else if (phoneStr.startsWith('70')) {
+      serviceName = 'واي';
+    } else if (phoneStr.startsWith('79')) {
+      serviceName = 'عدن نت';
+    } else if (/^0[1-7]/.test(phoneStr)) {
+      serviceName = 'الهاتف الثابت';
+    } else {
+      serviceName = 'سداد اتصالات';
+    }
+    categoryName = detectTelecomPackageOrBalance();
+  }
+
+  return { cleanTxType, serviceName, categoryName, isNetwork };
+}
+
 export function extractRecipientPhone(tx?: TransactionModalData | null): string {
   if (!tx) return '';
   const raw = tx.recipientPhoneNumber || tx.mobile || tx.phone || '';
@@ -389,7 +523,7 @@ function drawModalExactToCanvas(
   }
 
   if (data.phone) {
-    drawRow('الرقم المسدد له:', data.phone);
+    drawRow('رقم الهاتف:', data.phone);
   }
 
   drawRow('التاريخ:', data.dateText);
@@ -468,29 +602,14 @@ export function TransactionDetailsModal({
     if (isAlwadi) {
       const cardMatch = (transaction.notes || '').match(/(?:كرت|رقم الكرت|الكرت)\s*:?\s*([0-9a-zA-Z]+)/);
       const nameMatch = (transaction.notes || '').match(/(?:المشترك|اسم المشترك|الاسم)\s*:?\s*([^-\n,]+)/);
-      
+
       const cardNum = transaction.cardNumber || (cardMatch ? cardMatch[1] : '') || transaction.recipientPhoneNumber || '';
-      if (cardNum && !resolvedCardNumber) {
+      if (cardNum && !transaction.cardNumber) {
         setResolvedCardNumber(cardNum);
       }
 
       if (nameMatch && nameMatch[1] && !transaction.subscriberName) {
         setResolvedSubscriberName(nameMatch[1].trim());
-      } else if (!transaction.subscriberName && cardNum) {
-        // فحص تلقائي لحظي من السيرفر لمعرفة اسم المشترك الحقيقي
-        fetch('/api/alwadi/lookup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ number: cardNum })
-        })
-          .then(res => res.json())
-          .then(data => {
-            if (data?.success && data?.data?.name) {
-              setResolvedSubscriberName(data.data.name);
-              if (data.data.cardNumber) setResolvedCardNumber(data.data.cardNumber);
-            }
-          })
-          .catch(() => {});
       }
     }
   }, [transaction, isAlwadi]);
@@ -503,78 +622,7 @@ export function TransactionDetailsModal({
   const isPending = readiness.status === 'pending' || transaction.status === 'pending';
   const isSuccess = readiness.status === 'success' || transaction.status === 'success';
 
-  // تنظيف اسم الخدمة من أي ذكر للـ API
-  const cleanTxType = (transaction.transactionType || '')
-    .replace(/\s*\(?api\)?/gi, '')
-    .replace(/\s*-\s*api/gi, '')
-    .trim();
-
-  // تحديد الخدمة والصنف بدقة لجميع خدمات التطبيق
-  const txCombined = `${cleanTxType} ${transaction.notes || ''}`.trim();
-  const txLower = txCombined.toLowerCase();
-
-  let companyName = cleanTxType || 'عملية مالية';
-  let categoryName = cleanTxType || 'عملية مالية';
-
-  if (txLower.includes('كهرباء')) {
-    companyName = 'الكهرباء';
-    categoryName = 'سداد فاتورة';
-  } else if (txLower.includes('مياه') || txLower.includes('ماء')) {
-    companyName = 'المياه';
-    categoryName = 'سداد فاتورة';
-  } else if (txLower.includes('الوادي') || txLower.includes('وادي')) {
-    companyName = 'منظومة الوادي';
-    const alwadiCatMatch = txCombined.match(/(?:فئة|باقة|تجديد)\s*:?\s*([^\n-]+)/);
-    categoryName = alwadiCatMatch?.[1]?.trim() || cleanTxType.replace(/منظومة الوادي|الوادي/gi, '').trim() || 'تجديد اشتراك';
-  } else if (txLower.includes('شراء كرت') || txLower.includes('شبكة') || txLower.includes('شبكات')) {
-    companyName = 'الشبكات المحلية';
-    const netCatMatch = txCombined.match(/(?:الفئة|فئة|كرت)\s*:?\s*([^\n-]+)/);
-    categoryName = netCatMatch?.[1]?.trim() || cleanTxType.replace(/شراء كرت محلي|شراء كرت/gi, '').trim() || 'كرت شبكة';
-  } else if (txLower.includes('ببجي') || txLower.includes('pubg') || txLower.includes('شدات')) {
-    companyName = 'الألعاب (ببجي موبايل)';
-    const pubgCatMatch = cleanTxType.match(/(?:شحن شدات\s*:?\s*|شدات\s*:?\s*)(.+)/i);
-    categoryName = pubgCatMatch?.[1]?.trim() || cleanTxType || 'شدات ببجي';
-  } else if (txLower.includes('فري فاير') || txLower.includes('freefire') || txLower.includes('جواهر')) {
-    companyName = 'الألعاب (فري فاير)';
-    const ffCatMatch = cleanTxType.match(/(?:شحن جواهر\s*:?\s*|جواهر\s*:?\s*)(.+)/i);
-    categoryName = ffCatMatch?.[1]?.trim() || cleanTxType || 'جواهر فري فاير';
-  } else {
-    let isTelecom = false;
-    if (txLower.includes('يمن موبايل') || txLower.includes('موبايل')) {
-      companyName = 'يمن موبايل';
-      isTelecom = true;
-    } else if (txLower.includes('سبأفون') || txLower.includes('سبافون')) {
-      companyName = 'سبأفون';
-      isTelecom = true;
-    } else if (txLower.includes('يو') || txLower.includes('you')) {
-      companyName = 'يو (YOU)';
-      isTelecom = true;
-    } else if (txLower.includes('واي') || txLower.includes('why') || txLower.includes('way')) {
-      companyName = 'واي';
-      isTelecom = true;
-    } else if (txLower.includes('فورجي') || txLower.includes('4g')) {
-      companyName = 'يمن فورجي';
-      isTelecom = true;
-    } else if (txLower.includes('عدن')) {
-      companyName = 'عدن نت';
-      isTelecom = true;
-    } else if (txLower.includes('هاتف') || txLower.includes('ثابت')) {
-      companyName = 'الهاتف الثابت';
-      isTelecom = true;
-    } else if (txLower.includes('انترنت') || txLower.includes('أرضي') || txLower.includes('adsl')) {
-      companyName = 'الإنترنت الأرضي';
-      isTelecom = true;
-    }
-
-    if (isTelecom) {
-      if (txLower.includes('باقة')) {
-        const pkgMatch = txCombined.match(/باقة\s*([^\n-]+(?:\s+[^\n-]+){0,4})/);
-        categoryName = pkgMatch?.[1]?.trim() ? `باقة ${pkgMatch[1].trim()}` : 'باقة';
-      } else {
-        categoryName = 'رصيد';
-      }
-    }
-  }
+  const { cleanTxType, serviceName: companyName, categoryName, isNetwork } = resolveTransactionDisplay(transaction);
 
   const readinessLabel = isSuccess ? 'جاهز' : isPending ? 'قيد الانتظار' : 'غير جاهز';
 
@@ -787,11 +835,11 @@ export function TransactionDetailsModal({
             </span>
           </div>
 
-          {/* الصنف */}
+          {/* الصنف / الفئة */}
           <div className="flex justify-between items-center py-2 border-b border-dashed border-border/60">
             <span className="text-muted-foreground text-xs font-bold flex items-center gap-2">
               <Activity className="h-4 w-4 text-[#1b52a4]" />
-              الصنف:
+              {isNetwork ? 'الفئة:' : 'الصنف:'}
             </span>
             <span className="font-black text-[#1b52a4] text-xs sm:text-sm text-left max-w-[65%] truncate">
               {categoryName}
@@ -835,12 +883,12 @@ export function TransactionDetailsModal({
             </>
           )}
 
-          {/* الرقم المسدد له للاتصالات */}
+          {/* رقم الهاتف للاتصالات */}
           {!isAlwadi && phone ? (
             <div className="flex justify-between items-center py-2 border-b border-dashed border-border/60">
               <span className="text-muted-foreground text-xs font-bold flex items-center gap-2">
                 <Smartphone className="h-4 w-4 text-[#1b52a4]" />
-                الرقم المسدد له:
+                رقم الهاتف:
               </span>
               <div className="flex items-center gap-2">
                 <span className="font-mono font-black text-xs sm:text-sm tracking-widest text-foreground">
@@ -848,7 +896,7 @@ export function TransactionDetailsModal({
                 </span>
                 <button
                   type="button"
-                  onClick={() => handleCopy(phone, 'رقم الجوال')}
+                  onClick={() => handleCopy(phone, 'رقم الهاتف')}
                   className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-primary transition-colors"
                   title="نسخ الرقم"
                 >
@@ -858,14 +906,38 @@ export function TransactionDetailsModal({
             </div>
           ) : null}
 
+          {/* المبلغ */}
+          <div className="flex justify-between items-center py-2 border-b border-dashed border-border/60">
+            <span className="text-muted-foreground text-xs font-bold flex items-center gap-2">
+              <Banknote className="h-4 w-4 text-[#1b52a4]" />
+              المبلغ:
+            </span>
+            <span className="font-black text-xs sm:text-sm text-foreground">
+              {transaction.amount.toLocaleString('en-US')} ريال
+            </span>
+          </div>
+
           {/* التاريخ والوقت بالثواني */}
           <div className="flex justify-between items-center py-2 border-b border-dashed border-border/60">
             <span className="text-muted-foreground text-xs font-bold flex items-center gap-2">
               <Calendar className="h-4 w-4 text-[#1b52a4]" />
               التاريخ:
             </span>
-            <span className="font-bold text-xs text-foreground" dir="ltr">
-              {safeFormatDate(transaction.transactionDate || transaction.createdAt, 'yyyy/MM/dd - h:mm:ss a')}
+            <span className="font-black text-xs sm:text-sm text-foreground flex items-center gap-1.5" dir="rtl">
+              <span dir="ltr">{safeFormatDate(transaction.transactionDate || transaction.createdAt, 'yyyy/MM/dd')}</span>
+              <span>-</span>
+              <span>{safeFormatDate(transaction.transactionDate || transaction.createdAt, 'h:mm:ss a')}</span>
+            </span>
+          </div>
+
+          {/* الجاهزية */}
+          <div className="flex justify-between items-center py-2 border-b border-dashed border-border/60">
+            <span className="text-muted-foreground text-xs font-bold flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-[#1b52a4]" />
+              الجاهزية:
+            </span>
+            <span className={cn("font-black text-xs px-2.5 py-0.5 rounded-full border", readiness.bgClass)}>
+              {readinessLabel}
             </span>
           </div>
 

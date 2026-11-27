@@ -33,7 +33,7 @@ import {
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay, isValid } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { isTelecomService, getReadinessDetails } from '@/lib/telecom-order';
-import { TransactionDetailsModal, extractRecipientPhone } from '@/components/layout/transaction-details-modal';
+import { TransactionDetailsModal, extractRecipientPhone, resolveTransactionDisplay } from '@/components/layout/transaction-details-modal';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -434,7 +434,12 @@ export default function TransactionsPage() {
                                             </div>
                                             <div className='text-right'>
                                                 <p className="font-bold text-sm text-foreground">
-                                                    {txType.replace(/\s*\(?api\)?/gi, '').replace(/\s*-\s*api/gi, '').trim() || 'عملية مالية'}
+                                                    {(() => {
+                                                      const disp = resolveTransactionDisplay(tx);
+                                                      return disp.serviceName !== disp.categoryName
+                                                        ? `${disp.serviceName} - ${disp.categoryName}`
+                                                        : disp.serviceName;
+                                                    })()}
                                                 </p>
                                                 <div className="flex items-center gap-2 mt-0.5">
                                                     <p className="text-[10px] text-muted-foreground">{safeFormatDate(tx.transactionDate, 'd MMMM yyyy')}</p>

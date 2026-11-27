@@ -29,7 +29,7 @@ import {
 import { format, parseISO } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import Link from 'next/link';
-import { TransactionDetailsModal, extractRecipientPhone } from '@/components/layout/transaction-details-modal';
+import { TransactionDetailsModal, extractRecipientPhone, resolveTransactionDisplay } from '@/components/layout/transaction-details-modal';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
@@ -245,7 +245,12 @@ export function RecentTransactions() {
 
                                 <div className="flex-1 text-right mx-4 overflow-hidden">
                                     <p className="font-bold text-primary text-sm truncate">
-                                        {txType.replace(/\s*\(?api\)?/gi, '').replace(/\s*-\s*api/gi, '').trim() || 'عملية مالية'}
+                                        {(() => {
+                                          const disp = resolveTransactionDisplay(tx);
+                                          return disp.serviceName !== disp.categoryName
+                                            ? `${disp.serviceName} - ${disp.categoryName}`
+                                            : disp.serviceName;
+                                        })()}
                                     </p>
                                     <div className="flex items-center gap-2 mt-0.5">
                                         <p className="text-[10px] text-primary/70 font-semibold">
