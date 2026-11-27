@@ -125,24 +125,35 @@ export function resolveTransactionDisplay(tx?: TransactionModalData | null): {
   ) {
     isNetwork = true;
     const anyTx = tx as any;
-    const netNameMatch = txCombined.match(/(?:الشبكة|شبكة)\s*:?\s*([^\n-(]+)/);
-    const notesParts = (tx?.notes || '').split(/\s+-\s+/).map(s => s.trim()).filter(Boolean);
-    const extractedNet = (anyTx?.networkName || netNameMatch?.[1] || (notesParts.length >= 2 ? notesParts[0] : '') || '').trim();
+    const notesStr = tx?.notes || '';
+    const notesNetMatch = notesStr.match(/(?:الشبكة|شبكة)\s*:\s*([^\n-]+)/);
+    const anyNetMatch = txCombined.match(/(?:الشبكة|شبكة)\s*:\s*([^\n-(]+)/);
+    const notesParts = notesStr.split(/\s+-\s+/).map(s => s.trim()).filter(Boolean);
+    const extractedNet = (
+      notesNetMatch?.[1] ||
+      anyTx?.networkName ||
+      anyNetMatch?.[1] ||
+      (notesParts.length >= 2 ? notesParts[0].replace(/^(?:الشبكة|شبكة)\s*:\s*/i, '') : '') ||
+      ''
+    ).trim();
     serviceName = extractedNet || 'الشبكات المحلية';
 
-    const netCatMatch = txCombined.match(/(?:الفئة|فئة)\s*:?\s*([^\n-(]+)/);
+    const colonCatMatch = txCombined.match(/(?:الفئة|فئة)\s*:\s*([^\n-]+)/);
+    const dashCatMatch = cleanTxType.match(/-\s*((?:فئة\s*)?[^\n-]+)$/);
     const buyCardMatch = cleanTxType.match(/شراء كرت(?:\s*محلي)?(?:\s*شبكة)?\s*:?\s*([^\n-]+)/);
     const notesCat = notesParts.length >= 2 ? notesParts[1].replace(/\(.*?\)/g, '').trim() : '';
-    const rawCat = (
+    const candidateCat = (
       anyTx?.categoryName ||
       anyTx?.className ||
-      netCatMatch?.[1] ||
+      colonCatMatch?.[1] ||
+      dashCatMatch?.[1] ||
       notesCat ||
       buyCardMatch?.[1] ||
       ''
     ).trim();
-    categoryName = (rawCat && !/^(شبكة|شبكات|محلي)$/i.test(rawCat))
-      ? rawCat
+    const isDuplicateOfNetwork = candidateCat && (serviceName.includes(candidateCat) || candidateCat.includes(serviceName));
+    categoryName = (candidateCat && !/^(شبكة|شبكات|محلي)$/i.test(candidateCat) && !isDuplicateOfNetwork)
+      ? candidateCat
       : (tx?.amount ? `فئة ${Number(tx.amount).toLocaleString('en-US')} ريال` : 'كرت شبكة');
   } else if (txLower.includes('ببجي') || txLower.includes('pubg') || txLower.includes('شدات')) {
     serviceName = 'تسديد ببجي موبايل';
