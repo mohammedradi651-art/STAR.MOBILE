@@ -509,44 +509,74 @@ export function TransactionDetailsModal({
     .replace(/\s*-\s*api/gi, '')
     .trim();
 
-  // تحديد اسم الشركة والصنف بدقة لعمليات الاتصالات والألعاب
-  let companyName = cleanTxType;
-  let categoryName = 'رصيد';
+  // تحديد الخدمة والصنف بدقة لجميع خدمات التطبيق
+  const txCombined = `${cleanTxType} ${transaction.notes || ''}`.trim();
+  const txLower = txCombined.toLowerCase();
 
-  const txLower = (cleanTxType + ' ' + (transaction.notes || '')).toLowerCase();
-  if (txLower.includes('يمن موبايل') || txLower.includes('موبايل')) {
-    companyName = 'يمن موبايل';
-  } else if (txLower.includes('سبأفون') || txLower.includes('سبافون')) {
-    companyName = 'سبأفون';
-  } else if (txLower.includes('يو') || txLower.includes('you')) {
-    companyName = 'يو';
-  } else if (txLower.includes('واي') || txLower.includes('why') || txLower.includes('way')) {
-    companyName = 'واي';
-  } else if (txLower.includes('فورجي') || txLower.includes('4g')) {
-    companyName = 'يمن فورجي';
-  } else if (txLower.includes('عدن')) {
-    companyName = 'عدن نت';
-  } else if (txLower.includes('هاتف') || txLower.includes('ثابت')) {
-    companyName = 'الهاتف الثابت';
-  } else if (txLower.includes('انترنت') || txLower.includes('أرضي') || txLower.includes('adsl')) {
-    companyName = 'الإنترنت الأرضي';
-  } else if (txLower.includes('ببجي') || txLower.includes('pubg')) {
-    companyName = 'ببجي موبايل';
-  } else if (txLower.includes('فري فاير') || txLower.includes('freefire')) {
-    companyName = 'فري فاير';
-  }
+  let companyName = cleanTxType || 'عملية مالية';
+  let categoryName = cleanTxType || 'عملية مالية';
 
-  if (txLower.includes('باقة')) {
-    categoryName = 'تسديد باقة';
-    const pkgMatch = (cleanTxType + ' ' + (transaction.notes || '')).match(/باقة\s*([^\s-]+(?:\s+[^\s-]+){0,3})/);
-    if (pkgMatch && pkgMatch[1]) {
-      categoryName = `تسديد باقة ${pkgMatch[1].trim()}`;
+  if (txLower.includes('كهرباء')) {
+    companyName = 'الكهرباء';
+    categoryName = 'سداد فاتورة';
+  } else if (txLower.includes('مياه') || txLower.includes('ماء')) {
+    companyName = 'المياه';
+    categoryName = 'سداد فاتورة';
+  } else if (txLower.includes('الوادي') || txLower.includes('وادي')) {
+    companyName = 'منظومة الوادي';
+    const alwadiCatMatch = txCombined.match(/(?:فئة|باقة|تجديد)\s*:?\s*([^\n-]+)/);
+    categoryName = alwadiCatMatch?.[1]?.trim() || cleanTxType.replace(/منظومة الوادي|الوادي/gi, '').trim() || 'تجديد اشتراك';
+  } else if (txLower.includes('شراء كرت') || txLower.includes('شبكة') || txLower.includes('شبكات')) {
+    companyName = 'الشبكات المحلية';
+    const netCatMatch = txCombined.match(/(?:الفئة|فئة|كرت)\s*:?\s*([^\n-]+)/);
+    categoryName = netCatMatch?.[1]?.trim() || cleanTxType.replace(/شراء كرت محلي|شراء كرت/gi, '').trim() || 'كرت شبكة';
+  } else if (txLower.includes('ببجي') || txLower.includes('pubg') || txLower.includes('شدات')) {
+    companyName = 'الألعاب (ببجي موبايل)';
+    const pubgCatMatch = cleanTxType.match(/(?:شحن شدات\s*:?\s*|شدات\s*:?\s*)(.+)/i);
+    categoryName = pubgCatMatch?.[1]?.trim() || cleanTxType || 'شدات ببجي';
+  } else if (txLower.includes('فري فاير') || txLower.includes('freefire') || txLower.includes('جواهر')) {
+    companyName = 'الألعاب (فري فاير)';
+    const ffCatMatch = cleanTxType.match(/(?:شحن جواهر\s*:?\s*|جواهر\s*:?\s*)(.+)/i);
+    categoryName = ffCatMatch?.[1]?.trim() || cleanTxType || 'جواهر فري فاير';
+  } else {
+    let isTelecom = false;
+    if (txLower.includes('يمن موبايل') || txLower.includes('موبايل')) {
+      companyName = 'يمن موبايل';
+      isTelecom = true;
+    } else if (txLower.includes('سبأفون') || txLower.includes('سبافون')) {
+      companyName = 'سبأفون';
+      isTelecom = true;
+    } else if (txLower.includes('يو') || txLower.includes('you')) {
+      companyName = 'يو (YOU)';
+      isTelecom = true;
+    } else if (txLower.includes('واي') || txLower.includes('why') || txLower.includes('way')) {
+      companyName = 'واي';
+      isTelecom = true;
+    } else if (txLower.includes('فورجي') || txLower.includes('4g')) {
+      companyName = 'يمن فورجي';
+      isTelecom = true;
+    } else if (txLower.includes('عدن')) {
+      companyName = 'عدن نت';
+      isTelecom = true;
+    } else if (txLower.includes('هاتف') || txLower.includes('ثابت')) {
+      companyName = 'الهاتف الثابت';
+      isTelecom = true;
+    } else if (txLower.includes('انترنت') || txLower.includes('أرضي') || txLower.includes('adsl')) {
+      companyName = 'الإنترنت الأرضي';
+      isTelecom = true;
     }
-  } else if (txLower.includes('شدات')) {
-    categoryName = 'شدات ببجي';
-  } else if (txLower.includes('جواهر')) {
-    categoryName = 'جواهر فري فاير';
+
+    if (isTelecom) {
+      if (txLower.includes('باقة')) {
+        const pkgMatch = txCombined.match(/باقة\s*([^\n-]+(?:\s+[^\n-]+){0,4})/);
+        categoryName = pkgMatch?.[1]?.trim() ? `باقة ${pkgMatch[1].trim()}` : 'باقة';
+      } else {
+        categoryName = 'رصيد';
+      }
+    }
   }
+
+  const readinessLabel = isSuccess ? 'جاهز' : isPending ? 'قيد الانتظار' : 'غير جاهز';
 
   // استخراج سبب الرفض إن وجد
   let cleanProviderReason = '';
@@ -565,12 +595,18 @@ export function TransactionDetailsModal({
     .trim();
   if (!cleanProviderReason) cleanProviderReason = 'فشلت المعاملة من قبل المزود';
 
-  // نصوص الملاحظات الثابتة
-  const displayNotes = isSuccess
-    ? 'تم التسديد بنجاح'
-    : isPending
-    ? 'قيد الانتظار'
-    : `فاشلة: ${cleanProviderReason}`;
+  // عرض ملاحظات العملية الفعلية كما هي (مع fallback مناسب عند عدم وجودها)
+  const rawActualNotes = (transaction.notes || '')
+    .replace(/\s*\(?api\)?/gi, '')
+    .replace(/\s*-\s*api/gi, '')
+    .trim();
+  const displayNotes = rawActualNotes || (
+    isSuccess
+      ? 'تم التسديد بنجاح'
+      : isPending
+      ? 'قيد الانتظار'
+      : `فاشلة: ${cleanProviderReason}`
+  );
 
   const handleCopy = (text: string, label: string) => {
     if (!text) return;
@@ -705,7 +741,7 @@ export function TransactionDetailsModal({
               {isSuccess && <CheckCircle2 className="w-3.5 h-3.5" />}
               {isPending && <Clock3 className="w-3.5 h-3.5 animate-spin" />}
               {isFailed && <XCircle className="w-3.5 h-3.5" />}
-              {readiness.text}
+              {readinessLabel}
             </span>
 
             {/* زر التحديث اللحظي للعمليات المعلقة */}
@@ -740,14 +776,25 @@ export function TransactionDetailsModal({
             </div>
           </div>
 
-          {/* نوع الخدمة */}
+          {/* الخدمة */}
           <div className="flex justify-between items-center py-2 border-b border-dashed border-border/60">
             <span className="text-muted-foreground text-xs font-bold flex items-center gap-2">
               <Tag className="h-4 w-4 text-[#1b52a4]" />
               الخدمة:
             </span>
             <span className="font-black text-foreground text-xs sm:text-sm text-left max-w-[65%] truncate">
-              {cleanTxType}
+              {companyName}
+            </span>
+          </div>
+
+          {/* الصنف */}
+          <div className="flex justify-between items-center py-2 border-b border-dashed border-border/60">
+            <span className="text-muted-foreground text-xs font-bold flex items-center gap-2">
+              <Activity className="h-4 w-4 text-[#1b52a4]" />
+              الصنف:
+            </span>
+            <span className="font-black text-[#1b52a4] text-xs sm:text-sm text-left max-w-[65%] truncate">
+              {categoryName}
             </span>
           </div>
 
@@ -811,24 +858,14 @@ export function TransactionDetailsModal({
             </div>
           ) : null}
 
-          {/* التاريخ والوقت */}
+          {/* التاريخ والوقت بالثواني */}
           <div className="flex justify-between items-center py-2 border-b border-dashed border-border/60">
             <span className="text-muted-foreground text-xs font-bold flex items-center gap-2">
               <Calendar className="h-4 w-4 text-[#1b52a4]" />
               التاريخ:
             </span>
-            <span className="font-bold text-xs text-foreground">
-              {safeFormatDate(transaction.transactionDate || transaction.createdAt, 'eeee، d MMMM yyyy')}
-            </span>
-          </div>
-
-          <div className="flex justify-between items-center py-2 border-b border-dashed border-border/60">
-            <span className="text-muted-foreground text-xs font-bold flex items-center gap-2">
-              <Clock className="h-4 w-4 text-[#1b52a4]" />
-              الوقت:
-            </span>
-            <span className="font-bold text-xs text-foreground">
-              {safeFormatDate(transaction.transactionDate || transaction.createdAt, 'h:mm:ss a')}
+            <span className="font-bold text-xs text-foreground" dir="ltr">
+              {safeFormatDate(transaction.transactionDate || transaction.createdAt, 'yyyy/MM/dd - h:mm:ss a')}
             </span>
           </div>
 
