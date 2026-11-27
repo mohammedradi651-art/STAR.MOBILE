@@ -2,13 +2,13 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { SimpleHeader } from '@/components/layout/simple-header';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, Trash2, Edit, Save, X, Wifi, MapPin, Phone, Search, Settings } from 'lucide-react';
-import { useCollection, useFirestore, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
-import { collection, doc, getDocs, getDoc, query, where, updateDoc, collectionGroup } from 'firebase/firestore';
+import { PlusCircle, Trash2, Edit, Save, X, Wifi, MapPin, Phone, Search, Settings, ChevronLeft } from 'lucide-react';
+import { useFirestore, deleteDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
+import { doc, getDocs, setDoc, collectionGroup, serverTimestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,14 +23,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-
+} from '@/components/ui/alert-dialog';
 
 type Network = {
   id: string;
   name: string;
   location: string;
   phoneNumber?: string;
+  categoriesCount?: number;
 };
 
 export default function NetworksManagementPage() {
@@ -40,7 +40,6 @@ export default function NetworksManagementPage() {
   const [networks, setNetworks] = useState<Network[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // جلب الشبكات مباشرة من مجموعة local_networks
   useEffect(() => {
     if (!firestore) return;
     const fetchNetworks = async () => {
@@ -49,12 +48,13 @@ export default function NetworksManagementPage() {
         const list: Network[] = [];
         for (const d of netSnap.docs) {
           const data = d.data();
-          const ownerId = d.ref.parent.parent ? d.ref.parent.parent.id : (data.ownerUid || d.id);
+          const ownerId = d.ref.parent.parent ? d.ref.parent.parent.id : data.ownerUid || d.id;
           list.push({
             id: ownerId,
             name: data.name || data.networkName || 'شبكة محلية',
             location: data.location || data.neighborhood || data.city || 'حضرموت',
-            phoneNumber: data.ownerPhone || ''
+            phoneNumber: data.ownerPhone || '',
+            categoriesCount: Array.isArray(data.categories) ? data.categories.length : 0,
           });
         }
         setNetworks(list);
@@ -70,15 +70,15 @@ export default function NetworksManagementPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
-  
+
   const initialNewNetworkState = { name: '', location: '', phoneNumber: '' };
   const [newNetwork, setNewNetwork] = useState(initialNewNetworkState);
-  
+
   const [editingValues, setEditingValues] = useState<{ [key: string]: { name: string; location: string; phoneNumber: string } }>({});
-  
+
   const filteredNetworks = useMemo(() => {
     if (!networks) return [];
-    return networks.filter(net => net.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    return networks.filter((net) => net.name.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [networks, searchTerm]);
 
   const handleEdit = (network: Network) => {
@@ -89,32 +89,28 @@ export default function NetworksManagementPage() {
     });
   };
 
-  const handleCancelEdit = () => {
-    setEditingId(null);
-  };
-
   const handleSave = async (id: string) => {
-    if (!firestore || !editingValues[id].name || !editingValues[id].location) {
-        toast({ title: 'خطأ', description: 'الرجاء تعبئة اسم وموقع الشبكة.', variant: 'destructive'});
-        return;
-    };
+    if (!firestore || !editingValues[id]?.name || !editingValues[id]?.location) {
+      toast({ title: 'خطأ', description: 'الرجاء تعبئة اسم وموقع الشبكة.', variant: 'destructive' });
+      return;
+    }
     const localRef = doc(firestore, `users/${id}/local_networks`, id);
     await updateDocumentNonBlocking(localRef, {
       name: editingValues[id].name,
       networkName: editingValues[id].name,
       location: editingValues[id].location,
       neighborhood: editingValues[id].location,
-      ownerPhone: editingValues[id].phoneNumber
+      ownerPhone: editingValues[id].phoneNumber,
     });
     setEditingId(null);
-    setNetworks(prev => prev.map(n => n.id === id ? { ...n, ...editingValues[id] } : n));
-    toast({ title: "تم الحفظ", description: "تم تحديث بيانات الشبكة بنجاح." });
+    setNetworks((prev) => prev.map((n) => (n.id === id ? { ...n, ...editingValues[id] } : n)));
+    toast({ title: 'تم الحفظ', description: 'تم تحديث بيانات الشبكة بنجاح.' });
   };
-  
+
   const handleValueChange = (id: string, field: 'name' | 'location' | 'phoneNumber', value: string) => {
-    setEditingValues(prev => ({
-        ...prev,
-        [id]: { ...prev[id], [field]: value },
+    setEditingValues((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], [field]: value },
     }));
   };
 
@@ -122,150 +118,238 @@ export default function NetworksManagementPage() {
     if (!firestore) return;
     const localRef = doc(firestore, `users/${id}/local_networks`, id);
     await deleteDocumentNonBlocking(localRef);
-    setNetworks(prev => prev.filter(n => n.id !== id));
-    toast({ title: "تم الحذف", description: "تم حذف الشبكة بنجاح.", variant: "destructive" });
+    setNetworks((prev) => prev.filter((n) => n.id !== id));
+    toast({ title: 'تم الحذف', description: 'تم حذف الشبكة بنجاح.', variant: 'destructive' });
   };
-  
-  const handleAddNew = () => {
-    if (newNetwork.name && newNetwork.location && firestore && networksCollection) {
-      addDocumentNonBlocking(networksCollection, newNetwork);
+
+  const handleAddNew = async () => {
+    if (!newNetwork.name.trim() || !newNetwork.location.trim() || !firestore) {
+      toast({ title: 'خطأ', description: 'الرجاء تعبئة اسم وموقع الشبكة على الأقل.', variant: 'destructive' });
+      return;
+    }
+    try {
+      const newNetId = `net_${Date.now()}`;
+      const localRef = doc(firestore, `users/${newNetId}/local_networks`, newNetId);
+      await setDoc(localRef, {
+        name: newNetwork.name.trim(),
+        networkName: newNetwork.name.trim(),
+        location: newNetwork.location.trim(),
+        neighborhood: newNetwork.location.trim(),
+        ownerPhone: newNetwork.phoneNumber.trim(),
+        ownerUid: newNetId,
+        categories: [],
+        createdAt: serverTimestamp(),
+      });
+      setNetworks((prev) => [
+        {
+          id: newNetId,
+          name: newNetwork.name.trim(),
+          location: newNetwork.location.trim(),
+          phoneNumber: newNetwork.phoneNumber.trim(),
+          categoriesCount: 0,
+        },
+        ...prev,
+      ]);
       setNewNetwork(initialNewNetworkState);
       setIsAdding(false);
-      toast({ title: "تمت الإضافة", description: "تمت إضافة شبكة جديدة بنجاح." });
-    } else {
-        toast({ title: "خطأ", description: "الرجاء تعبئة اسم وموقع الشبكة على الأقل.", variant: "destructive" });
+      toast({ title: 'تمت الإضافة', description: 'تمت إضافة شبكة جديدة بنجاح.' });
+    } catch (e: any) {
+      toast({ title: 'خطأ', description: 'فشل إضافة الشبكة: ' + e.message, variant: 'destructive' });
     }
   };
 
   return (
     <>
-    <div className="flex flex-col h-full bg-background">
-      <SimpleHeader title="إدارة الشبكات" />
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        
-        <div className="relative">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="البحث باسم الشبكة..."
-              className="w-full pr-10"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className='text-center'>الشبكات المضافة</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {isLoading ? (
-                <div className="space-y-4">
-                    {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-lg" />)}
+      <div className="flex flex-col h-full bg-[#F4F7F9] dark:bg-slate-950">
+        <SimpleHeader title="إدارة الشبكات" />
+        <div className="flex-1 overflow-y-auto p-4 pb-24 space-y-5">
+          {/* Mesh Gradient Hero Card matching Owner Design */}
+          <Card className="border-none shadow-xl rounded-[32px] bg-mesh-gradient text-white overflow-hidden">
+            <CardContent className="p-6 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-2xl bg-white/15 backdrop-blur-md border border-white/20">
+                  <Wifi className="h-6 w-6 text-white" />
                 </div>
-            ) : filteredNetworks.length === 0 && !isAdding ? (
-               <p className="text-center text-muted-foreground py-8">لا توجد شبكات مضافة. ابدأ بإضافة شبكة جديدة.</p>
-            ) : (
-                filteredNetworks?.map((network) => (
-                <Card key={network.id} className="p-4">
-                    {editingId === network.id ? (
-                    <div className="space-y-4">
-                        <Label htmlFor={`name-${network.id}`}>اسم الشبكة</Label>
-                        <Input id={`name-${network.id}`} value={editingValues[network.id]?.name ?? ''} onChange={(e) => handleValueChange(network.id, 'name', e.target.value)} />
-                        <Label htmlFor={`location-${network.id}`}>الموقع</Label>
-                        <Input id={`location-${network.id}`} value={editingValues[network.id]?.location ?? ''} onChange={(e) => handleValueChange(network.id, 'location', e.target.value)} />
-                        <Label htmlFor={`phone-${network.id}`}>رقم التواصل</Label>
-                        <Input id={`phone-${network.id}`} value={editingValues[network.id]?.phoneNumber ?? ''} onChange={(e) => handleValueChange(network.id, 'phoneNumber', e.target.value)} />
-                        <div className="flex justify-end gap-2">
-                            <Button size="icon" variant="ghost" onClick={handleCancelEdit}><X className="h-4 w-4" /></Button>
-                            <Button size="icon" onClick={() => handleSave(network.id)}><Save className="h-4 w-4" /></Button>
-                        </div>
-                    </div>
-                    ) : (
-                    <div>
-                        <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-4">
-                              <div className='p-2 bg-primary/10 rounded-full'>
-                               <Wifi className="h-6 w-6 text-primary" />
-                              </div>
-                              <div>
-                                <p className="font-semibold">{network.name}</p>
-                                <p className="text-sm text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3"/>{network.location}</p>
-                                {network.phoneNumber && <p className="text-sm text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3"/>{network.phoneNumber}</p>}
-                              </div>
-                            </div>
-                            <div className="flex flex-col gap-2">
-                                <Button variant="outline" size="icon" onClick={() => handleEdit(network)}>
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button variant="destructive" size="icon">
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        هل أنت متأكد من رغبتك في حذف شبكة "{network.name}"؟ سيتم حذف جميع الفئات والكروت المتعلقة بها.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                                      <AlertDialogAction onClick={() => handleDelete(network.id)}>
-                                        حذف
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                            </div>
-                        </div>
-                        <div className="mt-4">
-                           <Link href={`/networks-management/${network.id}`}>
-                                <Button variant="secondary" className="w-full">
-                                    <Settings className="ml-2 h-4 w-4" />
-                                    إدارة الفئات والكروت
-                                </Button>
-                            </Link>
-                        </div>
-                    </div>
-                    )}
-                </Card>
-                ))
-            )}
+                <div>
+                  <h2 className="text-lg font-black">الشبكات المحلية</h2>
+                  <p className="text-[11px] font-bold text-white/80">إدارة شاملة للفئات والكروت لجميع الشبكات</p>
+                </div>
+              </div>
+              <div className="bg-white/15 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 text-center">
+                <p className="text-[9px] font-bold text-white/80">إجمالي الشبكات</p>
+                <p className="text-lg font-black">{networks.length}</p>
+              </div>
+            </CardContent>
+          </Card>
 
-            {isAdding && (
-              <Card className="p-4 bg-muted/50">
-                 <div className="space-y-4">
-                    <Label htmlFor="new-name" className='flex items-center gap-2'><Wifi className='w-4 h-4' /> اسم الشبكة</Label>
-                    <Input id="new-name" value={newNetwork.name} onChange={(e) => setNewNetwork(p=>({...p, name: e.target.value}))} placeholder="مثال: شبكة باشادي" />
-                    
-                    <Label htmlFor="new-location" className='flex items-center gap-2'><MapPin className='w-4 h-4' /> الموقع</Label>
-                    <Input id="new-location" value={newNetwork.location} onChange={(e) => setNewNetwork(p=>({...p, location: e.target.value}))} placeholder="مثال: سيئون - الغرفة" />
-                    
-                    <Label htmlFor="new-phone" className='flex items-center gap-2'><Phone className='w-4 h-4' /> رقم التواصل (اختياري)</Label>
-                    <Input id="new-phone" type="tel" value={newNetwork.phoneNumber} onChange={(e) => setNewNetwork(p=>({...p, phoneNumber: e.target.value}))} placeholder="7xxxxxxxx" />
-                    
-                    <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="icon" onClick={() => setIsAdding(false)}><X className="h-4 w-4" /></Button>
-                      <Button onClick={handleAddNew}>إضافة الشبكة</Button>
-                    </div>
-                  </div>
-              </Card>
-            )}
-          </CardContent>
-        </Card>
-        
-        {!isAdding && (
-            <Button className="w-full" onClick={() => setIsAdding(true)}>
-            <PlusCircle className="ml-2 h-4 w-4" />
-            إضافة شبكة جديدة
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="البحث باسم الشبكة..."
+                className="w-full pr-10 h-12 rounded-2xl bg-card border-none shadow-sm"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <Button onClick={() => setIsAdding(!isAdding)} className="h-12 px-4 rounded-2xl font-black text-xs gap-1.5 shadow-sm">
+              <PlusCircle className="h-4 w-4" />
+              <span>{isAdding ? 'إلغاء' : 'شبكة جديدة'}</span>
             </Button>
-        )}
+          </div>
+
+          {isAdding && (
+            <Card className="rounded-[28px] border-2 border-dashed border-primary/20 bg-primary/5">
+              <CardContent className="p-5 space-y-3">
+                <h4 className="font-black text-sm text-primary text-center">إضافة شبكة محلية جديدة</h4>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black text-muted-foreground">اسم الشبكة</Label>
+                  <Input
+                    value={newNetwork.name}
+                    onChange={(e) => setNewNetwork((p) => ({ ...p, name: e.target.value }))}
+                    placeholder="مثال: شبكة النور"
+                    className="h-11 rounded-xl bg-card"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-black text-muted-foreground">الموقع / الحي</Label>
+                    <Input
+                      value={newNetwork.location}
+                      onChange={(e) => setNewNetwork((p) => ({ ...p, location: e.target.value }))}
+                      placeholder="المكلا - الديس"
+                      className="h-11 rounded-xl bg-card"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-black text-muted-foreground">رقم المالك</Label>
+                    <Input
+                      value={newNetwork.phoneNumber}
+                      onChange={(e) => setNewNetwork((p) => ({ ...p, phoneNumber: e.target.value }))}
+                      placeholder="77xxxxxxx"
+                      className="h-11 rounded-xl bg-card"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+                <Button onClick={handleAddNew} className="w-full h-11 rounded-2xl font-black">
+                  حفظ الشبكة
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="space-y-3">
+            {isLoading ? (
+              [...Array(3)].map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-[28px]" />)
+            ) : filteredNetworks.length === 0 ? (
+              <Card className="rounded-[28px] border border-dashed p-10 text-center bg-card/60">
+                <Wifi className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
+                <p className="text-xs font-black text-muted-foreground">لا توجد شبكات مطابقة.</p>
+              </Card>
+            ) : (
+              filteredNetworks.map((network) => (
+                <Card key={network.id} className="rounded-[28px] border-none shadow-sm bg-card overflow-hidden">
+                  <CardContent className="p-5">
+                    {editingId === network.id ? (
+                      <div className="space-y-3">
+                        <Input
+                          value={editingValues[network.id]?.name || ''}
+                          onChange={(e) => handleValueChange(network.id, 'name', e.target.value)}
+                          placeholder="اسم الشبكة"
+                          className="h-10 rounded-xl"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            value={editingValues[network.id]?.location || ''}
+                            onChange={(e) => handleValueChange(network.id, 'location', e.target.value)}
+                            placeholder="الموقع"
+                            className="h-10 rounded-xl"
+                          />
+                          <Input
+                            value={editingValues[network.id]?.phoneNumber || ''}
+                            onChange={(e) => handleValueChange(network.id, 'phoneNumber', e.target.value)}
+                            placeholder="رقم المالك"
+                            className="h-10 rounded-xl"
+                            dir="ltr"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <Button size="sm" variant="outline" className="rounded-xl" onClick={() => setEditingId(null)}>
+                            <X className="h-4 w-4 ml-1" /> إلغاء
+                          </Button>
+                          <Button size="sm" className="rounded-xl" onClick={() => handleSave(network.id)}>
+                            <Save className="h-4 w-4 ml-1" /> حفظ
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <div className="p-3 bg-primary/10 rounded-[20px] text-primary shrink-0">
+                            <Wifi className="h-6 w-6" />
+                          </div>
+                          <div className="text-right min-w-0">
+                            <h3 className="font-black text-base text-foreground truncate">{network.name}</h3>
+                            <div className="flex items-center gap-3 text-[11px] font-bold text-muted-foreground mt-1 flex-wrap">
+                              <span className="flex items-center gap-1">
+                                <MapPin className="h-3 w-3 text-primary" />
+                                {network.location}
+                              </span>
+                              {network.phoneNumber && (
+                                <span className="flex items-center gap-1 font-mono" dir="ltr">
+                                  <Phone className="h-3 w-3 text-primary" />
+                                  {network.phoneNumber}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Link href={`/networks-management/${network.id}`}>
+                            <Button size="sm" className="h-9 px-3 rounded-xl font-black text-xs gap-1 shadow-xs">
+                              <Settings className="h-3.5 w-3.5" />
+                              <span>إدارة</span>
+                              <ChevronLeft className="h-3.5 w-3.5" />
+                            </Button>
+                          </Link>
+                          <Button variant="ghost" size="icon" onClick={() => handleEdit(network)} className="h-9 w-9 rounded-xl bg-muted/50 text-primary">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl bg-destructive/10 text-destructive">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent className="rounded-[32px]">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle className="text-center font-black">تأكيد حذف الشبكة</AlertDialogTitle>
+                                <AlertDialogDescription className="text-center">
+                                  هل أنت متأكد من حذف شبكة &quot;{network.name}&quot;؟
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter className="grid grid-cols-2 gap-3 sm:space-x-0">
+                                <AlertDialogCancel className="rounded-2xl h-11 mt-0">إلغاء</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDelete(network.id)} className="rounded-2xl h-11 bg-destructive hover:bg-destructive/90 font-bold">
+                                  حذف
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+        </div>
       </div>
-    </div>
-    <Toaster />
+      <Toaster />
     </>
   );
 }

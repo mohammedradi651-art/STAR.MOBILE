@@ -422,37 +422,47 @@ export async function markPaymentFailedAndRefund(
     const userDocRef = doc(firestore, 'users', userId);
     const userTxRef = doc(firestore, `users/${userId}/transactions`, transid);
     const globalTxRef = doc(firestore, 'paymentTransactions', transid);
-
-    // التأكد الصارم من عدم تكرار الإرجاع نهائياً
-    const gSnap = await getDoc(globalTxRef);
-    const snap = await getDoc(userTxRef);
-    if ((gSnap.exists() && gSnap.data()?.refunded) || (snap.exists() && snap.data()?.refunded)) {
-      console.warn(`[Telecom] Transaction ${transid} is ALREADY refunded. Skipping duplicate refund!`);
-      return;
-    }
-
+    const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
     const cleanReason = formatProviderErrorMessage(reason);
-    const currentNotes = (gSnap.exists() ? (gSnap.data()?.notes || '') : '') || (snap.exists() ? (snap.data()?.notes || '') : '');
-    const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
-    const updatedNotes = cleanNotes ? `${cleanNotes}\nالسبب من المزود: ${cleanReason}` : `السبب من المزود: ${cleanReason}`;
 
-    const updateData = {
-      status: 'failed',
-      readiness: 'فاشلة',
-      refunded: true,
-      providerMessage: cleanReason,
-      notes: updatedNotes,
-      failedAt: new Date().toISOString()
-    };
+    const didRefund = await runTransaction(firestore, async (transaction) => {
+      const gSnap = await transaction.get(globalTxRef);
+      const snap = await transaction.get(userTxRef);
+      const hSnap = await transaction.get(historyRef);
 
-    const batch = writeBatch(firestore);
-    batch.update(userDocRef, { balance: increment(amount) });
-    // batch.update(userTxRef, updateData);
-    batch.update(globalTxRef, updateData);
+      const gData = gSnap.exists() ? gSnap.data() : null;
+      const uData = snap.exists() ? snap.data() : null;
 
-    try {
-      const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
-      const hSnap = await getDoc(historyRef);
+      if (
+        gData?.refunded ||
+        uData?.refunded ||
+        gData?.status === 'failed' ||
+        gData?.status === 'success' ||
+        uData?.status === 'failed' ||
+        uData?.status === 'success'
+      ) {
+        return false;
+      }
+
+      const currentNotes = (gData?.notes || '') || (uData?.notes || '');
+      const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
+      const updatedNotes = cleanNotes ? `${cleanNotes}\nالسبب من المزود: ${cleanReason}` : `السبب من المزود: ${cleanReason}`;
+      const nowIso = new Date().toISOString();
+
+      const updateData = {
+        status: 'failed',
+        readiness: 'فاشلة',
+        refunded: true,
+        providerMessage: cleanReason,
+        notes: updatedNotes,
+        failedAt: nowIso
+      };
+
+      if (amount > 0) {
+        transaction.update(userDocRef, { balance: increment(amount) });
+      }
+      transaction.set(globalTxRef, updateData, { merge: true });
+
       if (hSnap.exists()) {
         const rawList = hSnap.data()?.list || [];
         const rawTxs = hSnap.data()?.transactions || [];
@@ -470,7 +480,7 @@ export async function markPaymentFailedAndRefund(
               refunded: true,
               providerMessage: cleanReason,
               notes: updatedNotes,
-              failedAt: new Date().toISOString()
+              failedAt: nowIso
             };
           }
           return item;
@@ -480,11 +490,11 @@ export async function markPaymentFailedAndRefund(
         let updatedTxs = rawTxs.map(mapFailedItem);
 
         if (!found) {
-          const gData = gSnap.exists() ? gSnap.data() : (snap.exists() ? snap.data() : null);
-          const resolvedAmount = amount || gData?.amount || 0;
-          const resolvedType = gData?.transactionType || 'سداد اتصالات';
-          const resolvedPhone = gData?.recipientPhoneNumber || gData?.phoneNumber || '';
-          const resolvedDate = gData?.transactionDate || gData?.createdAt || new Date().toISOString();
+          const fallbackData = gData || uData;
+          const resolvedAmount = amount || fallbackData?.amount || 0;
+          const resolvedType = fallbackData?.transactionType || 'سداد اتصالات';
+          const resolvedPhone = fallbackData?.recipientPhoneNumber || fallbackData?.phoneNumber || '';
+          const resolvedDate = fallbackData?.transactionDate || fallbackData?.createdAt || nowIso;
           const newFailedTx = {
             id: transid,
             transid: transid,
@@ -498,7 +508,7 @@ export async function markPaymentFailedAndRefund(
             transactionDate: resolvedDate,
             d: resolvedDate,
             createdAt: resolvedDate,
-            serviceCategory: gData?.serviceCategory || 'اتصالات',
+            serviceCategory: fallbackData?.serviceCategory || 'اتصالات',
             status: 'failed',
             s: 'failed',
             readiness: 'فاشلة',
@@ -506,17 +516,21 @@ export async function markPaymentFailedAndRefund(
             refunded: true,
             providerMessage: cleanReason,
             notes: updatedNotes,
-            failedAt: new Date().toISOString()
+            failedAt: nowIso
           };
           updatedList = [newFailedTx, ...updatedList];
           updatedTxs = [...updatedTxs, newFailedTx];
         }
 
-        batch.set(historyRef, { list: updatedList, transactions: updatedTxs, lastUpdated: new Date().toISOString() }, { merge: true });
+        transaction.set(historyRef, { list: updatedList, transactions: updatedTxs, lastUpdated: nowIso }, { merge: true });
       }
-    } catch (_) {}
 
-    await batch.commit();
+      return true;
+    });
+
+    if (!didRefund) {
+      console.warn(`[Telecom] Transaction ${transid} is ALREADY processed/refunded. Skipping duplicate refund!`);
+    }
   } catch (err) {
     console.error('Failed to refund and mark payment failed:', err);
   }

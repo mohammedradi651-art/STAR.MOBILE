@@ -12,6 +12,7 @@ import {
   getDocs,
   collection,
   writeBatch,
+  runTransaction,
   increment,
   onSnapshot,
   arrayUnion,
@@ -482,43 +483,54 @@ function NetworkPurchasePageComponent() {
           cleanup();
 
           try {
-            const refundBatch = writeBatch(firestore);
-            refundBatch.update(userDocRef, { balance: increment(effectivePrice) });
-            refundBatch.update(baityOrderRef, {
-              status: 'failed',
-              refunded: true,
-              errorReason: reason,
-              failedAt: new Date().toISOString(),
-            });
+            await runTransaction(firestore, async (transaction) => {
+              const orderSnap = await transaction.get(baityOrderRef);
+              const hSnap = await transaction.get(userHistoryRef);
+              const orderData = orderSnap.exists() ? orderSnap.data() : null;
 
-            const hSnap = await getDoc(userHistoryRef);
-            if (hSnap.exists()) {
-              const rawTxs = hSnap.data()?.transactions || [];
-              const rawList = hSnap.data()?.list || [];
-              const failNote = isStockOutArg
-                ? `فشل الشراء (نفاد المخزون) وتم إرجاع ${effectivePrice} ر.ي`
-                : `فشل الشراء وتم إرجاع ${effectivePrice} ر.ي`;
+              if (orderData?.refunded || orderData?.status === 'failed' || orderData?.status === 'completed') {
+                return;
+              }
 
-              refundBatch.update(userHistoryRef, {
-                transactions: rawTxs.map((item: any) =>
-                  item.id === txId
-                    ? { ...item, status: 'failed', readiness: 'فاشلة', notes: failNote }
-                    : item
-                ),
-                list: rawList.map((item: any) =>
-                  item.id === txId
-                    ? { ...item, s: 'failed', r: 'فاشلة', note: failNote }
-                    : item
-                ),
-                lastUpdated: new Date().toISOString(),
+              const nowIso = new Date().toISOString();
+              if (effectivePrice > 0) {
+                transaction.update(userDocRef, { balance: increment(effectivePrice) });
+              }
+              transaction.update(baityOrderRef, {
+                status: 'failed',
+                refunded: true,
+                errorReason: reason,
+                failedAt: nowIso,
               });
-            }
-            refundBatch.update(globalTxRef, {
-              status: 'failed',
-              readiness: 'فاشلة',
-              notes: reason || 'فشل الشراء من المزود',
+
+              if (hSnap.exists()) {
+                const rawTxs = hSnap.data()?.transactions || [];
+                const rawList = hSnap.data()?.list || [];
+                const failNote = isStockOutArg
+                  ? `فشل الشراء (نفاد المخزون) وتم إرجاع ${effectivePrice} ر.ي`
+                  : `فشل الشراء وتم إرجاع ${effectivePrice} ر.ي`;
+
+                transaction.update(userHistoryRef, {
+                  transactions: rawTxs.map((item: any) =>
+                    item.id === txId
+                      ? { ...item, status: 'failed', readiness: 'فاشلة', refunded: true, notes: failNote }
+                      : item
+                  ),
+                  list: rawList.map((item: any) =>
+                    item.id === txId
+                      ? { ...item, s: 'failed', r: 'فاشلة', refunded: true, note: failNote }
+                      : item
+                  ),
+                  lastUpdated: nowIso,
+                });
+              }
+              transaction.set(globalTxRef, {
+                status: 'failed',
+                readiness: 'فاشلة',
+                refunded: true,
+                notes: reason || 'فشل الشراء من المزود',
+              }, { merge: true });
             });
-            await refundBatch.commit();
             isExternalOrderDeducted = false;
           } catch (e) {
             console.error('Error refunding baityOrder:', e);

@@ -601,23 +601,32 @@ export async function POST(req: Request) {
         .replace(/تم\s*استرجاع\s*المبلغ[^\n.]*/gi, '')
         .trim() || 'تم رفض العملية من قبل مزود الخدمة.';
 
-      const refundBatch = writeBatch(firestore);
-      refundBatch.update(userRef, { balance: increment(payAmount) });
+      await runTransaction(firestore, async (transaction) => {
+        const gSnap = await transaction.get(globalTxRef);
+        const hSnap = await transaction.get(historyRef);
+        const gData = gSnap.exists() ? gSnap.data() : null;
 
-      const failPayload = {
-        status: 'failed',
-        readiness: 'فاشلة',
-        refunded: true,
-        amount: payAmount,
-        providerMessage: cleanError,
-        notes: `${telecomDetails.notes}\nالسبب: ${cleanError}`,
-        failedAt: new Date().toISOString()
-      };
+        if (gData?.refunded || gData?.status === 'failed' || gData?.status === 'success') {
+          return;
+        }
 
-      refundBatch.set(globalTxRef, failPayload, { merge: true });
+        const nowIso = new Date().toISOString();
+        if (payAmount > 0) {
+          transaction.update(userRef, { balance: increment(payAmount) });
+        }
 
-      try {
-        const hSnap = await getDoc(historyRef);
+        const failPayload = {
+          status: 'failed',
+          readiness: 'فاشلة',
+          refunded: true,
+          amount: payAmount,
+          providerMessage: cleanError,
+          notes: `${telecomDetails.notes}\nالسبب: ${cleanError}`,
+          failedAt: nowIso
+        };
+
+        transaction.set(globalTxRef, failPayload, { merge: true });
+
         if (hSnap.exists()) {
           const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
           const updatedList = rawList.map((item: any) => {
@@ -631,16 +640,14 @@ export async function POST(req: Request) {
                 refunded: true,
                 providerMessage: cleanError,
                 notes: `${telecomDetails.notes}\nالسبب: ${cleanError}`,
-                failedAt: new Date().toISOString()
+                failedAt: nowIso
               };
             }
             return item;
           });
-          refundBatch.update(historyRef, { list: updatedList, transactions: updatedList, lastUpdated: new Date().toISOString() });
+          transaction.update(historyRef, { list: updatedList, transactions: updatedList, lastUpdated: nowIso });
         }
-      } catch (_) {}
-
-      await refundBatch.commit();
+      });
 
       return NextResponse.json({
         success: false,

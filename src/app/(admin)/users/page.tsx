@@ -91,6 +91,8 @@ type User = {
   gamesDiscount?: number;
   apiKey?: string;
   email?: string;
+  linkedApiOwnerId?: string;
+  linkedApiOwnerName?: string;
 };
 
 type AppSettings = {
@@ -110,6 +112,7 @@ const filterOptions = [
     { label: 'لديه رصيد', value: 'with-balance', icon: Wallet },
     { label: 'مستخدمون', value: 'user', icon: UserIcon },
     { label: 'ملاك شبكات', value: 'network-owner', icon: Crown },
+    { label: 'أصحاب API', value: 'api-owners', icon: Key },
 ];
 
 export default function UsersPage() {
@@ -118,7 +121,7 @@ export default function UsersPage() {
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [accountTypeFilter, setAccountTypeFilter] = useState<'all' | 'user' | 'with-balance' | 'network-owner'>('all');
+  const [accountTypeFilter, setAccountTypeFilter] = useState<'all' | 'user' | 'with-balance' | 'network-owner' | 'api-owners'>('all');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [topUpAmount, setTopUpAmount] = useState('');
@@ -148,6 +151,12 @@ export default function UsersPage() {
   const [isBoxEditingOpen, setIsBoxEditingOpen] = useState(false);
   const [newBoxValue, setNewBoxValue] = useState('');
 
+  // API Owners & Linked Clients Management States
+  const [selectedApiOwner, setSelectedApiOwner] = useState<User | null>(null);
+  const [isLinkedClientsOpen, setIsLinkedClientsOpen] = useState(false);
+  const [linkClientPhone, setLinkClientPhone] = useState('');
+  const [isLinkingClient, setIsLinkingClient] = useState(false);
+
   const isUserAdmin = user?.email === '770326828@shabakat.com' || user?.uid === 'wsy8bUcULSYX2J9Q9WyisiFX5ki2';
 
   // إدارة حالة المستخدمين عبر البحث عند الطلب
@@ -166,6 +175,42 @@ export default function UsersPage() {
     [firestore, isUserAdmin]
   );
   const { data: rawUsersWithBalance, isLoading: isLoadingUsersWithBalance } = useCollection<User>(usersWithBalanceQuery);
+
+  // جلب أصحاب API (كل من لديه apiKey) والعملاء المرتبطين بهم
+  const apiOwnersQuery = useMemoFirebase(
+    () => (firestore && isUserAdmin ? query(
+      collection(firestore, 'users'),
+      where('apiKey', '>', '')
+    ) : null),
+    [firestore, isUserAdmin]
+  );
+  const { data: rawApiOwners } = useCollection<User>(apiOwnersQuery);
+
+  const apiOwners = useMemo(() => {
+    if (!rawApiOwners) return [];
+    return rawApiOwners
+      .filter(u => u.id !== 'wsy8bUcULSYX2J9Q9WyisiFX5ki2' && u.phoneNumber !== '770326828')
+      .sort((a, b) => (b.balance ?? 0) - (a.balance ?? 0));
+  }, [rawApiOwners]);
+
+  const linkedClientsQuery = useMemoFirebase(
+    () => (firestore && isUserAdmin ? query(
+      collection(firestore, 'users'),
+      where('linkedApiOwnerId', '>', '')
+    ) : null),
+    [firestore, isUserAdmin]
+  );
+  const { data: rawLinkedClients } = useCollection<User>(linkedClientsQuery);
+
+  const linkedClientsByOwner = useMemo(() => {
+    const map: Record<string, User[]> = {};
+    (rawLinkedClients || []).forEach(c => {
+      if (c.linkedApiOwnerId) {
+        (map[c.linkedApiOwnerId] = map[c.linkedApiOwnerId] || []).push(c);
+      }
+    });
+    return map;
+  }, [rawLinkedClients]);
 
   // استبعاد حساب المدير وحساب الـ API وترتيب أصحاب الرصيد تنازلياً (الأعلى رصيداً أولاً)
   const customersWithBalance = useMemo(() => {
@@ -772,6 +817,16 @@ export default function UsersPage() {
   }, [hasSearched, searchedUsers, searchTerm, customersWithBalance]);
 
   const filteredUsers = useMemo(() => {
+    if (accountTypeFilter === 'api-owners') {
+      const term = searchTerm.trim().toLowerCase();
+      const cleanDigits = term.replace(/\D/g, '');
+      return apiOwners.filter(u => {
+        if (!term) return true;
+        const matchName = (u.displayName || '').toLowerCase().includes(term);
+        const matchPhone = cleanDigits.length >= 2 && (u.phoneNumber || '').includes(cleanDigits);
+        return matchName || matchPhone;
+      });
+    }
     return displayedUsers.filter(user => {
       if (accountTypeFilter === 'all') return true;
       if (accountTypeFilter === 'user') return user.accountType === 'user' || !user.accountType;
@@ -779,7 +834,49 @@ export default function UsersPage() {
       if (accountTypeFilter === 'network-owner') return user.accountType === 'network-owner';
       return true;
     });
-  }, [displayedUsers, accountTypeFilter]);
+  }, [displayedUsers, accountTypeFilter, apiOwners, searchTerm]);
+
+  const handleLinkClientToApiOwner = async () => {
+    if (!firestore || !selectedApiOwner || !linkClientPhone.trim()) return;
+    setIsLinkingClient(true);
+    try {
+      const cleanPhone = linkClientPhone.trim().replace(/\D/g, '');
+      const q = query(collection(firestore, 'users'), where('phoneNumber', '==', cleanPhone));
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        toast({ variant: 'destructive', title: 'لم يتم العثور على العميل', description: 'تأكد من رقم الهاتف وحاول مرة أخرى.' });
+        return;
+      }
+      const clientDoc = snap.docs[0];
+      if (clientDoc.id === selectedApiOwner.id) {
+        toast({ variant: 'destructive', title: 'تنبيه', description: 'لا يمكن ربط صاحب الـ API بنفسه.' });
+        return;
+      }
+      await updateDoc(doc(firestore, 'users', clientDoc.id), {
+        linkedApiOwnerId: selectedApiOwner.id,
+        linkedApiOwnerName: selectedApiOwner.displayName || '',
+      });
+      toast({ title: 'تم الربط بنجاح', description: `تم ربط ${clientDoc.data().displayName || cleanPhone} بصاحب الـ API.` });
+      setLinkClientPhone('');
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'خطأ في الربط', description: e.message });
+    } finally {
+      setIsLinkingClient(false);
+    }
+  };
+
+  const handleUnlinkClientFromApiOwner = async (client: User) => {
+    if (!firestore) return;
+    try {
+      await updateDoc(doc(firestore, 'users', client.id), {
+        linkedApiOwnerId: '',
+        linkedApiOwnerName: '',
+      });
+      toast({ title: 'تم فك الارتباط', description: `تم فصل ${client.displayName} عن صاحب الـ API.` });
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'خطأ', description: e.message });
+    }
+  };
 
   const formatBalanceDisplay = (val: string | null) => {
     if (val === 'خطأ' || val === null) return 'خطأ';
@@ -954,9 +1051,9 @@ export default function UsersPage() {
             </div>
           </div>
 
-          {(customersWithBalance.length > 0 || searchedUsers.length > 0) && (
+          {(customersWithBalance.length > 0 || searchedUsers.length > 0 || apiOwners.length > 0) && (
             <div>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-5 gap-1.5">
                   {filterOptions.map((opt) => (
                       <button
                           key={opt.value}
@@ -974,6 +1071,47 @@ export default function UsersPage() {
                   ))}
               </div>
             </div>
+          )}
+
+          {accountTypeFilter === 'api-owners' && (
+            <Card className="rounded-3xl border border-blue-500/20 bg-gradient-to-br from-blue-600/10 via-indigo-500/5 to-card shadow-sm">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-2xl bg-blue-600 text-white shadow-sm">
+                      <Key className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-black text-foreground">إدارة أصحاب API والعملاء المرتبطين</h3>
+                      <p className="text-[10px] text-muted-foreground font-bold">متابعة الأرصدة، نسب الخصم، المفاتيح، والعملاء المرتبطين</p>
+                    </div>
+                  </div>
+                  <Badge className="bg-blue-600 text-white border-none text-[10px] font-black px-2.5 py-1 rounded-xl">
+                    {apiOwners.length} حساب
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-background/80 rounded-2xl p-2.5 border border-border/40">
+                    <p className="text-[9px] text-muted-foreground font-bold">إجمالي أرصدة API</p>
+                    <p className="text-xs font-black text-blue-600 mt-0.5">
+                      {apiOwners.reduce((s, u) => s + (u.balance ?? 0), 0).toLocaleString('en-US')} ر.ي
+                    </p>
+                  </div>
+                  <div className="bg-background/80 rounded-2xl p-2.5 border border-border/40">
+                    <p className="text-[9px] text-muted-foreground font-bold">العملاء المرتبطون</p>
+                    <p className="text-xs font-black text-emerald-600 mt-0.5">
+                      {(rawLinkedClients || []).length} عميل
+                    </p>
+                  </div>
+                  <div className="bg-background/80 rounded-2xl p-2.5 border border-border/40">
+                    <p className="text-[9px] text-muted-foreground font-bold">أرصدة المرتبطين</p>
+                    <p className="text-xs font-black text-foreground mt-0.5">
+                      {(rawLinkedClients || []).reduce((s, u) => s + (u.balance ?? 0), 0).toLocaleString('en-US')} ر.ي
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           <div className="space-y-3">
@@ -1079,7 +1217,20 @@ export default function UsersPage() {
                                             عميل API (نسب معتمدة)
                                         </Badge>
                                     )}
+                                    {Boolean(user.apiKey && (linkedClientsByOwner[user.id]?.length || 0) > 0) && (
+                                        <Badge className="bg-emerald-500/10 text-emerald-700 border border-emerald-500/20 text-[8px] font-black h-4 px-1.5 rounded-md">
+                                            {linkedClientsByOwner[user.id].length} عميل مرتبط
+                                        </Badge>
+                                    )}
                                 </div>
+                                {Boolean(user.apiKey && user.apiKey.trim().length > 0) && (
+                                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                        <span className="text-[9px] font-bold bg-muted px-1.5 py-0.5 rounded-md">اتصالات: {user.telecomDiscount ?? 0}%</span>
+                                        <span className="text-[9px] font-bold bg-muted px-1.5 py-0.5 rounded-md">الوادي: {user.alwadiDiscount ?? 0}%</span>
+                                        <span className="text-[9px] font-bold bg-muted px-1.5 py-0.5 rounded-md">ألعاب: {user.gamesDiscount ?? 0}%</span>
+                                        <span className="text-[9px] font-bold bg-muted px-1.5 py-0.5 rounded-md">شبكات: {user.networksDiscount ?? 0}%</span>
+                                    </div>
+                                )}
                                 {user.location && (
                                     <p className="text-[10px] font-black text-primary/70 flex items-center gap-1">
                                         <MapPin className="h-2.5 w-2.5" />
@@ -1118,6 +1269,18 @@ export default function UsersPage() {
                         </AlertDialogContent>
                         </AlertDialog>
                         
+                        {Boolean(user.apiKey && user.apiKey.trim().length > 0) && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => { setSelectedApiOwner(user); setIsLinkedClientsOpen(true); }}
+                                className="h-9 px-2.5 rounded-xl bg-indigo-500/10 text-indigo-600 hover:bg-indigo-500/20 text-[10px] font-black gap-1 transition-all"
+                                title="إدارة العملاء المرتبطين"
+                            >
+                                <Users className="h-3.5 w-3.5" />
+                                <span>العملاء ({linkedClientsByOwner[user.id]?.length || 0})</span>
+                            </Button>
+                        )}
                         <Button variant="ghost" size="icon" onClick={() => handleApiKeyClick(user)} className="h-9 w-9 rounded-xl bg-blue-100 text-blue-600 hover:bg-blue-200 transition-all" title="مفتاح الربط API">
                             <Key className="h-4 w-4" />
                         </Button>
@@ -1425,6 +1588,85 @@ export default function UsersPage() {
             <DialogFooter>
                 <Button onClick={handleSaveBoxBalance} className="w-full h-12 rounded-2xl font-black bg-red-600 hover:bg-red-700">تحديث المبلغ</Button>
             </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Linked Clients Management Dialog for API Owners */}
+      <Dialog open={isLinkedClientsOpen} onOpenChange={setIsLinkedClientsOpen}>
+        <DialogContent className="rounded-[32px] max-w-md p-6 max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+                <DialogTitle className="text-center font-black">العملاء المرتبطون بـ {selectedApiOwner?.displayName}</DialogTitle>
+                <DialogDescription className="text-center text-xs">
+                    ربط العملاء بحساب صاحب الـ API ومتابعة أرصدتهم وكشوفاتهم
+                </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-2">
+                <div className="flex gap-2">
+                    <Input
+                        value={linkClientPhone}
+                        onChange={(e) => setLinkClientPhone(e.target.value)}
+                        placeholder="أدخل رقم هاتف العميل لربطه..."
+                        className="h-11 rounded-2xl text-sm"
+                        dir="ltr"
+                    />
+                    <Button
+                        onClick={handleLinkClientToApiOwner}
+                        disabled={isLinkingClient || !linkClientPhone.trim()}
+                        className="h-11 px-4 rounded-2xl font-black text-xs shrink-0"
+                    >
+                        {isLinkingClient ? <Loader2 className="w-4 h-4 animate-spin" /> : 'ربط عميل'}
+                    </Button>
+                </div>
+
+                <div className="space-y-2">
+                    {(selectedApiOwner && (linkedClientsByOwner[selectedApiOwner.id]?.length || 0) > 0) ? (
+                        linkedClientsByOwner[selectedApiOwner.id].map((client) => (
+                            <Card key={client.id} className="rounded-2xl border border-border/50 shadow-none">
+                                <CardContent className="p-3 flex items-center justify-between gap-2">
+                                    <div className="text-right">
+                                        <p className="font-black text-xs text-foreground">{client.displayName}</p>
+                                        <p className="text-[10px] text-muted-foreground font-mono">{client.phoneNumber}</p>
+                                        <p className="text-xs font-black text-emerald-600 mt-0.5">
+                                            {(client.balance ?? 0).toLocaleString('en-US')} ر.ي
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <Link href={`/users/${client.id}/report`}>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl bg-muted/50 hover:text-primary" title="كشف حساب">
+                                                <FileText className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </Link>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => { setSelectedUser(client); setIsTopUpDialogOpen(true); }}
+                                            className="h-8 w-8 rounded-xl bg-primary/10 text-primary"
+                                            title="تغذية"
+                                        >
+                                            <PlusCircle className="h-3.5 w-3.5" />
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => handleUnlinkClientFromApiOwner(client)}
+                                            className="h-8 w-8 rounded-xl bg-destructive/10 text-destructive"
+                                            title="فك الارتباط"
+                                        >
+                                            <XCircle className="h-3.5 w-3.5" />
+                                        </Button>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        ))
+                    ) : (
+                        <div className="text-center py-8 bg-muted/20 rounded-2xl border border-dashed">
+                            <Users className="w-8 h-8 mx-auto text-muted-foreground/40 mb-2" />
+                            <p className="text-xs font-bold text-muted-foreground">لا يوجد عملاء مرتبطون بهذا الحساب حتى الآن.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
         </DialogContent>
       </Dialog>
     </>

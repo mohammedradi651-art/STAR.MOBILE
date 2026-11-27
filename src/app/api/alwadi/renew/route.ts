@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
-import { doc, getDoc, writeBatch, increment, collection, query, where, getDocs, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, writeBatch, increment, collection, query, where, getDocs, arrayUnion, runTransaction } from 'firebase/firestore';
 import { executeAlwadiKw } from '@/lib/alwadi-client';
 
 export const dynamic = 'force-dynamic';
@@ -293,41 +293,50 @@ async function refundAlwadi(firestore: any, userId: string, transid: string, amo
     const userRef = doc(firestore, 'users', userId);
     const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
     const globalTxRef = doc(firestore, 'paymentTransactions', transid);
-    const nowStr = new Date().toISOString();
 
-    const batch = writeBatch(firestore);
-    batch.update(userRef, { balance: increment(amount) });
+    await runTransaction(firestore, async (transaction) => {
+      const gSnap = await transaction.get(globalTxRef);
+      const hSnap = await transaction.get(historyRef);
+      const gData = gSnap.exists() ? gSnap.data() : null;
 
-    const hSnap = await getDoc(historyRef);
-    if (hSnap.exists()) {
-      const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
-      const updatedList = rawList.map((item: any) => {
-        if (item.id === transid) {
-          return {
-            ...item,
-            status: 'failed',
-            s: 'failed',
-            readiness: 'فاشلة',
-            r: 'فاشلة',
-            refunded: true,
-            notes: `فشلت العملية وتمت إعادة المبلغ (${amount} ر.ي): ${reason}`,
-            failedAt: nowStr
-          };
-        }
-        return item;
-      });
-      batch.set(historyRef, { list: updatedList, transactions: updatedList, lastUpdated: nowStr }, { merge: true });
-    }
+      if (gData?.refunded || gData?.status === 'failed' || gData?.status === 'success') {
+        return;
+      }
 
-    const failedData = {
-      status: 'failed',
-      readiness: 'فاشلة',
-      refunded: true,
-      notes: `فشلت العملية وتمت إعادة المبلغ (${amount} ر.ي): ${reason}`,
-      failedAt: nowStr
-    };
-    batch.update(globalTxRef, failedData);
-    await batch.commit();
+      const nowStr = new Date().toISOString();
+      if (amount > 0) {
+        transaction.update(userRef, { balance: increment(amount) });
+      }
+
+      if (hSnap.exists()) {
+        const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+        const updatedList = rawList.map((item: any) => {
+          if (item.id === transid) {
+            return {
+              ...item,
+              status: 'failed',
+              s: 'failed',
+              readiness: 'فاشلة',
+              r: 'فاشلة',
+              refunded: true,
+              notes: `فشلت العملية وتمت إعادة المبلغ (${amount} ر.ي): ${reason}`,
+              failedAt: nowStr
+            };
+          }
+          return item;
+        });
+        transaction.set(historyRef, { list: updatedList, transactions: updatedList, lastUpdated: nowStr }, { merge: true });
+      }
+
+      const failedData = {
+        status: 'failed',
+        readiness: 'فاشلة',
+        refunded: true,
+        notes: `فشلت العملية وتمت إعادة المبلغ (${amount} ر.ي): ${reason}`,
+        failedAt: nowStr
+      };
+      transaction.set(globalTxRef, failedData, { merge: true });
+    });
   } catch (e) {
     console.error("Failed to refund alwadi transaction:", e);
   }

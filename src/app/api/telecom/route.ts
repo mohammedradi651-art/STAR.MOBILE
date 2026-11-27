@@ -1492,38 +1492,49 @@ async function refundUser(firestore: any, userId: string, transid: string, amoun
     const globalTxRef = doc(firestore, 'paymentTransactions', transid);
     const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
 
-    const gSnap = await getDoc(globalTxRef);
-    const snap = await getDoc(userTxRef);
-    if ((gSnap.exists() && gSnap.data()?.refunded) || (snap.exists() && snap.data()?.refunded)) {
-      return;
-    }
+    const txResult = await runTransaction(firestore, async (transaction) => {
+      const gSnap = await transaction.get(globalTxRef);
+      const snap = await transaction.get(userTxRef);
+      const hSnap = await transaction.get(historyRef);
 
-    const currentNotes = (gSnap.exists() ? (gSnap.data()?.notes || '') : '') || (snap.exists() ? (snap.data()?.notes || '') : '');
-    const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
-    const updatedNotes = cleanNotes ? `${cleanNotes}\nسبب الرفض: ${reason}` : `سبب الرفض: ${reason}`;
-    const clientBackUrl = gSnap.exists() ? (gSnap.data()?.clientBackUrl || null) : (snap.exists() ? (snap.data()?.clientBackUrl || null) : null);
-    const txData = gSnap.exists() ? gSnap.data() : (snap.exists() ? snap.data() : null);
+      const gData = gSnap.exists() ? gSnap.data() : null;
+      const uData = snap.exists() ? snap.data() : null;
 
-    const updateData: any = {
-      status: 'failed',
-      readiness: 'فاشلة',
-      refunded: true,
-      providerMessage: reason,
-      notes: updatedNotes,
-      failedAt: new Date().toISOString()
-    };
-    if (amount > 0 && (!snap.data()?.amount || snap.data()?.amount === 0)) {
-      updateData.amount = amount;
-    }
+      if (
+        gData?.refunded ||
+        uData?.refunded ||
+        gData?.status === 'failed' ||
+        gData?.status === 'success' ||
+        uData?.status === 'failed' ||
+        uData?.status === 'success'
+      ) {
+        return null;
+      }
 
-    const batch = writeBatch(firestore);
-    batch.update(userRef, { balance: increment(amount) });
-    // batch.update(userTxRef, ...);
-    batch.update(globalTxRef, updateData);
+      const currentNotes = (gData?.notes || '') || (uData?.notes || '');
+      const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
+      const updatedNotes = cleanNotes ? `${cleanNotes}\nسبب الرفض: ${reason}` : `سبب الرفض: ${reason}`;
+      const clientBackUrl = gData?.clientBackUrl || uData?.clientBackUrl || null;
+      const txData = gData || uData;
+      const nowIso = new Date().toISOString();
 
-    // تحديث مصفوفة history
-    try {
-      const hSnap = await getDoc(historyRef);
+      const updateData: any = {
+        status: 'failed',
+        readiness: 'فاشلة',
+        refunded: true,
+        providerMessage: reason,
+        notes: updatedNotes,
+        failedAt: nowIso
+      };
+      if (amount > 0 && (!uData?.amount || uData?.amount === 0)) {
+        updateData.amount = amount;
+      }
+
+      if (amount > 0) {
+        transaction.update(userRef, { balance: increment(amount) });
+      }
+      transaction.set(globalTxRef, updateData, { merge: true });
+
       if (hSnap.exists()) {
         const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
         const updatedList = rawList.map((item: any) => {
@@ -1532,20 +1543,27 @@ async function refundUser(firestore: any, userId: string, transid: string, amoun
               ...item,
               s: 'failed',
               r: 'غير جاهز',
+              refunded: true,
               note: updatedNotes
             };
           }
           return item;
         });
-        batch.update(historyRef, {
+        transaction.update(historyRef, {
           list: updatedList,
           transactions: updatedList,
-          lastUpdated: new Date().toISOString()
+          lastUpdated: nowIso
         });
       }
-    } catch (_) {}
 
-    await batch.commit();
+      return { clientBackUrl, txData };
+    });
+
+    if (!txResult) {
+      return;
+    }
+
+    const { clientBackUrl, txData } = txResult;
 
     // إرسال إشعار سحابي FCM فقط إذا تأخر الرد
     const createdTime = new Date(txData?.createdAt || txData?.transactionDate || txData?.date || 0).getTime();

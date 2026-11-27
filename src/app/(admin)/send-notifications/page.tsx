@@ -11,7 +11,7 @@ import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, setDoc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
-import { Send, Trash2, PlusCircle, BellOff } from 'lucide-react';
+import { Send, Trash2, PlusCircle, BellOff, Bell, Clock } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, parseISO } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -208,14 +208,51 @@ export default function SendNotificationsPage() {
           }
 
           return (
-            <Card key={notification.id} className="p-4 flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <p className="font-bold text-sm">{notification.title}</p>
-                <p className="text-sm text-muted-foreground mt-1">{notification.body}</p>
-                {formattedDate && (
-                  <p className="text-xs text-muted-foreground mt-2">{formattedDate}</p>
-                )}
-              </div>
+            <Card key={notification.id} className="rounded-[24px] border-none shadow-sm bg-card overflow-hidden hover:shadow-md transition-shadow">
+              <CardContent className="p-4 flex items-start justify-between gap-3">
+                <div className="p-2.5 rounded-2xl bg-primary/10 text-primary shrink-0 mt-0.5">
+                  <Bell className="h-5 w-5" />
+                </div>
+                <div className="flex-1 text-right min-w-0">
+                  <p className="font-black text-sm text-foreground">{notification.title}</p>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed whitespace-pre-line">{notification.body}</p>
+                  {formattedDate && (
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground/80 mt-2">
+                      <Clock className="h-3 w-3 text-primary/70" />
+                      <span>{formattedDate}</span>
+                    </div>
+                  )}
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 shrink-0"
+                      title="حذف الإشعار"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent className="rounded-[32px]">
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="text-center font-black">تأكيد حذف الإشعار</AlertDialogTitle>
+                      <AlertDialogDescription className="text-center">
+                        هل أنت متأكد من حذف إشعار &quot;{notification.title}&quot;؟
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="grid grid-cols-2 gap-3 sm:space-x-0">
+                      <AlertDialogCancel className="rounded-2xl h-11 mt-0">إلغاء</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => handleDelete(notification.id)}
+                        className="rounded-2xl h-11 bg-destructive hover:bg-destructive/90 font-bold"
+                      >
+                        حذف
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </CardContent>
             </Card>
           );
         })}
@@ -224,58 +261,84 @@ export default function SendNotificationsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col h-full bg-[#F4F7F9] dark:bg-slate-950">
       <SimpleHeader title="إرسال إشعارات عامة" />
-      <div className="flex justify-end">
-        <Button onClick={() => setIsAdding(!isAdding)}>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          {isAdding ? 'إلغاء' : 'إرسال إشعار جديد'}
-        </Button>
-      </div>
-
-      {isAdding && (
-        <Card>
-          <CardHeader>
-            <CardTitle>إنشاء إشعار عام للعملاء</CardTitle>
-            <CardDescription>
-              سيتم إرسال هذا الإشعار لجميع الأجهزة سحابياً وحفظه في مستند البث العام للتطبيق مباشرة.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="title">عنوان الإشعار</Label>
-              <Input
-                id="title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="مثال: خصم خاص اليوم!"
-              />
+      <div className="flex-1 overflow-y-auto p-4 pb-24 space-y-5">
+        <Card className="border-none shadow-xl rounded-[32px] bg-mesh-gradient text-white overflow-hidden">
+          <CardContent className="p-6 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-white/15 backdrop-blur-md border border-white/20">
+                <Bell className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-black">مركز الإشعارات العامة</h2>
+                <p className="text-[11px] font-bold text-white/80">إرسال إشعارات فورية لجميع المشتركين وإدارتها</p>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="message">نص الإشعار</Label>
-              <Textarea
-                id="message"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="اكتب تفاصيل الإشعار هنا..."
-                rows={4}
-              />
+            <div className="bg-white/15 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 text-center shrink-0">
+              <p className="text-[9px] font-bold text-white/80">المرسلة</p>
+              <p className="text-lg font-black">{announcements.length}</p>
             </div>
-            <Button onClick={handleSend} disabled={isLoading} className="w-full">
-              <Send className="mr-2 h-4 w-4" />
-              {isLoading ? 'جاري الإرسال السحابي...' : 'إرسال الإشعار الآن'}
-            </Button>
           </CardContent>
         </Card>
-      )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>سجل الإشعارات المرسلة للتطبيق</CardTitle>
-          <CardDescription>قائمة الإشعارات العامة الحالية المحفوظة في التطبيق</CardDescription>
-        </CardHeader>
-        <CardContent>{renderSentNotifications()}</CardContent>
-      </Card>
+        <div className="flex justify-end">
+          <Button
+            onClick={() => setIsAdding(!isAdding)}
+            className="h-11 px-5 rounded-2xl font-black text-xs gap-2 shadow-sm"
+            variant={isAdding ? 'outline' : 'default'}
+          >
+            <PlusCircle className="h-4 w-4" />
+            {isAdding ? 'إلغاء' : 'إرسال إشعار جديد'}
+          </Button>
+        </div>
+
+        {isAdding && (
+          <Card className="rounded-[28px] border-none shadow-md bg-card overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base font-black">إنشاء إشعار عام للعملاء</CardTitle>
+              <CardDescription className="text-xs">
+                سيتم إرسال هذا الإشعار لجميع الأجهزة سحابياً وحفظه في مستند البث العام للتطبيق مباشرة.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="title" className="text-xs font-black">عنوان الإشعار</Label>
+                <Input
+                  id="title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="مثال: خصم خاص اليوم!"
+                  className="h-11 rounded-2xl"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="message" className="text-xs font-black">نص الإشعار</Label>
+                <Textarea
+                  id="message"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="اكتب تفاصيل الإشعار هنا..."
+                  rows={4}
+                  className="rounded-2xl"
+                />
+              </div>
+              <Button onClick={handleSend} disabled={isLoading} className="w-full h-12 rounded-2xl font-black gap-2">
+                <Send className="h-4 w-4" />
+                {isLoading ? 'جاري الإرسال السحابي...' : 'إرسال الإشعار الآن'}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card className="rounded-[28px] border-none shadow-sm bg-transparent">
+          <CardHeader className="px-1 pb-3">
+            <CardTitle className="text-sm font-black">سجل الإشعارات المرسلة للتطبيق</CardTitle>
+            <CardDescription className="text-xs">قائمة الإشعارات العامة الحالية المحفوظة في التطبيق</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">{renderSentNotifications()}</CardContent>
+        </Card>
+      </div>
       <Toaster />
     </div>
   );

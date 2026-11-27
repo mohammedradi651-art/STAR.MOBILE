@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
-import { collection, query, where, getDocs, doc, writeBatch, increment, getDoc, arrayUnion } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, writeBatch, increment, getDoc, arrayUnion, runTransaction } from 'firebase/firestore';
 import { 
   DEFAULT_SERVICES_CONFIG, 
   SystemServicesConfig, 
@@ -544,21 +544,30 @@ export async function POST(req: Request) {
         telecomResult?.resultDesc || telecomResult?.message || telecomResult?.reason || 'تم رفض العملية من قبل المزود.'
       );
 
-      const failBatch = writeBatch(firestore);
-      failBatch.update(userRef, { balance: increment(finalPrice) });
-      const failPayload = {
-        status: 'failed',
-        readiness: 'فاشلة',
-        refunded: true,
-        providerMessage: cleanFailReason,
-        notes: `${txNotes}\nالسبب من المزود: ${cleanFailReason}`,
-        failedAt: new Date().toISOString()
-      };
-      failBatch.set(globalTxRef, failPayload, { merge: true });
+      await runTransaction(firestore, async (transaction) => {
+        const gSnap = await transaction.get(globalTxRef);
+        const hSnap = await transaction.get(historyRef);
+        const gData = gSnap.exists() ? gSnap.data() : null;
 
-      // تحديث مصفوفة history للعمليات الموحدة
-      try {
-        const hSnap = await getDoc(historyRef);
+        if (gData?.refunded || gData?.status === 'failed' || gData?.status === 'success') {
+          return;
+        }
+
+        const nowIso = new Date().toISOString();
+        if (finalPrice > 0) {
+          transaction.update(userRef, { balance: increment(finalPrice) });
+        }
+
+        const failPayload = {
+          status: 'failed',
+          readiness: 'فاشلة',
+          refunded: true,
+          providerMessage: cleanFailReason,
+          notes: `${txNotes}\nالسبب من المزود: ${cleanFailReason}`,
+          failedAt: nowIso
+        };
+        transaction.set(globalTxRef, failPayload, { merge: true });
+
         if (hSnap.exists()) {
           const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
           const updatedList = rawList.map((item: any) => {
@@ -572,16 +581,14 @@ export async function POST(req: Request) {
                 refunded: true,
                 providerMessage: cleanFailReason,
                 notes: `${txNotes}\nالسبب من المزود: ${cleanFailReason}`,
-                failedAt: new Date().toISOString()
+                failedAt: nowIso
               };
             }
             return item;
           });
-          failBatch.update(historyRef, { list: updatedList, transactions: updatedList, lastUpdated: new Date().toISOString() });
+          transaction.update(historyRef, { list: updatedList, transactions: updatedList, lastUpdated: nowIso });
         }
-      } catch (_) {}
-
-      await failBatch.commit();
+      });
 
       return NextResponse.json({
         success: false,

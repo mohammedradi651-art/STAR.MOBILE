@@ -4,7 +4,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { useCollection, useFirestore, useMemoFirebase, useUser, deleteDocumentNonBlocking, useDoc } from '@/firebase';
-import { collection, query, where, doc, getDocs, getDoc, writeBatch, increment, limit as firestoreLimit, updateDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, doc, getDocs, getDoc, writeBatch, runTransaction, increment, limit as firestoreLimit, updateDoc, onSnapshot } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { 
   Wifi, 
@@ -425,36 +425,46 @@ export default function FavoritesPage() {
                 if (unsubscribe) unsubscribe();
 
                 try {
-                    const refundBatch = writeBatch(firestore);
-                    refundBatch.update(userDocRef, { balance: increment(effectivePrice) });
-                    refundBatch.update(baityOrderRef, {
-                        status: 'failed',
-                        failedAt: new Date().toISOString(),
-                        errorReason: reason || 'فشل الشراء من المزود'
-                    });
+                    await runTransaction(firestore, async (transaction) => {
+                        const orderSnap = await transaction.get(baityOrderRef);
+                        const hSnap = await transaction.get(userHistoryRef);
+                        const orderData = orderSnap.exists() ? orderSnap.data() : null;
 
-                    // تحديث في history
-                    const hSnap = await getDoc(userHistoryRef);
-                    if (hSnap.exists()) {
-                        const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
-                        const updatedList = rawList.map((item: any) => {
-                            if (item.id === txId || item.externalRef === externalRef) {
-                                return {
-                                    ...item,
-                                    status: 'failed',
-                                    s: 'failed',
-                                    readiness: 'فاشلة',
-                                    r: 'فاشلة',
-                                    notes: `شبكة: ${selectedNetwork.name} (فشل الشراء)`,
-                                    failedAt: new Date().toISOString()
-                                };
-                            }
-                            return item;
+                        if (orderData?.refunded || orderData?.status === 'failed' || orderData?.status === 'completed') {
+                            return;
+                        }
+
+                        const nowIso = new Date().toISOString();
+                        if (effectivePrice > 0) {
+                            transaction.update(userDocRef, { balance: increment(effectivePrice) });
+                        }
+                        transaction.update(baityOrderRef, {
+                            status: 'failed',
+                            refunded: true,
+                            failedAt: nowIso,
+                            errorReason: reason || 'فشل الشراء من المزود'
                         });
-                        refundBatch.set(userHistoryRef, { list: updatedList, transactions: updatedList, lastUpdated: new Date().toISOString() }, { merge: true });
-                    }
 
-                    await refundBatch.commit();
+                        if (hSnap.exists()) {
+                            const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+                            const updatedList = rawList.map((item: any) => {
+                                if (item.id === txId || item.externalRef === externalRef) {
+                                    return {
+                                        ...item,
+                                        status: 'failed',
+                                        s: 'failed',
+                                        readiness: 'فاشلة',
+                                        r: 'فاشلة',
+                                        refunded: true,
+                                        notes: `شبكة: ${selectedNetwork.name} (فشل الشراء)`,
+                                        failedAt: nowIso
+                                    };
+                                }
+                                return item;
+                            });
+                            transaction.set(userHistoryRef, { list: updatedList, transactions: updatedList, lastUpdated: nowIso }, { merge: true });
+                        }
+                    });
                     isExternalOrderDeducted = false;
                 } catch (refErr) {
                     console.error("Refund commit error:", refErr);

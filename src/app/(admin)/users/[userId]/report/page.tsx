@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { SimpleHeader } from '@/components/layout/simple-header';
 import { useDoc, useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { doc, collection, query, orderBy, writeBatch, increment } from 'firebase/firestore';
+import { doc, getDoc, collection, query, orderBy, writeBatch, increment } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -865,6 +865,10 @@ function UserReportPage() {
         cardNumber,
         cardPassword,
       } as Transaction;
+    }).sort((a: Transaction, b: Transaction) => {
+      const timeA = new Date(a.transactionDate || a.createdAt || 0).getTime();
+      const timeB = new Date(b.transactionDate || b.createdAt || 0).getTime();
+      return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
     });
   }, [historyData]);
 

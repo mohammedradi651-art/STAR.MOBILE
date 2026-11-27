@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
-import { doc, getDoc, writeBatch, increment } from 'firebase/firestore';
+import { doc, getDoc, writeBatch, increment, runTransaction } from 'firebase/firestore';
 import { formatProviderErrorMessage } from '@/lib/telecom-order';
 
 export const dynamic = 'force-dynamic';
@@ -101,36 +101,43 @@ export async function POST(request: Request) {
       data.readiness === 'جاهزة';
 
     if (isBan) {
-      // المزود ألغى العملية -> تحويل إلى فاشلة وإرجاع الرصيد إن لم يُسترجع
+      // المزود ألغى العملية -> تحويل إلى فاشلة وإرجاع الرصيد ذرياً عبر Transaction
       const cancellationReason = formatProviderErrorMessage(data.reason || data.resultDesc || data.message || 'تم إلغاء العملية من المزود');
-      const currentNotes = txData.notes || '';
-      const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
-      const updatedNotes = cleanNotes
-        ? `${cleanNotes}\nالسبب من المزود: ${cancellationReason}`
-        : `السبب من المزود: ${cancellationReason}`;
 
-      const updatePayload = {
-        status: 'failed',
-        readiness: 'فاشلة',
-        refunded: true,
-        providerMessage: cancellationReason,
-        notes: updatedNotes,
-        failedAt: new Date().toISOString()
-      };
+      await runTransaction(firestore, async (transaction) => {
+        const gSnap = await transaction.get(txDocRef);
+        const latestData = gSnap.exists() ? gSnap.data() : txData;
+        const latestStatus = String(latestData?.status || '').toLowerCase();
 
-      const shouldRefund = !txData.refunded && !data.refunded && Number(txData.amount || 0) > 0;
+        if (latestStatus === 'success' || latestData?.readiness === 'جاهزة') {
+          return;
+        }
+        if (latestData?.refunded || latestStatus === 'failed' || latestStatus === 'cancelled') {
+          return;
+        }
 
-      const batch = writeBatch(firestore);
-      if (shouldRefund && txData.userId) {
-        const userRef = doc(firestore, 'users', txData.userId);
-        batch.update(userRef, { balance: increment(Number(txData.amount)) });
-      }
-      batch.set(txDocRef, updatePayload, { merge: true });
-      if (txData.userId) {
-        const userTxRef = doc(firestore, `users/${txData.userId}/transactions`, cleanTransId);
-        // batch.set(userTxRef, ...);
-      }
-      await batch.commit();
+        const currentNotes = latestData?.notes || '';
+        const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
+        const updatedNotes = cleanNotes
+          ? `${cleanNotes}\nالسبب من المزود: ${cancellationReason}`
+          : `السبب من المزود: ${cancellationReason}`;
+
+        const updatePayload = {
+          status: 'failed',
+          readiness: 'فاشلة',
+          refunded: true,
+          providerMessage: cancellationReason,
+          notes: updatedNotes,
+          failedAt: new Date().toISOString()
+        };
+
+        const shouldRefund = !data.refunded && Number(latestData?.amount || 0) > 0;
+        if (shouldRefund && latestData?.userId) {
+          const userRef = doc(firestore, 'users', latestData.userId);
+          transaction.update(userRef, { balance: increment(Number(latestData.amount)) });
+        }
+        transaction.set(txDocRef, updatePayload, { merge: true });
+      });
 
       if (txData.clientBackUrl) {
         try {

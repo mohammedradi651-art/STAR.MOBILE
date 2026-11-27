@@ -6,6 +6,7 @@ import {
   getDoc,
   increment,
   writeBatch,
+  runTransaction,
   addDoc,
   collectionGroup,
   query,
@@ -457,86 +458,84 @@ async function handleWebhookExecution(
 
   // 5. معالجة حالة الإلغاء/الفشل: action = ban
   if (isBan) {
-    // إذا كانت العملية ناجحة بالفعل، لا يجوز تحويلها إلى فاشلة أو إرجاع الرصيد
-    if (previousStatus === 'success' || txData.readiness === 'جاهزة') {
-      await addDoc(logsRef, {
-        ...logBase,
-        transactionFound: true,
-        backpassValid: true,
-        previousStatus,
-        newStatus: 'success',
-        processingResult: 'ignored_ban_after_done_conflict'
-      });
-      return new Response('OK', { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
-    }
-
-    // Idempotency: إذا كانت العملية قد عولجت كفاشلة وتم إرجاع الرصيد مسبقاً، امنع تكرار الإرجاع
-    if (previousStatus === 'failed' || previousStatus === 'cancelled' || txData.refunded) {
-      await addDoc(logsRef, {
-        ...logBase,
-        transactionFound: true,
-        backpassValid: true,
-        previousStatus,
-        newStatus: 'failed',
-        processingResult: 'ignored_duplicate_ban'
-      });
-      return new Response('OK', { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
-    }
-
-    const currentNotes = txData.notes || '';
-    const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
     const cancellationReason = message || 'تم إلغاء العملية من المزود';
-    const updatedNotes = cleanNotes
-      ? `${cleanNotes}\nالسبب من المزود: ${cancellationReason}`
-      : `السبب من المزود: ${cancellationReason}`;
+    const historyRef = userId ? doc(firestore, `users/${userId}/transactions`, 'history') : null;
+    const userRef = userId ? doc(firestore, 'users', userId) : null;
 
-    const updatePayload = {
-      status: 'failed',
-      readiness: 'فاشلة',
-      refunded: true,
-      providerMessage: cancellationReason,
-      notes: updatedNotes,
-      failedAt: new Date().toISOString()
-    };
+    const txOutcome = await runTransaction(firestore, async (transaction) => {
+      const gSnap = txDocRef ? await transaction.get(txDocRef) : null;
+      const uSnap = userTxRef ? await transaction.get(userTxRef) : null;
+      const hSnap = historyRef ? await transaction.get(historyRef) : null;
 
-    // تنفيذ إرجاع الرصيد وتحديث العملية ذرياً
-    const batch = writeBatch(firestore);
-    if (userId && amount > 0) {
-      const userRef = doc(firestore, 'users', userId);
-      batch.update(userRef, { balance: increment(amount) });
+      const latestData = (gSnap?.exists() ? gSnap.data() : null) || (uSnap?.exists() ? uSnap.data() : null) || txData;
+      const latestStatus = String(latestData?.status || '').toLowerCase();
+
+      if (latestStatus === 'success' || latestData?.readiness === 'جاهزة') {
+        return 'ignored_ban_after_done_conflict';
+      }
+
+      if (latestStatus === 'failed' || latestStatus === 'cancelled' || latestData?.refunded) {
+        return 'ignored_duplicate_ban';
+      }
+
+      const currentNotes = latestData?.notes || '';
+      const cleanNotes = currentNotes.replace(/\(قيد الانتظار\)/g, '').trim();
+      const updatedNotes = cleanNotes
+        ? `${cleanNotes}\nالسبب من المزود: ${cancellationReason}`
+        : `السبب من المزود: ${cancellationReason}`;
+      const nowIso = new Date().toISOString();
+
+      const updatePayload = {
+        status: 'failed',
+        readiness: 'فاشلة',
+        refunded: true,
+        providerMessage: cancellationReason,
+        notes: updatedNotes,
+        failedAt: nowIso
+      };
+
+      if (userRef && amount > 0) {
+        transaction.update(userRef, { balance: increment(amount) });
+      }
+      if (txDocRef) {
+        transaction.set(txDocRef, updatePayload, { merge: true });
+      }
+
+      if (hSnap && hSnap.exists() && historyRef) {
+        const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+        const updatedList = rawList.map((item: any) => {
+          if (item.id === cleanTransId || item.transid === cleanTransId) {
+            return {
+              ...item,
+              s: 'failed',
+              r: 'غير جاهز',
+              refunded: true,
+              note: updatedNotes
+            };
+          }
+          return item;
+        });
+        transaction.update(historyRef, {
+          list: updatedList,
+          transactions: updatedList,
+          lastUpdated: nowIso
+        });
+      }
+
+      return 'refunded';
+    });
+
+    if (txOutcome !== 'refunded') {
+      await addDoc(logsRef, {
+        ...logBase,
+        transactionFound: true,
+        backpassValid: true,
+        previousStatus,
+        newStatus: txOutcome === 'ignored_ban_after_done_conflict' ? 'success' : 'failed',
+        processingResult: txOutcome
+      });
+      return new Response('OK', { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
     }
-    if (txDocRef) batch.set(txDocRef, updatePayload, { merge: true });
-    // تم إلغاء الكتابة في مستند منفصل والاعتماد حصرياً على history
-    // if (userTxRef) batch.set(userTxRef, updatePayload, { merge: true });
-
-    // تحديث مستند history لكشف الحساب
-    if (userId) {
-      try {
-        const historyRef = doc(firestore, `users/${userId}/transactions`, 'history');
-        const hSnap = await getDoc(historyRef);
-        if (hSnap.exists()) {
-          const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
-          const updatedList = rawList.map((item: any) => {
-            if (item.id === cleanTransId || item.transid === cleanTransId) {
-              return {
-                ...item,
-                s: 'failed',
-                r: 'غير جاهز',
-                note: updatedNotes
-              };
-            }
-            return item;
-          });
-          batch.update(historyRef, {
-            list: updatedList,
-            transactions: updatedList,
-            lastUpdated: new Date().toISOString()
-          });
-        }
-      } catch (_) {}
-    }
-
-    await batch.commit();
 
     // إرسال إشعار سحابي FCM فقط إذا تأخر الرد
     if (userId) {

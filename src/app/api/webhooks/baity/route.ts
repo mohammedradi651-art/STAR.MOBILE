@@ -262,57 +262,66 @@ export async function POST(req: Request) {
             sendSmsNotification(existingOrder.phoneNumber, smsMsg);
           }
         } else if (isCompleted === false || payload.event === 'order.failed') {
-          // في حال فشل الطلب لدى المزود: إعادة المبلغ لحساب العميل بصمت وتحديث الحالة لفشل
-          if (existingOrder.status !== 'failed' && existingOrder.status !== 'refunded') {
-            const refundAmount = existingOrder.price || 0;
-            if (userId && refundAmount > 0) {
-              await db.collection('users').doc(userId).update({
-                balance: admin.firestore.FieldValue.increment(refundAmount),
-              });
+          // في حال فشل الطلب لدى المزود: إعادة المبلغ لحساب العميل ذرياً عبر Transaction وتحديث الحالة لفشل
+          const histRef = userId ? db.collection('users').doc(userId).collection('transactions').doc('history') : null;
+          const userRef = userId ? db.collection('users').doc(userId) : null;
 
-              // إشعار العميل الموحد بفشل الإصدار مع إرسال إشعار سحابي FCM
-              try {
-                await sendPushNotificationToUser(null, userId, {
-                  title: 'تعذر إصدار الكرت ⚠️',
-                  body: `تعذر إصدار كرت ${existingOrder.className || ''}، يرجى التواصل مع الادارة 770326828`,
-                  transid: transactionId || externalRef,
-                  status: 'failed',
-                  amount: refundAmount,
-                });
-              } catch (_) {}
+          const refundResult = await db.runTransaction(async (tx) => {
+            const latestOrderSnap = await tx.get(orderRef);
+            const latestOrder = latestOrderSnap.exists ? latestOrderSnap.data() : existingOrder;
+            if (!latestOrder || latestOrder.status === 'failed' || latestOrder.status === 'refunded' || latestOrder.status === 'completed' || latestOrder.refunded) {
+              return { didRefund: false, refundAmount: 0 };
             }
 
-            await orderRef.update({
+            const hSnap = histRef ? await tx.get(histRef) : null;
+            const refundAmount = latestOrder.price || 0;
+
+            if (userRef && refundAmount > 0) {
+              tx.update(userRef, {
+                balance: admin.firestore.FieldValue.increment(refundAmount),
+              });
+            }
+
+            tx.update(orderRef, {
               status: 'failed',
+              refunded: true,
               failedAt: nowIso,
               updatedAt: nowIso,
             });
 
-            if (userId) {
-              try {
-                const histRef = db.collection('users').doc(userId).collection('transactions').doc('history');
-                const hSnap = await histRef.get();
-                if (hSnap.exists) {
-                  const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
-                  const updatedList = rawList.map((item: any) => {
-                    if (item.id === transactionId || item.externalRef === externalRef) {
-                      return {
-                        ...item,
-                        status: 'failed',
-                        s: 'failed',
-                        readiness: 'غير جاهز',
-                        r: 'غير جاهز',
-                        notes: (existingOrder.notes || '') + ' (فشلت العملية وتمت استعادة الرصيد)',
-                        failedAt: nowIso,
-                        refunded: true,
-                      };
-                    }
-                    return item;
-                  });
-                  await histRef.update({ list: updatedList, transactions: updatedList, lastUpdated: nowIso });
+            if (histRef && hSnap && hSnap.exists) {
+              const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
+              const updatedList = rawList.map((item: any) => {
+                if (item.id === transactionId || item.externalRef === externalRef) {
+                  return {
+                    ...item,
+                    status: 'failed',
+                    s: 'failed',
+                    readiness: 'غير جاهز',
+                    r: 'غير جاهز',
+                    notes: (latestOrder.notes || '') + ' (فشلت العملية وتمت استعادة الرصيد)',
+                    failedAt: nowIso,
+                    refunded: true,
+                  };
                 }
-              } catch (_) {}
+                return item;
+              });
+              tx.update(histRef, { list: updatedList, transactions: updatedList, lastUpdated: nowIso });
             }
+
+            return { didRefund: true, refundAmount };
+          });
+
+          if (refundResult.didRefund && userId && refundResult.refundAmount > 0) {
+            try {
+              await sendPushNotificationToUser(null, userId, {
+                title: 'تعذر إصدار الكرت ⚠️',
+                body: `تعذر إصدار كرت ${existingOrder.className || ''}، يرجى التواصل مع الادارة 770326828`,
+                transid: transactionId || externalRef,
+                status: 'failed',
+                amount: refundResult.refundAmount,
+              });
+            } catch (_) {}
           }
         }
       } else {

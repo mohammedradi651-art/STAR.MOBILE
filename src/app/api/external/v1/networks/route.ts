@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { initializeServerFirebase } from '@/firebase/server-init';
-import { collection, query, where, getDocs, doc, writeBatch, increment, limit as firestoreLimit, getDoc, updateDoc, setDoc, collectionGroup, arrayUnion } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, writeBatch, runTransaction, increment, limit as firestoreLimit, getDoc, updateDoc, setDoc, collectionGroup, arrayUnion } from 'firebase/firestore';
 
 /**
  * @fileOverview بوابة الربط البرمجي للشبكات v1.6
@@ -495,12 +495,23 @@ export async function POST(req: Request) {
                     }, { headers: corsHeaders });
                 }
 
-                // إذا رفض المزود الطلب بشكل صريح: استرجاع المبلغ فوراً
+                // إذا رفض المزود الطلب بشكل صريح: استرجاع المبلغ ذرياً عبر Transaction
                 if (result.status && result.status !== 200) {
-                    await updateDoc(doc(firestore, 'users', effectiveUserId), { balance: increment(discountedPrice) });
-                    const failNow = new Date().toISOString();
-                    try {
-                        const hSnap = await getDoc(userHistRef);
+                    const userRef = doc(firestore, 'users', effectiveUserId);
+                    await runTransaction(firestore, async (transaction) => {
+                        const orderSnap = await transaction.get(baityOrderRef);
+                        const hSnap = await transaction.get(userHistRef);
+                        const orderData = orderSnap.exists() ? orderSnap.data() : null;
+
+                        if (orderData?.refunded || orderData?.status === 'failed' || orderData?.status === 'completed') {
+                            return;
+                        }
+
+                        const failNow = new Date().toISOString();
+                        if (discountedPrice > 0) {
+                            transaction.update(userRef, { balance: increment(discountedPrice) });
+                        }
+
                         if (hSnap.exists()) {
                             const rawList = hSnap.data()?.list || hSnap.data()?.transactions || [];
                             const updatedList = rawList.map((item: any) => {
@@ -518,10 +529,10 @@ export async function POST(req: Request) {
                                 }
                                 return item;
                             });
-                            await updateDoc(userHistRef, { list: updatedList, transactions: updatedList, lastUpdated: failNow });
+                            transaction.update(userHistRef, { list: updatedList, transactions: updatedList, lastUpdated: failNow });
                         }
-                    } catch (_) {}
-                    await updateDoc(baityOrderRef, { status: 'failed' }).catch(() => {});
+                        transaction.set(baityOrderRef, { status: 'failed', refunded: true, failedAt: failNow }, { merge: true });
+                    });
 
                     return NextResponse.json({
                         success: false,
